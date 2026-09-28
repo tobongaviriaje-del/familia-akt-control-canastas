@@ -1,0 +1,233 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0f766e"><link rel="manifest" href="manifest.json"><title>Familia AKT | Control de Canastas</title><style>
+:root{--p:#c8102e;--dark:#151515;--bg:#f3f4f6;--card:#fff;--danger:#a30d24;--muted:#64748b}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:#0f172a}header{background:linear-gradient(135deg,var(--dark),var(--p));color:white;padding:20px}main{max-width:1100px;margin:auto;padding:16px}.card{background:var(--card);border-radius:16px;padding:18px;margin:14px 0;box-shadow:0 3px 12px #0001}h1,h2{margin-top:0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}label{display:block;font-weight:bold;font-size:14px;margin-top:10px}input,select,button,textarea{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:10px;font-size:16px;margin-top:5px}button{background:var(--p);color:white;border:0;font-weight:bold;cursor:pointer}button.secondary{background:#475569}button.danger{background:var(--danger)}button.small{width:auto;padding:8px 12px;font-size:14px}.modal{position:fixed;inset:0;background:#0008;display:flex;align-items:center;justify-content:center;padding:16px;z-index:9999}.modal.hidden{display:none}.modalBox{background:white;border-radius:16px;padding:20px;max-width:760px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 12px 40px #0005}.hidden{display:none}.pill{display:inline-block;padding:4px 8px;border-radius:99px;background:#d1fae5;color:#065f46;font-size:12px;font-weight:bold}.muted{color:var(--muted)}table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:9px;border-bottom:1px solid #e2e8f0;text-align:left;vertical-align:top}.scroll{overflow:auto}.notice{padding:10px;background:#ecfeff;border-left:4px solid var(--p);margin:10px 0}.error{color:var(--danger);font-weight:bold}.topbar{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}.camera{border:2px dashed #94a3b8;padding:16px;text-align:center;border-radius:12px}.stat{font-size:28px;font-weight:bold;color:var(--p)}
+@media(min-width:800px){#mesaninPanel{max-width:100%}#patinadorPanel{max-width:650px;margin:auto}}@media(max-width:799px){body{font-size:15px}main{padding:8px}.card{padding:14px;margin:10px 0}header{padding:14px}.grid{grid-template-columns:1fr 1fr}}@media(max-width:480px){.grid{grid-template-columns:1fr}button{min-height:46px}}.loginBrand{font-size:13px;font-weight:bold;letter-spacing:1.5px;color:var(--p);text-transform:uppercase;margin-bottom:8px}header h1{letter-spacing:.5px}header{border-bottom:4px solid var(--p)}button:hover{filter:brightness(.92)}.card{border:1px solid #e5e7eb}</style></head><body><header><div class="topbar"><div><h1>🏍️ FAMILIA AKT</h1><div>Control de canastas · Ensamble y logística</div></div><button id="logout" class="small secondary hidden" onclick="logout()">Salir</button></div></header><main>
+<div id="assignmentModal" class="modal hidden">
+<div class="modalBox">
+<div class="topbar"><div><h2>🛠️ Cambiar asignación</h2><p id="assignmentUserLabel" class="muted"></p></div><button type="button" class="small secondary" onclick="closeAssignment()">Cerrar</button></div>
+<p class="muted">Puedes escribir números separados por comas o rangos, por ejemplo: <b>1-10,33</b>.</p>
+<div class="grid">
+<label>PRE<input id="asigPRE" placeholder="1-10,33"></label>
+<label>Derecho<input id="asigDerecho" placeholder="1-10"></label>
+<label>Izquierdo<input id="asigIzquierdo" placeholder="1-10"></label>
+<label>Final de línea<input id="asigFinal" placeholder="1-20"></label>
+<label>Turno<select id="asigTurno"><option>Día</option><option>Noche</option><option>Todos</option></select></label>
+</div>
+<p id="assignmentMsg"></p>
+<button type="button" onclick="saveAssignment()">💾 Guardar asignación</button>
+</div></div>
+<section id="loginView" class="card"><h2>🔐 Ingreso · Familia AKT</h2><div class="notice"><b>Familia AKT · Sistema interno</b><br>Gestión de canastas, tareas y entregas para operación de ensamble.</div><label>Usuario<input id="user"></label><label>Contraseña<input id="pass" type="password"></label><button onclick="login()">Ingresar</button><p id="loginError" class="error"></p><p class="muted">Usuarios demo: admin/admin · mesanin/mesanin123 · hamilton/Hamilton123! · juanesteban/Juan123! · jorge/Jorge123!</p></section>
+<section id="appView" class="hidden"><div class="topbar"><div><h2 id="welcome"></h2><span id="rolePill" class="pill"></span></div><div><button class="small secondary" onclick="resetDemo()">Reiniciar demo</button></div></div>
+<div id="adminPanel" class="card hidden"><h2>🔐 Administración de usuarios</h2><p class="muted">Solo el administrador puede crear usuarios, asignar contraseñas y cambiarlas.</p><div class="grid"><div><label>Usuario<input id="newUsername" placeholder="Ej. noche1"></label></div><div><label>Nombre completo<input id="newName" placeholder="Nombre del trabajador"></label></div><div><label>Contraseña inicial<input id="newPass" type="password" placeholder="Mínimo 4 caracteres"></label></div><div><label>Rol<select id="newRole"><option>Patinador</option><option>Mesanín</option></select></label></div><div><label>Turno<select id="newUserTurno"><option>Día</option><option>Noche</option><option>Todos</option></select></label></div><div><label>Puestos (separados por coma)<input id="newPuestos" placeholder="Final 1, Final 2"></label></div></div><button onclick="createUser()">Crear usuario</button><p id="userMsg"></p><div class="scroll"><table><thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Turno</th><th>Acciones</th></tr></thead><tbody id="usersBody"></tbody></table></div></div><div id="mesaninPanel" class="hidden"><div class="notice"><b>🖥️ Panel de mesanín (computador)</b><br>Desde aquí se cargan tareas, lotes y LPN, y se revisan todas las entregas.</div><div class="card"><h2>🧰 Herramientas del mesanín</h2><p class="muted">Seleccione una opción para cargar información:</p><div class="grid"><button type="button" onclick="mostrarCarga('tareas')">📤 Subir tareas</button><button type="button" onclick="mostrarCarga('lotes')">📦 Cargar lotes</button><button type="button" onclick="mostrarCarga('lpn')">🏷️ Cargar LPN</button><button type="button" onclick="mostrarCrearLPN()">➕ Crear LPN</button></div><div id="cargaPanel" class="notice hidden"></div></div><div class="card"><h2>Crear tarea de distribución</h2><div class="grid"><div><label>LPN / código de estiva<input id="lpn" placeholder="Ej. LPN000123"></label></div><div><label>Estiba<input id="estiba" placeholder="Ej. Estiba 1"></label></div><div><label>Código EAN de mercancía<input id="ean" placeholder="Ej. 7701234567890"></label></div><div><label>Mercancía<input id="producto" placeholder="Nombre del producto"></label></div><div><label>Cantidad<input id="cantidad" type="number" min="1" value="1"></label></div><div><label>Área / lado<select id="area"><option>Derecho</option><option>Izquierdo</option><option>PRE</option><option>Final de línea</option></select></label></div><div><label>Puesto<select id="puesto"></select></label></div><div><label>Turno<select id="turno"><option>Día</option><option>Noche</option></select></label></div></div><button onclick="crearTarea()">Crear tarea</button><p id="taskMsg"></p></div></div>
+<div id="patinadorPanel" class="hidden"><div class="notice"><b>📱 Panel de patinador (celular)</b><br>Escanea o escribe los códigos. Si no funciona la cámara, usa el registro manual.</div><div class="card"><h2>Ejecutar entrega</h2><div class="notice">Escanea el LPN y el puesto. Si la cámara no funciona, escribe los códigos manualmente.</div><div class="grid"><div><label>LPN escaneado o manual<input id="scanLpn"></label></div><div><label>Código de puesto escaneado o manual<input id="scanPuesto"></label></div><div><label>Cantidad entregada<input id="scanCantidad" type="number" min="1" value="1"></label></div><div><label>📝 <span title="Agregar una novedad">Observaciones</span><textarea id="scanObservaciones" rows="2" placeholder="Novedad, faltante, daño, etc."></textarea></label></div></div><div class="camera"><p>📷 <b>Escáner de códigos</b></p><div class="grid"><button type="button" onclick="iniciarEscaner('lpn')">📷 Escanear LPN</button><button type="button" onclick="iniciarEscaner('puesto')">📷 Escanear puesto</button><button type="button" class="secondary" onclick="detenerEscaner()">⏹ Detener cámara</button></div><video id="video" autoplay playsinline muted class="hidden" style="width:100%;max-height:300px;margin-top:10px;border-radius:12px"></video><p id="cameraMsg" class="muted">Apunta la cámara al código de barras o QR. La lectura automática funciona en navegadores compatibles y requiere HTTPS o localhost.</p></div><div class="grid"><button onclick="buscarTarea()">🔎 Buscar tarea</button><button type="button" onclick="entregadoSinCamara()">✅ Entregado sin cámara</button></div><div id="foundTask"></div></div></div>
+<div class="card"><h2>Resumen</h2><div class="grid"><div><div class="stat" id="totalStat">0</div><div class="muted">Tareas</div></div><div><div class="stat" id="pendingStat">0</div><div class="muted">Pendientes</div></div><div><div class="stat" id="doneStat">0</div><div class="muted">Entregadas</div></div></div></div>
+<div id="mesaninEntregas" class="card hidden"><h2>Control de entregas por patinador</h2><div id="deliverySummary"></div></div><div class="card"><h2>Listado de tareas</h2><div class="scroll"><table><thead><tr><th>LPN / Estiba</th><th>Mercancía</th><th>Cantidad</th><th>Destino</th><th>Turno</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="tasksBody"></tbody></table></div></div></section></main>
+<script>
+const defaultUsers={admin:{pass:'admin',role:'Admin',name:'Administrador'},mesanin:{pass:'mesanin123',role:'Mesanín',name:'Mesanín'},hamilton:{pass:'Hamilton123!',role:'Patinador',name:'Hamilton',areas:['PRE','Izquierdo'],puestos:['PRE 21','PRE 22','PRE 23','PRE 24','PRE 25','PRE 26','PRE 27','PRE 28','PRE 29','PRE 30','PRE 31','PRE 32','Izquierdo 1','Izquierdo 2','Izquierdo 3','Izquierdo 4','Izquierdo 5','Izquierdo 6','Izquierdo 7','Izquierdo 8','Izquierdo 9','Izquierdo 10']},juanesteban:{pass:'Juan123!',role:'Patinador',name:'Juan Esteban',areas:['PRE','Derecho'],puestos:['PRE 1','PRE 2','PRE 3','PRE 4','PRE 5','PRE 6','PRE 7','PRE 8','PRE 9','PRE 10','PRE 33','Derecho 1','Derecho 2','Derecho 3','Derecho 4','Derecho 5','Derecho 6','Derecho 7','Derecho 8','Derecho 9','Derecho 10']},jorge:{pass:'Jorge123!',role:'Patinador',name:'Jorge',areas:['PRE','Derecho','Izquierdo'],puestos:['PRE 11','PRE 12','PRE 13','PRE 14','PRE 15','PRE 16','PRE 17','PRE 18','PRE 19','PRE 20','Derecho 11','Derecho 12','Derecho 13','Derecho 14','Derecho 15','Derecho 16','Izquierdo 12','Izquierdo 13','Izquierdo 14','Izquierdo 15','Izquierdo 16','Final 1','Final 2','Final 3','Final 4','Final 5','Final 6','Final 7','Final 8','Final 9','Final 10','Final 11','Final 12','Final 13','Final 14','Final 15','Final 16','Final 17','Final 18','Final 19','Final 20'],areas:['PRE','Derecho','Izquierdo','Final de línea']}};
+let current=null,stream=null;
+let users={};
+let cloudTasks=[];
+let cloudReady=false;
+let cloudSyncBusy=false;
+const $=id=>document.getElementById(id);
+
+async function cloudLoad(){
+  try{
+    const r=await fetch('/api/state',{cache:'no-store'});
+    if(!r.ok) throw new Error('No se pudo conectar con el servidor');
+    const s=await r.json();
+    users=s.users||{};
+    cloudTasks=Array.isArray(s.tasks)?s.tasks:[];
+    cloudReady=true;
+    localStorage.setItem('cc_users',JSON.stringify(users));
+    localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
+    render();
+    return true;
+  }catch(e){
+    const su=localStorage.getItem('cc_users');
+    const st=localStorage.getItem('cc_tasks');
+    users=su?JSON.parse(su):defaultUsers;
+    cloudTasks=st?JSON.parse(st):[];
+    cloudReady=false;
+    render();
+    return false;
+  }
+}
+async function cloudSave(){
+  if(cloudSyncBusy)return;
+  cloudSyncBusy=true;
+  try{
+    const r=await fetch('/api/state',{
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({users,tasks:cloudTasks})
+    });
+    if(r.ok){
+      const s=await r.json();
+      users=s.users||users;
+      cloudTasks=Array.isArray(s.tasks)?s.tasks:cloudTasks;
+      localStorage.setItem('cc_users',JSON.stringify(users));
+      localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
+      cloudReady=true;
+    }
+  }catch(e){}
+  finally{cloudSyncBusy=false;}
+}
+function loadUsers(){return users;}
+function saveUsers(){localStorage.setItem('cc_users',JSON.stringify(users));cloudSave();}
+const getTasks=()=>cloudTasks;
+const saveTasks=t=>{cloudTasks=t;localStorage.setItem('cc_tasks',JSON.stringify(t));cloudSave();};
+
+cloudLoad();
+setInterval(async()=>{if(!cloudSyncBusy) await cloudLoad();},5000);
+function isAdmin(){return current&&current.role==='Admin';}
+function renderUsers(){if(!isAdmin())return;const body=$('usersBody');body.innerHTML=Object.entries(users).map(([key,u])=>`<tr><td>${key}</td><td>${u.name}</td><td>${u.role}</td><td>${u.turno||'Todos'}</td><td><button type="button" class="small" onclick="editUser('${key}')">Cambiar contraseña</button> ${u.role==='Patinador'?`<button type="button" class="small" onclick="editAssignment('${key}')">🛠️ Cambiar asignación</button>`:''} <button type="button" class="small danger" onclick="deleteUser('${key}')" ${key==='admin'?'disabled':''}>Eliminar</button></td></tr>`).join('');}
+let assignmentEditingKey=null;
+function numbersFromText(text){
+  const out=[];
+  for(const part of String(text||'').split(',')){
+    const s=part.trim();
+    if(!s) continue;
+    if(/^\d+\s*-\s*\d+$/.test(s)){
+      let [a,b]=s.split('-').map(x=>Number(x.trim()));
+      if(a>b)[a,b]=[b,a];
+      for(let n=a;n<=b;n++) if(n>=1&&n<=100) out.push(n);
+    }else if(/^\d+$/.test(s)){
+      const n=Number(s);
+      if(n>=1&&n<=100) out.push(n);
+    }
+  }
+  return [...new Set(out)].sort((a,b)=>a-b);
+}
+function textFromNumbers(nums){
+  const a=[...new Set((nums||[]).map(Number).filter(n=>n>=1&&n<=100))].sort((x,y)=>x-y);
+  const parts=[];
+  for(let i=0;i<a.length;i++){
+    let start=a[i],end=start;
+    while(i+1<a.length&&a[i+1]===end+1){end=a[++i];}
+    parts.push(start===end?String(start):start+'-'+end);
+  }
+  return parts.join(',');
+}
+function numsFor(user,area){
+  const prefix=area==='Final de línea'?'Final ':area+' ';
+  return (user.puestos||[]).filter(p=>p.indexOf(prefix)===0).map(p=>Number(p.slice(prefix.length))).filter(Number.isFinite);
+}
+function editAssignment(key){
+  if(!isAdmin()){alert('Solo el administrador puede cambiar asignaciones.');return;}
+  if(!users[key]||users[key].role!=='Patinador'){alert('Este usuario no es un patinador.');return;}
+  assignmentEditingKey=key;
+  const u=users[key];
+  $('assignmentUserLabel').textContent='Trabajador: '+u.name+' ('+key+')';
+  $('asigPRE').value=textFromNumbers(numsFor(u,'PRE'));
+  $('asigDerecho').value=textFromNumbers(numsFor(u,'Derecho'));
+  $('asigIzquierdo').value=textFromNumbers(numsFor(u,'Izquierdo'));
+  $('asigFinal').value=textFromNumbers(numsFor(u,'Final de línea'));
+  $('asigTurno').value=u.turno||'Día';
+  $('assignmentMsg').className='';
+  $('assignmentMsg').textContent='';
+  $('assignmentModal').classList.remove('hidden');
+  document.body.style.overflow='hidden';
+}
+function closeAssignment(){
+  assignmentEditingKey=null;
+  $('assignmentModal').classList.add('hidden');
+  document.body.style.overflow='';
+}
+function saveAssignment(){
+  if(!assignmentEditingKey||!users[assignmentEditingKey]){alert('No hay un usuario seleccionado.');return;}
+  const u=users[assignmentEditingKey];
+  const puestos=[];
+  const add=(area,text)=>{for(const n of numbersFromText(text)) puestos.push(area+' '+n);};
+  add('PRE',$('asigPRE').value);
+  add('Derecho',$('asigDerecho').value);
+  add('Izquierdo',$('asigIzquierdo').value);
+  add('Final',$('asigFinal').value);
+  u.puestos=[...new Set(puestos)];
+  u.areas=[];
+  if(numbersFromText($('asigPRE').value).length) u.areas.push('PRE');
+  if(numbersFromText($('asigDerecho').value).length) u.areas.push('Derecho');
+  if(numbersFromText($('asigIzquierdo').value).length) u.areas.push('Izquierdo');
+  if(numbersFromText($('asigFinal').value).length) u.areas.push('Final de línea');
+  u.turno=$('asigTurno').value;
+  saveUsers();
+  renderUsers();
+  $('assignmentMsg').className='pill';
+  $('assignmentMsg').textContent='Asignación guardada correctamente.';
+  current= current && current.username===assignmentEditingKey ? {...users[assignmentEditingKey],username:assignmentEditingKey} : current;
+  render();
+}
+
+function createUser(){const username=$('newUsername').value.trim().toLowerCase(),name=$('newName').value.trim(),pass=$('newPass').value,role=$('newRole').value,turno=$('newUserTurno').value,puestos=$('newPuestos').value.split(',').map(x=>x.trim()).filter(Boolean);if(!username||!name||!pass){$('userMsg').textContent='Complete usuario, nombre y contraseña.';return}if(users[username]){ $('userMsg').textContent='Ese usuario ya existe.';return}users[username]={pass,name,role,turno,puestos:role==='Patinador'?puestos:[],areas:role==='Patinador'?['PRE','Derecho','Izquierdo','Final de línea']:[]};saveUsers();$('userMsg').textContent='Usuario creado correctamente.';renderUsers();}
+function editUser(key){const pass=prompt('Nueva contraseña para '+key+':');if(pass===null)return;if(pass.length<4){alert('La contraseña debe tener mínimo 4 caracteres.');return}users[key].pass=pass;saveUsers();alert('Contraseña cambiada correctamente.');renderUsers();}
+function deleteUser(key){if(key==='admin')return;if(confirm('¿Eliminar usuario '+key+'?')){delete users[key];saveUsers();renderUsers();}}
+const getTasks=()=>JSON.parse(localStorage.getItem('cc_tasks')||'[]');const saveTasks=t=>localStorage.setItem('cc_tasks',JSON.stringify(t));
+async function login(){let u=$('user').value.trim().toLowerCase(),p=$('pass').value;
+if(!cloudReady) await cloudLoad();
+users=loadUsers();if(!users[u]||users[u].pass!==p){$('loginError').textContent='Usuario o contraseña incorrectos';return}current={...users[u],username:u};$('loginView').classList.add('hidden');$('appView').classList.remove('hidden');$('logout').classList.remove('hidden');$('welcome').textContent='Hola, '+current.name;$('rolePill').textContent=current.role;const canManage=current.role==='Mesanín'||current.role==='Admin';$('mesaninPanel').classList.toggle('hidden',!canManage);$('adminPanel').classList.toggle('hidden',!isAdmin());if(isAdmin())renderUsers();$('patinadorPanel').classList.toggle('hidden',current.role!=='Patinador');if(canManage)fillPuestos();render();}
+function logout(){if(stream)stream.getTracks().forEach(t=>t.stop());current=null;$('appView').classList.add('hidden');$('loginView').classList.remove('hidden');$('logout').classList.add('hidden');}
+function fillPuestos(){let arr=[];for(let i=1;i<=33;i++)arr.push('PRE '+i);for(let i=1;i<=16;i++){arr.push('Derecho '+i);arr.push('Izquierdo '+i)}for(let i=1;i<=20;i++)arr.push('Final '+i);$('puesto').innerHTML=arr.map(x=>`<option>${x}</option>`).join('');}
+function crearTarea(){let qty=Number($('cantidad').value);if(!$('lpn').value||!$('ean').value||!$('producto').value||qty<1){$('taskMsg').textContent='Completa todos los campos';return}let t=getTasks();t.push({id:Date.now(),lpn:$('lpn').value.trim(),estiba:($('estiba').value.trim()||'Estiba 1'),ean:$('ean').value.trim(),producto:$('producto').value.trim(),cantidad:qty,area:$('area').value,puesto:$('puesto').value,turno:$('turno').value,estado:'Pendiente',creadoPor:current.name,fechaCreacion:new Date().toLocaleString('es-CO'),entrega:null});saveTasks(t);$('taskMsg').textContent='Tarea creada correctamente';render();}
+function entregadoSinCamara(){let lpn=$('scanLpn').value.trim(),puesto=$('scanPuesto').value.trim(),qty=Number($('scanCantidad').value),obs=($('scanObservaciones').value||'').trim();if(!lpn||!puesto||qty<1){$('foundTask').innerHTML='<p class="error">Escribe el LPN, el puesto y la cantidad antes de registrar la entrega.</p>';return}let t=getTasks().find(x=>x.lpn===lpn&&x.puesto===puesto&&x.estado!=='Entregada');if(!t){$('foundTask').innerHTML='<p class="error">No se encontró una tarea pendiente para ese LPN y puesto.</p>';return}if(current.areas&&!current.areas.includes(t.area)&&!current.puestos.includes(t.puesto)){$('foundTask').innerHTML='<p class="error">Esta tarea no está asignada a tu zona.</p>';return}let restante=t.cantidad-(t.entregado||0);if(qty>restante){$('foundTask').innerHTML='<p class="error">La cantidad supera lo pendiente. Faltan '+restante+' unidades.</p>';return}if(confirm('¿Confirmas entregar '+qty+' unidad(es) sin cámara?'))confirmarEntrega(t.id,qty,obs+ (obs?' | ':'')+'Registro manual sin cámara');}
+function buscarTarea(){let lpn=$('scanLpn').value.trim(),puesto=$('scanPuesto').value.trim(),qty=Number($('scanCantidad').value),obs=($('scanObservaciones').value||'').trim();let t=getTasks().find(x=>x.lpn===lpn&&x.puesto===puesto&&x.estado!=='Entregada');if(!t){$('foundTask').innerHTML='<p class="error">No se encontró una tarea pendiente para ese LPN y puesto.</p>';return}if(current.areas&&!current.areas.includes(t.area)&&!current.puestos.includes(t.puesto)){$('foundTask').innerHTML='<p class="error">Esta tarea no está asignada a tu zona.</p>';return}let restante=t.cantidad-(t.entregado||0);if(qty<1||qty>restante){$('foundTask').innerHTML='<p class="error">Cantidad inválida. Faltan '+restante+' unidades.</p>';return}$('foundTask').innerHTML=`<div class="notice"><b>${t.producto}</b><br>Solicitado: ${t.cantidad}<br>Entregado: ${t.entregado||0}<br>Faltante: ${restante}<br>Estiba: ${t.estiba||'Estiba 1'}<br>Destino: ${t.area} / ${t.puesto}<br><button onclick="confirmarEntrega(${t.id},${qty},${JSON.stringify(obs)})">✅ Entregado</button></div>`;}
+function confirmarEntrega(id,qty,obs){let t=getTasks(),x=t.find(a=>a.id===id);if(!x)return;let restante=x.cantidad-(x.entregado||0);if(qty<1||qty>restante){alert('La cantidad supera lo pendiente');return}x.entregado=(x.entregado||0)+qty;x.estado=x.entregado>=x.cantidad?'Entregada':'Parcial';x.entregas=x.entregas||[];x.entregas.push({patinador:current.name,cantidad:qty,fechaHora:new Date().toLocaleString('es-CO'),metodo:'Escáner o botón manual',observaciones:obs||''});x.entrega=x.entregas[x.entregas.length-1];saveTasks(t);$('foundTask').innerHTML='<p class="pill">Entrega registrada correctamente</p>';render();}
+function mostrarCrearLPN(){
+ const panel=$('cargaPanel');
+ panel.classList.remove('hidden');
+ panel.innerHTML=`<b>➕ Crear LPN</b><p>Complete los datos y pulse Guardar LPN.</p>
+ <div class="grid"><div><label>LPN / código de estiva<input id="newLpn" placeholder="Ej. LPN000123"></label></div>
+ <div><label>Estiba<input id="newEstiba" placeholder="Ej. Estiba 1"></label></div><div><label>EAN<input id="newEan" placeholder="Ej. 7701234567890"></label></div>
+ <div><label>Mercancía<input id="newProducto" placeholder="Nombre del producto"></label></div>
+ <div><label>Cantidad<input id="newCantidad" type="number" min="1" value="1"></label></div>
+ <div><label>Área / lado<select id="newArea"><option>Derecho</option><option>Izquierdo</option><option>PRE</option><option>Final de línea</option></select></label></div>
+ <div><label>Puesto<input id="newPuesto" placeholder="Ej. PRE 1"></label></div>
+ <div><label>Turno<select id="newTurno"><option>Día</option><option>Noche</option></select></label></div></div>
+ <button type="button" onclick="guardarNuevoLPN()">💾 Guardar LPN</button><p id="lpnMsg"></p>`;
+}
+function guardarNuevoLPN(){
+ const lpn=$('newLpn').value.trim(),estiba=($('newEstiba').value.trim()||'Estiba 1'),ean=$('newEan').value.trim(),producto=$('newProducto').value.trim(),puesto=$('newPuesto').value.trim(),cantidad=Number($('newCantidad').value),area=$('newArea').value,turno=$('newTurno').value;
+ if(!lpn||!ean||!producto||!puesto||cantidad<1){$('lpnMsg').className='error';$('lpnMsg').textContent='Complete LPN, estiba, EAN, mercancía, cantidad y puesto.';return;}
+ const tasks=getTasks();
+ if(tasks.some(x=>x.lpn===lpn&&x.puesto===puesto&&x.estado!=='Entregada')){$('lpnMsg').className='error';$('lpnMsg').textContent='Ya existe una tarea pendiente con ese LPN y puesto.';return;}
+ tasks.push({id:Date.now(),lpn,estiba,ean,producto,cantidad,area,puesto,turno,estado:'Pendiente',entregado:0,entregas:[],creadoPor:current.name,fechaCreacion:new Date().toLocaleString('es-CO')});
+ saveTasks(tasks);$('lpnMsg').className='pill';$('lpnMsg').textContent='LPN guardado correctamente.';render();
+}
+function mostrarCarga(tipo){let panel=$('cargaPanel');panel.classList.remove('hidden');if(tipo==='tareas'){panel.innerHTML='<b>Subir tareas</b><p>Use el formulario de abajo para crear tareas individuales. También puede pegar varias líneas en el campo de carga masiva.</p><textarea id="bulkText" rows="5" placeholder="LPN;Estiba;EAN;Producto;Cantidad;Área;Puesto;Turno"></textarea><button onclick="cargarMasivo()">Importar tareas</button>'}else if(tipo==='lotes'){panel.innerHTML='<b>Cargar lotes</b><p>Ingrese cada lote en una línea con el formato: LPN;Estiba;EAN;Producto;Cantidad;Área;Puesto;Turno</p><textarea id="bulkText" rows="5"></textarea><button onclick="cargarMasivo()">Cargar lotes</button>'}else{panel.innerHTML='<b>Cargar LPN</b><p>Registre el código de la estiva y la mercancía que contiene. Formato: LPN;Estiba;EAN;Producto;Cantidad;Área;Puesto;Turno</p><textarea id="bulkText" rows="5"></textarea><button onclick="cargarMasivo()">Cargar LPN</button>'}}
+function cargarMasivo(){let lines=($('bulkText').value||'').split('\n').map(x=>x.trim()).filter(Boolean),tasks=getTasks(),ok=0;for(let line of lines){let [lpn,estiba,ean,producto,cantidad,area,puesto,turno]=line.split(';').map(x=>(x||'').trim());let qty=Number(cantidad);if(!lpn||!ean||!producto||!puesto||qty<1)continue;tasks.push({id:Date.now()+ok,lpn,estiba:estiba||'Estiba 1',ean,producto,cantidad:qty,area:area||'PRE',puesto,turno:turno||'Día',estado:'Pendiente',entregado:0,entregas:[],creadoPor:current.name,fechaCreacion:new Date().toLocaleString('es-CO')});ok++}saveTasks(tasks);$('cargaPanel').innerHTML='<b>'+ok+' tareas cargadas correctamente.</b>'+(ok===0?'<p class="error">No se cargó ninguna línea. Use: LPN;Estiba;EAN;Producto;Cantidad;Área;Puesto;Turno</p>':'');render();}
+let scannerMode=null, scanTimer=null, barcodeDetector=null;
+async function iniciarEscaner(mode){
+ scannerMode=mode;
+ if(!window.isSecureContext){$('cameraMsg').textContent='⚠️ La cámara necesita HTTPS o localhost. Si abres el archivo directamente, no podrá funcionar.';return;}
+ if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){$('cameraMsg').textContent='Este navegador no permite usar la cámara. Usa Chrome en Android o el ingreso manual.';return;}
+ if(!('BarcodeDetector' in window)){$('cameraMsg').textContent='⚠️ Este navegador no tiene lector automático de códigos. Puedes usar el ingreso manual; para escaneo automático prueba Chrome actualizado en Android.';return;}
+ try{
+  const formatos=['qr_code','code_128','code_39','code_93','ean_13','ean_8','upc_a','upc_e','itf','codabar'];
+  let disponibles=[];
+  if(BarcodeDetector.getSupportedFormats){const soportados=await BarcodeDetector.getSupportedFormats();disponibles=formatos.filter(f=>soportados.includes(f));}
+  barcodeDetector=new BarcodeDetector({formats:disponibles.length?disponibles:formatos});
+  detenerEscaner(false);
+  stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
+  const video=$('video');video.srcObject=stream;video.classList.remove('hidden');await video.play();
+  $('cameraMsg').textContent='📷 Buscando código… apunta al código de barras o QR.';
+  scanTimer=setInterval(leerCodigo,250);
+ }catch(e){detenerEscaner(false);$('cameraMsg').textContent='No se pudo iniciar el escáner: '+(e.message||e);}
+}
+async function leerCodigo(){
+ const video=$('video');if(!barcodeDetector||!video||video.readyState<2||video.videoWidth===0)return;
+ try{const codes=await barcodeDetector.detect(video);if(!codes.length)return;const valor=(codes[0].rawValue||'').trim();if(!valor)return;
+  if(scannerMode==='lpn'){$('scanLpn').value=valor;}else{$('scanPuesto').value=valor;}
+  $('cameraMsg').textContent='✅ Código leído: '+valor;
+  detenerEscaner(false);
+  if(scannerMode==='lpn'&&$('scanPuesto').value.trim())buscarTarea();
+ }catch(e){}
+}
+function detenerEscaner(msg=true){if(scanTimer){clearInterval(scanTimer);scanTimer=null;}if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}$('video').srcObject=null;$('video').classList.add('hidden');if(msg)$('cameraMsg').textContent='Cámara detenida. Puedes volver a escanear o escribir el código manualmente.';}
+function iniciarCamara(){iniciarEscaner('lpn')}
+function render(){let t=getTasks();$('totalStat').textContent=t.length;$('pendingStat').textContent=t.filter(x=>x.estado!=='Entregada').length;$('doneStat').textContent=t.filter(x=>x.estado==='Entregada').length;let visible=current&&current.role==='Patinador'?t.filter(x=>current.puestos.includes(x.puesto)):t;$('tasksBody').innerHTML=visible.map(x=>`<tr><td>${x.lpn}<br><small>${x.estiba||'Estiba 1'}</small></td><td>${x.producto}<br><small>${x.ean}</small></td><td>${x.cantidad}<br><small>Entregado: ${x.entregado||0}</small></td><td>${x.area}<br>${x.puesto}</td><td>${x.turno}</td><td>${x.estado}${x.entrega?'<br><small>'+x.entrega.patinador+'</small>':''}</td><td>${current&&current.role==='Admin'?`<button class="small danger" onclick="deleteTask(${x.id})">Borrar</button>`:'-'}</td></tr>`).join('')||'<tr><td colspan="7">Sin tareas</td></tr>';if(current&&(current.role==='Mesanín'||current.role==='Admin')){$('mesaninEntregas').classList.remove('hidden');let rows=[];t.forEach(x=>(x.entregas||[]).forEach(e=>rows.push(`<tr><td>${e.patinador}</td><td>${x.lpn}<br><small>${x.estiba||'Estiba 1'}</small></td><td>${x.puesto}</td><td>${e.cantidad}</td><td>${e.fechaHora}</td><td>${e.metodo}</td><td>${e.observaciones||'-'}</td></tr>`)));$('deliverySummary').innerHTML='<div class="scroll"><table><thead><tr><th>Patinador</th><th>LPN / Estiba</th><th>Puesto</th><th>Cantidad</th><th>Fecha/hora</th><th>Método</th><th>Observaciones</th></tr></thead><tbody>'+(rows.join('')||'<tr><td colspan="7">Aún no hay entregas registradas.</td></tr>')+'</tbody></table></div>';}}
+function deleteTask(id){saveTasks(getTasks().filter(x=>x.id!==id));render()}function resetDemo(){if(confirm('¿Borrar todas las tareas de este dispositivo?')){localStorage.removeItem('cc_tasks');render()}}
+</script>
+<script>
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
+}
+</script>
+</body></html>
