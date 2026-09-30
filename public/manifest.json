@@ -1,9 +1,20 @@
 {
-  "name": "Familia AKT - Control de Canastas",
-  "short_name": "Familia AKT",
+  "name": "Control de Canastas - Familia AKT",
+  "short_name": "Control de Canastas",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#f3f4f6",
   "theme_color": "#c8102e",
-  "description": "Sistema interno de control de canastas, tareas y entregas."
+  "description": "Sistema interno de control de canastas, tareas y entregas.",
+  "lang": "es-CO",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
 }
