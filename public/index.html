@@ -17,7 +17,7 @@
 </div></div>
 <section id="loginView" class="card"><h2>🔐 Ingreso · Familia AKT</h2><div class="notice"><b>Familia AKT · Sistema interno</b><br>Gestión de canastas, tareas y entregas para operación de ensamble.</div><label>Usuario<input id="user"></label><label>Contraseña<input id="pass" type="password"></label><button onclick="login()">Ingresar</button><p id="loginError" class="error"></p><p class="muted">Usuarios demo: admin/admin · mesanin/mesanin123 · hamilton/Hamilton123! · juanesteban/Juan123! · jorge/Jorge123!</p></section>
 <section id="appView" class="hidden"><div class="topbar"><div><h2 id="welcome"></h2><span id="rolePill" class="pill"></span></div><div><button class="small secondary" onclick="resetDemo()">Reiniciar demo</button></div></div>
-<div id="adminPanel" class="card hidden"><h2>🔐 Administración de usuarios</h2><div class="notice"><b>📷 Escáner del administrador</b><br>Puede escanear LPN, EAN, PRE, Derecho o Izquierdo.</div><div class="grid"><div><label>LPN<input id="adminScanLpn"></label></div><div><label>EAN<input id="adminScanEan"></label></div><div><label>Área / puesto<input id="adminScanPuesto"></label></div></div><div class="grid"><button type="button" onclick="iniciarEscaner('adminLpn')">📷 LPN</button><button type="button" onclick="iniciarEscaner('adminEan')">📷 EAN</button><button type="button" onclick="iniciarEscaner('adminPre')">📷 PRE</button><button type="button" onclick="iniciarEscaner('adminDerecho')">📷 Derecho</button><button type="button" onclick="iniciarEscaner('adminIzquierdo')">📷 Izquierdo</button></div><button type="button" onclick="abrirCrearTareaAdmin()">➕ CREAR TAREA</button><div class="camera"><p>📷 <b>Escáner del administrador</b></p><video id="adminVideo" autoplay playsinline muted class="hidden" style="width:100%;max-height:300px;margin-top:10px;border-radius:12px"></video><p id="adminCameraMsg" class="muted">Al pulsar un botón se activará la cámara aquí.</p><button type="button" class="secondary" onclick="detenerEscaner()">⏹ Detener cámara</button></div><div id="adminTaskPanel" class="card hidden"><h3>➕ Crear tarea con los códigos escaneados</h3><div class="grid"><div><label>Estiba<input id="adminTaskEstiba" placeholder="Ej. Estiba 1"></label></div><div><label>Mercancía<input id="adminTaskProducto" placeholder="Nombre del producto"></label></div><div><label>Cantidad<input id="adminTaskCantidad" type="number" min="1" value="1"></label></div><div><label>Área<select id="adminTaskArea"><option>Derecho</option><option>Izquierdo</option><option>PRE</option><option>Final de línea</option></select></label></div><div><label>Puesto<input id="adminTaskPuesto" placeholder="Ej. PRE 1"></label></div><div><label>Turno<select id="adminTaskTurno"><option>Día</option><option>Noche</option></select></label></div></div><p class="muted">LPN y EAN se toman de los campos escaneados de arriba. PRE, Derecho o Izquierdo también quedan cargados como puesto.</p><button type="button" onclick="crearTareaDesdeAdmin()">💾 CREAR TAREA</button><p id="adminTaskMsg"></p></div><p class="muted">Solo el administrador puede crear usuarios, asignar contraseñas y cambiarlas.</p><div class="grid"><div><label>Usuario<input id="newUsername" placeholder="Ej. noche1"></label></div><div><label>Nombre completo<input id="newName" placeholder="Nombre del trabajador"></label></div><div><label>Contraseña inicial<input id="newPass" type="password" placeholder="Mínimo 4 caracteres"></label></div><div><label>Rol<select id="newRole"><option>Patinador</option><option>Mesanín</option></select></label></div><div><label>Turno<select id="newUserTurno"><option>Día</option><option>Noche</option><option>Todos</option></select></label></div><div><label>Puestos (separados por coma)<input id="newPuestos" placeholder="Final 1, Final 2"></label></div></div><button onclick="createUser()">Crear usuario</button><p id="userMsg"></p><div class="scroll"><table><thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Turno</th><th>Acciones</th></tr></thead><tbody id="usersBody"></tbody></table></div></div><div id="mesaninPanel" class="hidden"><div class="notice"><b>🖥️ Panel de mesanín (computador)</b><br>Desde aquí se cargan tareas, lotes y LPN, y se revisan todas las entregas.</div><div class="card"><h2>🧰 Herramientas del mesanín</h2><p class="muted">Seleccione una opción para cargar información:</p><div class="grid"><button type="button" onclick="mostrarCarga('tareas')">📤 Subir tareas</button><button type="button" onclick="mostrarCarga('lotes')">📦 Cargar lotes</button><button type="button" onclick="mostrarCarga('lpn')">🏷️ Cargar LPN</button><button type="button" onclick="mostrarCrearLPN()">➕ Crear LPN</button></div><div id="cargaPanel" class="notice hidden"></div></div><div class="card"><h2>Crear tarea de distribución</h2><div class="grid"><div><label>LPN / código de estiva<input id="lpn" placeholder="Ej. LPN000123"></label></div><div><label>Estiba<input id="estiba" placeholder="Ej. Estiba 1"></label></div><div><label>Código EAN de mercancía<input id="ean" placeholder="Ej. 7701234567890"></label></div><div><label>Mercancía<input id="producto" placeholder="Nombre del producto"></label></div><div><label>Cantidad<input id="cantidad" type="number" min="1" value="1"></label></div><div><label>Área / lado<select id="area"><option>Derecho</option><option>Izquierdo</option><option>PRE</option><option>Final de línea</option></select></label></div><div><label>Puesto<select id="puesto"></select></label></div><div><label>Turno<select id="turno"><option>Día</option><option>Noche</option></select></label></div></div><button onclick="crearTarea()">Crear tarea</button><p id="taskMsg"></p></div></div>
+<div id="adminPanel" class="card hidden"><h2>🔐 Administración de usuarios</h2><div class="notice"><b>📷 Escáner del administrador</b><br>Puede escanear LPN, EAN, PRE, Derecho o Izquierdo.</div><div class="grid"><div><label>LPN<input id="adminScanLpn"></label></div><div><label>EAN<input id="adminScanEan"></label></div><div><label>Área / puesto<input id="adminScanPuesto"></label></div></div><div class="grid"><button type="button" onclick="iniciarEscaner('adminLpn')">📷 LPN</button><button type="button" onclick="iniciarEscaner('adminEan')">📷 EAN</button><button type="button" onclick="iniciarEscaner('adminPre')">📷 PRE</button><button type="button" onclick="iniciarEscaner('adminDerecho')">📷 Derecho</button><button type="button" onclick="iniciarEscaner('adminIzquierdo')">📷 Izquierdo</button></div><div class="grid"><button type="button" onclick="abrirCrearTareaAdmin()">➕ CREAR TAREA</button><button type="button" class="secondary" onclick="mostrarContenidoLpnAdmin()">🔎 VER CONTENIDO LPN</button></div><div id="adminLpnContents" class="card hidden"><h3>📦 Contenido del LPN</h3><p id="adminLpnContentsMsg" class="muted"></p><div id="adminLpnContentsBody"></div></div><div class="camera"><p>📷 <b>Escáner del administrador</b></p><video id="adminVideo" autoplay playsinline muted class="hidden" style="width:100%;max-height:300px;margin-top:10px;border-radius:12px"></video><p id="adminCameraMsg" class="muted">Al pulsar un botón se activará la cámara aquí.</p><button type="button" class="secondary" onclick="detenerEscaner()">⏹ Detener cámara</button></div><div id="adminTaskPanel" class="card hidden"><h3>➕ Crear tarea con los códigos escaneados</h3><div class="grid"><div><label>Estiba<input id="adminTaskEstiba" placeholder="Ej. Estiba 1"></label></div><div><label>Mercancía<input id="adminTaskProducto" placeholder="Nombre del producto"></label></div><div><label>Cantidad<input id="adminTaskCantidad" type="number" min="1" value="1"></label></div><div><label>Área<select id="adminTaskArea"><option>Derecho</option><option>Izquierdo</option><option>PRE</option><option>Final de línea</option></select></label></div><div><label>Puesto<input id="adminTaskPuesto" placeholder="Ej. PRE 1"></label></div><div><label>Turno<select id="adminTaskTurno"><option>Día</option><option>Noche</option></select></label></div></div><p class="muted">LPN y EAN se toman de los campos escaneados de arriba. PRE, Derecho o Izquierdo también quedan cargados como puesto.</p><button type="button" onclick="crearTareaDesdeAdmin()">💾 CREAR TAREA</button><p id="adminTaskMsg"></p></div><p class="muted">Solo el administrador puede crear usuarios, asignar contraseñas y cambiarlas.</p><div class="grid"><div><label>Usuario<input id="newUsername" placeholder="Ej. noche1"></label></div><div><label>Nombre completo<input id="newName" placeholder="Nombre del trabajador"></label></div><div><label>Contraseña inicial<input id="newPass" type="password" placeholder="Mínimo 4 caracteres"></label></div><div><label>Rol<select id="newRole"><option>Patinador</option><option>Mesanín</option></select></label></div><div><label>Turno<select id="newUserTurno"><option>Día</option><option>Noche</option><option>Todos</option></select></label></div><div><label>Puestos (separados por coma)<input id="newPuestos" placeholder="Final 1, Final 2"></label></div></div><button onclick="createUser()">Crear usuario</button><p id="userMsg"></p><div class="scroll"><table><thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Turno</th><th>Acciones</th></tr></thead><tbody id="usersBody"></tbody></table></div></div><div id="mesaninPanel" class="hidden"><div class="notice"><b>🖥️ Panel de mesanín (computador)</b><br>Desde aquí se cargan tareas, lotes y LPN, y se revisan todas las entregas.</div><div class="card"><h2>🧰 Herramientas del mesanín</h2><p class="muted">Seleccione una opción para cargar información:</p><div class="grid"><button type="button" onclick="mostrarCarga('tareas')">📤 Subir tareas</button><button type="button" onclick="mostrarCarga('lotes')">📦 Cargar lotes</button><button type="button" onclick="mostrarCarga('lpn')">🏷️ Cargar LPN</button><button type="button" onclick="mostrarCrearLPN()">➕ Crear LPN</button></div><div id="cargaPanel" class="notice hidden"></div></div><div class="card"><h2>Crear tarea de distribución</h2><div class="grid"><div><label>LPN / código de estiva<input id="lpn" placeholder="Ej. LPN000123"></label></div><div><label>Estiba<input id="estiba" placeholder="Ej. Estiba 1"></label></div><div><label>Código EAN de mercancía<input id="ean" placeholder="Ej. 7701234567890"></label></div><div><label>Mercancía<input id="producto" placeholder="Nombre del producto"></label></div><div><label>Cantidad<input id="cantidad" type="number" min="1" value="1"></label></div><div><label>Área / lado<select id="area"><option>Derecho</option><option>Izquierdo</option><option>PRE</option><option>Final de línea</option></select></label></div><div><label>Puesto<select id="puesto"></select></label></div><div><label>Turno<select id="turno"><option>Día</option><option>Noche</option></select></label></div></div><button onclick="crearTarea()">Crear tarea</button><p id="taskMsg"></p></div></div>
 <div id="patinadorPanel" class="hidden"><div class="notice"><b>📱 Panel de patinador (celular)</b><br>Escanea o escribe los códigos. Si no funciona la cámara, usa el registro manual.</div><div class="card"><h2>Ejecutar entrega</h2><div class="notice">Escanea el LPN y verás todos los productos pendientes de esa estiba. Luego puedes escanear EAN para identificar un producto específico.</div><div class="grid"><div><label>LPN escaneado o manual<input id="scanLpn"></label></div><div><label>EAN escaneado o manual<input id="scanEan"></label></div><div><label>PRE / Derecho / Izquierdo / puesto<input id="scanPuesto"></label></div><div><label>Cantidad entregada<input id="scanCantidad" type="number" min="1" value="1"></label></div><div><label>📝 <span title="Agregar una novedad">Observaciones</span><textarea id="scanObservaciones" rows="2" placeholder="Novedad, faltante, daño, etc."></textarea></label></div></div><div class="camera"><p>📷 <b>Escáner de códigos</b></p><div class="grid"><button type="button" onclick="iniciarEscaner('lpn')">📷 LPN</button><button type="button" onclick="iniciarEscaner('ean')">📷 EAN</button><button type="button" onclick="iniciarEscaner('pre')">📷 PRE</button><button type="button" onclick="iniciarEscaner('derecho')">📷 Derecho</button><button type="button" onclick="iniciarEscaner('izquierdo')">📷 Izquierdo</button><button type="button" class="secondary" onclick="detenerEscaner()">⏹ Detener</button></div><video id="video" autoplay playsinline muted class="hidden" style="width:100%;max-height:300px;margin-top:10px;border-radius:12px"></video><p id="cameraMsg" class="muted">Apunta la cámara al código de barras o QR.</p></div><div class="grid"><button onclick="buscarTarea()">🔎 Buscar tarea</button><button type="button" onclick="entregadoSinCamara()">🚚 ENTREGAR</button></div><div id="foundTask"></div></div></div>
 <div class="card"><h2>Resumen</h2><div class="grid"><div><div class="stat" id="totalStat">0</div><div class="muted">Tareas</div></div><div><div class="stat" id="pendingStat">0</div><div class="muted">Pendientes</div></div><div><div class="stat" id="doneStat">0</div><div class="muted">Entregadas</div></div></div></div>
 <div id="mesaninEntregas" class="card hidden"><h2>Control de entregas por patinador</h2><div id="deliverySummary"></div></div><div class="card"><h2>Listado de tareas</h2><div class="scroll"><table><thead><tr><th>LPN / Estiba</th><th>Mercancía</th><th>Cantidad</th><th>Destino</th><th>Turno</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="tasksBody"></tbody></table></div></div></section></main>
@@ -26,6 +26,7 @@ const defaultUsers={admin:{pass:'admin',role:'Admin',name:'Administrador'},mesan
 let current=null,stream=null;
 let users={};
 let cloudTasks=[];
+let lpnCatalog=[];
 let cloudReady=false;
 let cloudSyncBusy=false;
 const $=id=>document.getElementById(id);
@@ -37,16 +38,20 @@ async function cloudLoad(){
     const s=await r.json();
     users=s.users||{};
     cloudTasks=Array.isArray(s.tasks)?s.tasks:[];
+    lpnCatalog=Array.isArray(s.lpnCatalog)?s.lpnCatalog:[];
     cloudReady=true;
     localStorage.setItem('cc_users',JSON.stringify(users));
     localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
+    localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));
     render();
     return true;
   }catch(e){
     const su=localStorage.getItem('cc_users');
     const st=localStorage.getItem('cc_tasks');
+    const sl=localStorage.getItem('cc_lpn_catalog');
     users=su?JSON.parse(su):defaultUsers;
     cloudTasks=st?JSON.parse(st):[];
+    lpnCatalog=sl?JSON.parse(sl):[];
     cloudReady=false;
     render();
     return false;
@@ -59,14 +64,16 @@ async function cloudSave(){
     const r=await fetch('/api/state',{
       method:'PUT',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({users,tasks:cloudTasks})
+      body:JSON.stringify({users,tasks:cloudTasks,lpnCatalog})
     });
     if(r.ok){
       const s=await r.json();
       users=s.users||users;
       cloudTasks=Array.isArray(s.tasks)?s.tasks:cloudTasks;
+      lpnCatalog=Array.isArray(s.lpnCatalog)?s.lpnCatalog:lpnCatalog;
       localStorage.setItem('cc_users',JSON.stringify(users));
       localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
+      localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));
       cloudReady=true;
     }
   }catch(e){}
@@ -76,6 +83,60 @@ function loadUsers(){return users;}
 function saveUsers(){localStorage.setItem('cc_users',JSON.stringify(users));cloudSave();}
 const getTasks=()=>cloudTasks;
 const saveTasks=t=>{cloudTasks=t;localStorage.setItem('cc_tasks',JSON.stringify(t));cloudSave();};
+function upsertLpnCatalog(item){
+  const lpn=String(item.lpn||'').trim(),ean=String(item.ean||'').trim();
+  if(!lpn||!ean)return;
+  const key=x=>String(x.lpn||'').trim().toLowerCase()+'|'+String(x.ean||'').trim().toLowerCase()+'|'+String(x.estiba||'Estiba 1').trim().toLowerCase();
+  const k=key(item),idx=lpnCatalog.findIndex(x=>key(x)===k);
+  const clean={id:item.id||Date.now(),lpn,estiba:item.estiba||'Estiba 1',ean,producto:item.producto||'',cantidad:Number(item.cantidad)||1,area:item.area||'PRE',puesto:item.puesto||'',turno:item.turno||'Día'};
+  if(idx>=0)lpnCatalog[idx]={...lpnCatalog[idx],...clean}; else lpnCatalog.push(clean);
+  localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));
+}
+function getLpnItems(lpn){
+  const v=String(lpn||'').trim().toLowerCase();
+  if(!v)return [];
+  let items=lpnCatalog.filter(x=>String(x.lpn||'').trim().toLowerCase()===v);
+  if(!items.length){
+    const seen={};
+    for(const t of getTasks().filter(x=>String(x.lpn||'').trim().toLowerCase()===v)){
+      const k=String(t.ean||'').toLowerCase()+'|'+String(t.estiba||'Estiba 1').toLowerCase();
+      if(seen[k])seen[k].cantidad+=Number(t.cantidad)||0;
+      else seen[k]={id:'task-'+t.id,lpn:t.lpn,estiba:t.estiba||'Estiba 1',ean:t.ean||'',producto:t.producto||'',cantidad:Number(t.cantidad)||0,area:t.area||'PRE',puesto:t.puesto||'',turno:t.turno||'Día'};
+    }
+    items=Object.values(seen);
+  }
+  return items;
+}
+function mostrarContenidoLpnAdmin(lpn){
+  if(!isAdmin())return;
+  const valor=String(lpn||($('adminScanLpn')&&$('adminScanLpn').value)||'').trim();
+  const box=$('adminLpnContents'),msg=$('adminLpnContentsMsg'),body=$('adminLpnContentsBody');
+  if(!valor){box.classList.remove('hidden');msg.className='error';msg.textContent='Escanea o escribe un LPN para ver su contenido.';body.innerHTML='';return;}
+  $('adminScanLpn').value=valor;box.classList.remove('hidden');
+  const items=getLpnItems(valor);
+  if(!items.length){msg.className='error';msg.textContent='El LPN '+valor+' no está cargado todavía en Familia AKT.';body.innerHTML='<p class="muted">Cuando se cargue el LPN con sus productos, aquí aparecerá todo su contenido.</p>';return;}
+  msg.className='muted';msg.innerHTML='<b>'+items.length+'</b> producto(s) registrados en este LPN. Selecciona uno para crear la tarea.';
+  body.innerHTML='<div class="scroll"><table><thead><tr><th>Producto / EAN</th><th>Cantidad en LPN</th><th>Estiba</th><th>Acción</th></tr></thead><tbody>'+items.map(x=>'<tr><td><b>'+x.producto+'</b><br><small>EAN: '+x.ean+'</small></td><td>'+x.cantidad+'</td><td>'+x.estiba+'</td><td><button type="button" class="small" onclick="seleccionarProductoLpnAdmin(\''+String(x.id).replace(/'/g,"\\'")+'\')">➕ CREAR TAREA</button></td></tr>').join('')+'</tbody></table></div>';
+}
+function seleccionarProductoLpnAdmin(id){
+  if(!isAdmin())return;
+  const item=lpnCatalog.find(x=>String(x.id)===String(id));
+  const fallback=getLpnItems($('adminScanLpn').value.trim()).find(x=>String(x.id)===String(id));
+  const x=item||fallback;
+  if(!x){$('adminTaskMsg').className='error';$('adminTaskMsg').textContent='No se encontró el producto del LPN.';return;}
+  $('adminScanLpn').value=x.lpn||$('adminScanLpn').value;
+  $('adminScanEan').value=x.ean||'';
+  $('adminTaskEstiba').value=x.estiba||'Estiba 1';
+  $('adminTaskProducto').value=x.producto||'';
+  $('adminTaskCantidad').value=1;
+  $('adminTaskPuesto').value=x.puesto||$('adminScanPuesto').value||'';
+  $('adminTaskArea').value=x.area||areaDesdePuesto($('adminTaskPuesto').value,scannerMode);
+  $('adminTaskTurno').value=x.turno||'Día';
+  $('adminTaskPanel').classList.remove('hidden');
+  $('adminTaskMsg').className='pill';
+  $('adminTaskMsg').textContent='Producto seleccionado: '+(x.producto||x.ean)+'. Ahora puedes crear la tarea.';
+}
+
 
 cloudLoad();
 setInterval(async()=>{if(!cloudSyncBusy) await cloudLoad();},5000);
@@ -207,8 +268,11 @@ function crearTareaDesdeAdmin(){
     return;
   }
   const tasks=getTasks();
-  tasks.push({id:Date.now(),lpn,estiba,ean,producto,cantidad,area,puesto,turno,estado:'Pendiente',entregado:0,entregas:[],creadoPor:current.name,fechaCreacion:new Date().toLocaleString('es-CO')});
+  const nuevoId=Date.now();
+  tasks.push({id:nuevoId,lpn,estiba,ean,producto,cantidad,area,puesto,turno,estado:'Pendiente',entregado:0,entregas:[],creadoPor:current.name,fechaCreacion:new Date().toLocaleString('es-CO')});
+  upsertLpnCatalog({id:nuevoId,lpn,estiba,ean,producto,cantidad,area,puesto,turno});
   saveTasks(tasks);
+  cloudSave();
   $('adminTaskMsg').className='pill';
   $('adminTaskMsg').textContent='✅ Tarea creada correctamente.';
   render();
@@ -284,11 +348,14 @@ function guardarNuevoLPN(){
  if(!lpn||!ean||!producto||!puesto||cantidad<1){$('lpnMsg').className='error';$('lpnMsg').textContent='Complete LPN, estiba, EAN, mercancía, cantidad y puesto.';return;}
  const tasks=getTasks();
  if(tasks.some(x=>x.lpn===lpn&&x.puesto===puesto&&x.estado!=='Entregada')){$('lpnMsg').className='error';$('lpnMsg').textContent='Ya existe una tarea pendiente con ese LPN y puesto.';return;}
- tasks.push({id:Date.now(),lpn,estiba,ean,producto,cantidad,area,puesto,turno,estado:'Pendiente',entregado:0,entregas:[],creadoPor:current.name,fechaCreacion:new Date().toLocaleString('es-CO')});
- saveTasks(tasks);$('lpnMsg').className='pill';$('lpnMsg').textContent='LPN guardado correctamente.';render();
+ const nuevoId=Date.now();
+ tasks.push({id:nuevoId,lpn,estiba,ean,producto,cantidad,area,puesto,turno,estado:'Pendiente',entregado:0,entregas:[],creadoPor:current.name,fechaCreacion:new Date().toLocaleString('es-CO')});
+ upsertLpnCatalog({id:nuevoId,lpn,estiba,ean,producto,cantidad,area,puesto,turno});
+ saveTasks(tasks);
+ cloudSave();$('lpnMsg').className='pill';$('lpnMsg').textContent='LPN guardado correctamente.';render();
 }
 function mostrarCarga(tipo){let panel=$('cargaPanel');panel.classList.remove('hidden');if(tipo==='tareas'){panel.innerHTML='<b>Subir tareas</b><p>Use el formulario de abajo para crear tareas individuales. También puede pegar varias líneas en el campo de carga masiva.</p><textarea id="bulkText" rows="5" placeholder="LPN;Estiba;EAN;Producto;Cantidad;Área;Puesto;Turno"></textarea><button onclick="cargarMasivo()">Importar tareas</button>'}else if(tipo==='lotes'){panel.innerHTML='<b>Cargar lotes</b><p>Ingrese cada lote en una línea con el formato: LPN;Estiba;EAN;Producto;Cantidad;Área;Puesto;Turno</p><textarea id="bulkText" rows="5"></textarea><button onclick="cargarMasivo()">Cargar lotes</button>'}else{panel.innerHTML='<b>Cargar LPN</b><p>Registre el código de la estiva y la mercancía que contiene. Formato: LPN;Estiba;EAN;Producto;Cantidad;Área;Puesto;Turno</p><textarea id="bulkText" rows="5"></textarea><button onclick="cargarMasivo()">Cargar LPN</button>'}}
-function cargarMasivo(){let lines=($('bulkText').value||'').split('\n').map(x=>x.trim()).filter(Boolean),tasks=getTasks(),ok=0;for(let line of lines){let [lpn,estiba,ean,producto,cantidad,area,puesto,turno]=line.split(';').map(x=>(x||'').trim());let qty=Number(cantidad);if(!lpn||!ean||!producto||!puesto||qty<1)continue;tasks.push({id:Date.now()+ok,lpn,estiba:estiba||'Estiba 1',ean,producto,cantidad:qty,area:area||'PRE',puesto,turno:turno||'Día',estado:'Pendiente',entregado:0,entregas:[],creadoPor:current.name,fechaCreacion:new Date().toLocaleString('es-CO')});ok++}saveTasks(tasks);$('cargaPanel').innerHTML='<b>'+ok+' tareas cargadas correctamente.</b>'+(ok===0?'<p class="error">No se cargó ninguna línea. Use: LPN;Estiba;EAN;Producto;Cantidad;Área;Puesto;Turno</p>':'');render();}
+function cargarMasivo(){let lines=($('bulkText').value||'').split('\n').map(x=>x.trim()).filter(Boolean),tasks=getTasks(),ok=0;for(let line of lines){let [lpn,estiba,ean,producto,cantidad,area,puesto,turno]=line.split(';').map(x=>(x||'').trim());let qty=Number(cantidad);if(!lpn||!ean||!producto||!puesto||qty<1)continue;const nuevoId=Date.now()+ok;tasks.push({id:nuevoId,lpn,estiba:estiba||'Estiba 1',ean,producto,cantidad:qty,area:area||'PRE',puesto,turno:turno||'Día',estado:'Pendiente',entregado:0,entregas:[],creadoPor:current.name,fechaCreacion:new Date().toLocaleString('es-CO')});upsertLpnCatalog({id:nuevoId,lpn,estiba:estiba||'Estiba 1',ean,producto,cantidad:qty,area:area||'PRE',puesto,turno:turno||'Día'});ok++}saveTasks(tasks);$('cargaPanel').innerHTML='<b>'+ok+' tareas cargadas correctamente.</b>'+(ok===0?'<p class="error">No se cargó ninguna línea. Use: LPN;Estiba;EAN;Producto;Cantidad;Área;Puesto;Turno</p>':'');render();}
 let scannerMode=null, scanTimer=null, barcodeDetector=null;
 async function iniciarEscaner(mode){
  scannerMode=mode;
@@ -299,7 +366,7 @@ async function iniciarEscaner(mode){
  try{
   const formatos=['qr_code','code_128','code_39','code_93','ean_13','ean_8','upc_a','upc_e','itf','codabar'];
   let disponibles=formatos;
-  if(BarcodeDetector.getSupportedFormats){const soportados=await BarcodeDetector.getSupportedFormats();disponibles=formatos.filter(f=>soportados.includes(f));}
+  if('BarcodeDetector' in window && BarcodeDetector.getSupportedFormats){const soportados=await BarcodeDetector.getSupportedFormats();disponibles=formatos.filter(f=>soportados.includes(f));}
   barcodeDetector=('BarcodeDetector' in window)?new BarcodeDetector({formats:disponibles.length?disponibles:formatos}):null;
   detenerEscaner(false);
   stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
@@ -319,7 +386,13 @@ async function leerCodigo(){
   if(scannerMode==='adminEan')target='adminScanEan';
   if(scannerMode==='adminPre'||scannerMode==='adminDerecho'||scannerMode==='adminIzquierdo')target='adminScanPuesto';
   if(target&&$(target))$(target).value=valor;
-  if(isAdminMode()){ if(scannerMode==='adminPre'||scannerMode==='adminDerecho'||scannerMode==='adminIzquierdo'){ $('adminScanPuesto').value=normalizarPuestoAdmin(valor,scannerMode); } $('adminTaskPuesto').value=normalizarPuestoAdmin(($('adminScanPuesto').value||''),scannerMode); $('adminTaskArea').value=areaDesdePuesto($('adminScanPuesto').value,scannerMode); $('adminTaskPanel').classList.remove('hidden'); }
+  if(isAdminMode()){
+    if(scannerMode==='adminPre'||scannerMode==='adminDerecho'||scannerMode==='adminIzquierdo') $('adminScanPuesto').value=normalizarPuestoAdmin(valor,scannerMode);
+    $('adminTaskPuesto').value=normalizarPuestoAdmin(($('adminScanPuesto').value||''),scannerMode);
+    $('adminTaskArea').value=areaDesdePuesto($('adminScanPuesto').value,scannerMode);
+    $('adminTaskPanel').classList.remove('hidden');
+    if(scannerMode==='adminLpn') mostrarContenidoLpnAdmin(valor);
+  }
   (isAdminMode()?$('adminCameraMsg'):$('cameraMsg')).textContent='✅ Código leído: '+valor+' · Puedes pulsar CREAR TAREA';
   detenerEscaner(false);
   if(scannerMode==='lpn'&&$('scanLpn')&&valor)mostrarLpn(valor);
