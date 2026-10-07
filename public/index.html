@@ -239,18 +239,19 @@ function cargarMasivo(){let lines=($('bulkText').value||'').split('\n').map(x=>x
 let scannerMode=null, scanTimer=null, barcodeDetector=null;
 async function iniciarEscaner(mode){
  scannerMode=mode;
- if(!window.isSecureContext){const msgEl=()=>isAdminMode()?$('adminCameraMsg'):$('cameraMsg'); const videoEl=()=>isAdminMode()?$('adminVideo'):$('video'); msgEl().textContent='⚠️ La cámara necesita HTTPS.';return;}
+ const msgEl=()=>isAdminMode()?$('adminCameraMsg'):$('cameraMsg');
+ const videoEl=()=>isAdminMode()?$('adminVideo'):$('video');
+ if(!window.isSecureContext){msgEl().textContent='⚠️ La cámara necesita HTTPS. Abre la dirección de Railway con https://';return;}
  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){msgEl().textContent='Este navegador no permite usar la cámara.';return;}
- if(!('BarcodeDetector' in window)){msgEl().textContent='⚠️ Usa Chrome actualizado para escanear automáticamente.';return;}
  try{
   const formatos=['qr_code','code_128','code_39','code_93','ean_13','ean_8','upc_a','upc_e','itf','codabar'];
   let disponibles=formatos;
   if(BarcodeDetector.getSupportedFormats){const soportados=await BarcodeDetector.getSupportedFormats();disponibles=formatos.filter(f=>soportados.includes(f));}
-  barcodeDetector=new BarcodeDetector({formats:disponibles.length?disponibles:formatos});
+  barcodeDetector=('BarcodeDetector' in window)?new BarcodeDetector({formats:disponibles.length?disponibles:formatos}):null;
   detenerEscaner(false);
   stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
   const video=videoEl();video.srcObject=stream;video.classList.remove('hidden');await video.play();
-  msgEl().textContent='📷 Buscando código…';
+  msgEl().textContent=barcodeDetector?'📷 Buscando código…':'📷 Cámara activa. Escribe el código manualmente si no se detecta automáticamente.';
   scanTimer=setInterval(leerCodigo,250);
  }catch(e){detenerEscaner(false);msgEl().textContent='No se pudo iniciar el escáner: '+(e.message||e);}
 }
