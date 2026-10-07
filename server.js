@@ -33,7 +33,7 @@ function writeState(s){ensureState();fs.writeFileSync(STATE_FILE,JSON.stringify(
 const mime={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.json':'application/json; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.jpg':'image/jpeg'};
 const server=http.createServer((req,res)=>{
 const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);const p=decodeURIComponent(url.pathname);
-res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Cache-Control','no-store');
+res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Permissions-Policy','camera=(self), microphone=(self)');res.setHeader('Cache-Control','no-store');
 if(req.method==='OPTIONS'){res.setHeader('Access-Control-Allow-Methods','GET,PUT,OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type');return res.end();}
 if(p==='/api/state'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify(readState()));}
 if(p==='/api/state'&&req.method==='PUT'){
