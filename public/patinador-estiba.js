@@ -15,6 +15,27 @@
     }).catch(()=>{});
   }
 
+  function patinadorAsignado(puesto){
+    const v=String(puesto||'').trim().toLowerCase();
+    const m=v.match(/^(pre|derecho|izquierdo)\s*(\d+)/);
+    if(!m) return '';
+    const area=m[1],n=Number(m[2]);
+    if(area==='pre'){
+      if(n>=1&&n<=10 || n===33) return 'Juan Esteban';
+      if(n>=11&&n<=20) return 'Jorge';
+      if(n>=21&&n<=32) return 'Hamilton';
+    }
+    if(area==='derecho'){
+      if(n>=1&&n<=10) return 'Juan Esteban';
+      if(n>=11&&n<=16) return 'Jorge';
+    }
+    if(area==='izquierdo'){
+      if(n>=1&&n<=10) return 'Hamilton';
+      if(n>=12&&n<=16) return 'Jorge';
+    }
+    return '';
+  }
+
   let eanStream=null, eanTimer=null;
   async function escanearEAN(){
     const input=document.getElementById('scanEan');
@@ -64,12 +85,14 @@
     x.entregas=x.entregas||[];
     x.entregas.push({patinador:current.name,cantidad:qty,fechaHora:new Date().toLocaleString('es-CO'),metodo:'EAN / botón ENTREGAR',observaciones:obs||''});
     x.entrega=x.entregas[x.entregas.length-1];
-    const r=await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({users,tasks:t})});
+    const r=await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({users,tasks:t,lpnCatalog})});
     if(!r.ok) throw new Error('El servidor no pudo guardar la entrega.');
     const s=await r.json();
     users=s.users||users; cloudTasks=Array.isArray(s.tasks)?s.tasks:t;
+    if(Array.isArray(s.lpnCatalog)) lpnCatalog=s.lpnCatalog;
     localStorage.setItem('cc_users',JSON.stringify(users));
     localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
+    localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));
   }
 
   function instalar(){
@@ -99,7 +122,6 @@
     mostrarEstiba();
   }
 
-  // Reemplaza las acciones del patinador sin tocar el resto de la aplicación.
   window.confirmarEntrega=async function(id,qty,obs){
     try{
       await guardarEntregaDirecta(id,Number(qty),obs||'');
@@ -119,10 +141,12 @@
     if(!lpn||!puesto){box.innerHTML='<p class="error">Escribe o escanea el LPN y el puesto.</p>';return;}
     const t=cloudTasks.find(x=>String(x.lpn||'')===lpn && (!ean||String(x.ean||'')===ean) && String(x.puesto||'')===puesto && x.estado!=='Entregada');
     if(!t){box.innerHTML='<p class="error">No se encontró una tarea pendiente para ese LPN, EAN y puesto.</p>';return;}
+    const asignado=patinadorAsignado(t.puesto);
+    if(asignado && current.name!==asignado){box.innerHTML='<p class="error">Esta tarea está asignada a <b>'+esc(asignado)+'</b>.</p>';return;}
     if(current.areas&&!current.areas.includes(t.area)&&!(current.puestos||[]).includes(t.puesto)){box.innerHTML='<p class="error">Esta tarea no está asignada a tu zona.</p>';return;}
     const restante=Number(t.cantidad||0)-Number(t.entregado||0);
     if(qty<1||qty>restante){box.innerHTML='<p class="error">Cantidad inválida. Faltan '+restante+' unidades.</p>';return;}
-    box.innerHTML='<div class="notice"><b>'+esc(t.producto)+'</b><br>📦 Estiba: <b>'+esc(t.estiba||'Sin estiba')+'</b><br>🏷️ EAN: '+esc(t.ean||'')+'<br>🏷️ LPN: '+esc(t.lpn||'')+'<br>Solicitado: '+t.cantidad+'<br>Entregado: '+(t.entregado||0)+'<br>Faltante: '+restante+'<br>Destino: '+esc(t.area)+' / '+esc(t.puesto)+'<button type="button" id="btnEntregarReal">🚚 ENTREGAR</button></div>';
+    box.innerHTML='<div class="notice"><b>'+esc(t.producto)+'</b><br>📦 Estiba: <b>'+esc(t.estiba||'Sin estiba')+'</b><br>🏷️ EAN: '+esc(t.ean||'')+'<br>🏷️ LPN: '+esc(t.lpn||'')+'<br>👷 Patinador: <b>'+esc(asignado||current.name)+'</b><br>Solicitado: '+t.cantidad+'<br>Entregado: '+(t.entregado||0)+'<br>Faltante: '+restante+'<br>Destino: '+esc(t.area)+' / '+esc(t.puesto)+'<button type="button" id="btnEntregarReal">🚚 ENTREGAR</button></div>';
     document.getElementById('btnEntregarReal').onclick=()=>window.confirmarEntrega(t.id,qty,obs);
   };
 
