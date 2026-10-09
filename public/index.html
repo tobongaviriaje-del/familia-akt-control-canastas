@@ -404,10 +404,10 @@ function isAdminMode(){return typeof scannerMode==='string'&&scannerMode.indexOf
 function detenerEscaner(msg=true){if(scanTimer){clearInterval(scanTimer);scanTimer=null;}if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}const v=isAdminMode()?$('adminVideo'):$('video');if(v){v.srcObject=null;v.classList.add('hidden');}if(msg){const m=isAdminMode()?$('adminCameraMsg'):$('cameraMsg');if(m)m.textContent='Cámara detenida. Puedes volver a escanear o escribir el código manualmente.';}}
 function iniciarCamara(){iniciarEscaner('lpn')}
 function normalizarPuestoEstandar(v){
- const x=String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');
- let m=x.match(/^(?:pre)\\s*0*(\\d+)/);if(m)return 'PRE '+Number(m[1]);
- m=x.match(/^0*(\\d+)\\s*(derecho|izquierdo)$/);if(m)return m[2].charAt(0).toUpperCase()+m[2].slice(1)+' '+Number(m[1]);
- m=x.match(/^(derecho|izquierdo|final(?: de linea)?)\\s*0*(\\d+)/);if(m)return (m[1].startsWith('final')?'Final':m[1].charAt(0).toUpperCase()+m[1].slice(1))+' '+Number(m[2]);
+ const x=String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+ let m=x.match(/^(?:pre)\s*0*(\d+)/);if(m)return 'PRE '+Number(m[1]);
+ m=x.match(/^0*(\d+)\s*(derecho|izquierdo)$/);if(m)return m[2].charAt(0).toUpperCase()+m[2].slice(1)+' '+Number(m[1]);
+ m=x.match(/^(derecho|izquierdo|final(?: de linea)?)\s*0*(\d+)/);if(m)return (m[1].startsWith('final')?'Final':m[1].charAt(0).toUpperCase()+m[1].slice(1))+' '+Number(m[2]);
  return String(v||'').trim();
 }
 function prepararEstandarNKD(input){
@@ -422,7 +422,7 @@ function prepararEstandarNKD(input){
     const rows=XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,defval:'',raw:false});
     let headerAt=-1,ix={};
     for(let ri=0;ri<Math.min(rows.length,15);ri++){
-     const h=rows[ri].map(v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,''));
+     const h=rows[ri].map(v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''));
      const find=terms=>h.findIndex(v=>terms.some(t=>v===t||v.includes(t)));
      const test={ean:find(['ean','codigo de barras','referencia']),producto:find(['nombre','producto','descripcion','mercancia']),cantidad:find(['cant.','cantidad','qty']),puesto:find(['puesto','ubicacion','posicion'])};
      if(test.ean>=0&&test.producto>=0&&test.cantidad>=0&&test.puesto>=0){headerAt=ri;ix=test;break;}
