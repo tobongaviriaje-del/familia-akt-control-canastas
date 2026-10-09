@@ -405,7 +405,7 @@ function detenerEscaner(msg=true){if(scanTimer){clearInterval(scanTimer);scanTim
 function iniciarCamara(){iniciarEscaner('lpn')}
 function renderPatinadorChecklist(){
  const wrap=$('standardItems'),progress=$('standardProgress');if(!wrap||!progress||!current||current.role!=='Patinador')return;
- const assigned=getTasks().filter(x=>autorizadoParaTarea(x));
+ const assigned=getTasks().filter(x=>Array.isArray(current.puestos)&&current.puestos.includes(x.puesto));
  const total=assigned.length,done=assigned.filter(x=>(Number(x.entregado)||0)>=Number(x.cantidad||0)).length;
  const units=assigned.reduce((n,x)=>n+(Number(x.entregado)||0),0),target=assigned.reduce((n,x)=>n+(Number(x.cantidad)||0),0);
  const left=Math.max(0,target-units);
@@ -414,7 +414,7 @@ function renderPatinadorChecklist(){
  wrap.innerHTML='<div class="scroll"><table><thead><tr><th>Referencia / producto</th><th>Puesto</th><th>Cant. estándar</th><th>Entregado</th><th>Falta</th><th>Registrar</th></tr></thead><tbody>'+assigned.map(x=>{const qty=Number(x.cantidad)||0,del=Number(x.entregado)||0,rest=Math.max(0,qty-del),complete=rest===0;return '<tr><td><b>'+x.producto+'</b><br><small>EAN: '+(x.ean||'-')+'</small></td><td>'+x.puesto+'</td><td>'+qty+'</td><td>'+del+'</td><td><b>'+rest+'</b></td><td>'+(complete?'<span class="pill">✓ Entregada</span>':'<input aria-label="Cantidad a entregar" id="stdQty'+x.id+'" type="number" min="1" max="'+rest+'" value="'+rest+'" style="width:90px;margin:2px 0"><button type="button" class="small" onclick="registrarEntregaEstandar('+JSON.stringify(x.id)+')">✓ Entregar</button>')+'</td></tr>'}).join('')+'</tbody></table></div>';
 }
 function registrarEntregaEstandar(id){
- const x=getTasks().find(a=>String(a.id)===String(id));if(!x||!autorizadoParaTarea(x))return;
+ const x=getTasks().find(a=>String(a.id)===String(id));if(!x||!current.puestos||!current.puestos.includes(x.puesto))return;
  const input=$('stdQty'+id),qty=Number(input&&input.value),rest=Math.max(0,Number(x.cantidad||0)-(Number(x.entregado)||0));
  if(!Number.isInteger(qty)||qty<1||qty>rest){alert('Ingresa una cantidad entre 1 y '+rest+'.');return;}
  confirmarEntrega(x.id,qty,'Entrega registrada desde mi estándar NKD');
