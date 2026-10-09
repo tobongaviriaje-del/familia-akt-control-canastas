@@ -22,7 +22,7 @@
     const area=m[1],n=Number(m[2]);
     if(area==='pre'){
       if(n>=1&&n<=10 || n===33) return 'Juan Esteban';
-      if(n>=11&&n<=20) return 'Jorge';
+      if(n>=11&&n<=21) return 'Jorge';
       if(n>=21&&n<=32) return 'Hamilton';
     }
     if(area==='derecho'){
