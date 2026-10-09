@@ -439,8 +439,11 @@ function prepararEstandarNKD(input){
    if(!parsed.length){msg.className='error';msg.textContent='No encontré filas con EAN, Nombre, Cant. y Puesto. No se cambió el estándar guardado.';return;}
    const old=getTasks().filter(x=>!x.standardNKD);
    const tasks=[...old,...parsed];
-   saveTasks(tasks);
-   cloudSave().then(()=>{msg.className='pill';msg.textContent='✅ Estándar guardado en la nube: '+parsed.length+' referencias de '+wb.SheetNames.length+' hojas. Ya se distribuye por puesto a cada patinador.';render();}).catch(()=>{msg.className='error';msg.textContent='Se cargó localmente, pero no pude confirmar el guardado en la nube. Revisa la conexión.'});
+   cloudTasks=tasks;localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
+   fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({users,tasks:cloudTasks,lpnCatalog})})
+    .then(r=>{if(!r.ok)throw new Error('No se pudo guardar');return r.json();})
+    .then(state=>{users=state.users||users;cloudTasks=Array.isArray(state.tasks)?state.tasks:tasks;lpnCatalog=Array.isArray(state.lpnCatalog)?state.lpnCatalog:lpnCatalog;cloudReady=true;localStorage.setItem('cc_users',JSON.stringify(users));localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));msg.className='pill';msg.textContent='✅ Estándar guardado permanentemente: '+parsed.length+' referencias encontradas en '+wb.SheetNames.length+' hojas. Ya se distribuye por puesto a cada patinador.';render();})
+    .catch(()=>{msg.className='error';msg.textContent='No se pudo confirmar el guardado en la nube. Revisa la conexión antes de cerrar esta pantalla.';});
   }catch(err){msg.className='error';msg.textContent='No se pudo leer el Excel. No se cambió el estándar guardado.';}
  };
  reader.onerror=()=>{msg.className='error';msg.textContent='No se pudo leer el archivo.';};
