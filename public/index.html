@@ -451,7 +451,7 @@ function prepararEstandarNKD(input){
     for(let ri=0;ri<Math.min(rows.length,15);ri++){
      const h=rows[ri].map(v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''));
      const find=terms=>h.findIndex(v=>terms.some(t=>v===t||v.includes(t)));
-     const test={ean:find(['ean','codigo de barras','referencia']),producto:find(['nombre','producto','descripcion','mercancia']),cantidad:find(['cant.','cantidad','qty']),puesto:find(['puesto','ubicacion','posicion'])};
+     const test={ean:find(['ean','codigo de barras','referencia']),producto:find(['nombre','producto','descripcion','mercancia']),cantidad:find(['cantidad','qty','cant.']),puesto:find(['puesto','ubicacion','posicion'])};
      if(test.ean>=0&&test.producto>=0&&test.cantidad>=0&&test.puesto>=0){headerAt=ri;ix=test;break;}
     }
     if(headerAt<0)return;matchedSheets++;
