@@ -300,7 +300,14 @@ function crearTareaDesdeAdmin(){
 
 async function login(){let u=$('user').value.trim().toLowerCase(),p=$('pass').value;
 if(!cloudReady) await cloudLoad();
-users=loadUsers();if(!users[u]||users[u].pass!==p){$('loginError').textContent='Usuario o contraseña incorrectos';return}if(['juanesteban','jorge','hamilton'].includes(u)){users[u]={...users[u],puestos:[...defaultUsers[u].puestos],areas:[...defaultUsers[u].areas]};saveUsers()}current={...users[u],username:u};$('loginView').classList.add('hidden');$('appView').classList.remove('hidden');$('logout').classList.remove('hidden');$('welcome').textContent='Hola, '+current.name;$('rolePill').textContent=current.role;const canManage=current.role==='Mesanín'||current.role==='Admin';$('mesaninPanel').classList.toggle('hidden',!canManage);$('adminPanel').classList.toggle('hidden',!isAdmin());if(isAdmin())renderUsers();$('patinadorPanel').classList.toggle('hidden',current.role!=='Patinador');if(canManage)fillPuestos();render();}
+users=loadUsers();
+if(!users[u]&&defaultUsers[u])users[u]={...defaultUsers[u]};
+if(users[u]&&defaultUsers[u]&&p===defaultUsers[u].pass&&users[u].pass!==p){
+  users[u]={...defaultUsers[u],...users[u],pass:p};
+  saveUsers();
+}
+if(!users[u]||users[u].pass!==p){$('loginError').textContent='Usuario o contraseña incorrectos. Verifica usuario y mayúsculas de la contraseña.';return}
+if(['juanesteban','jorge','hamilton'].includes(u)){users[u]={...users[u],puestos:[...defaultUsers[u].puestos],areas:[...defaultUsers[u].areas]};saveUsers()}current={...users[u],username:u};$('loginView').classList.add('hidden');$('appView').classList.remove('hidden');$('logout').classList.remove('hidden');$('welcome').textContent='Hola, '+current.name;$('rolePill').textContent=current.role;const canManage=current.role==='Mesanín'||current.role==='Admin';$('mesaninPanel').classList.toggle('hidden',!canManage);$('adminPanel').classList.toggle('hidden',!isAdmin());if(isAdmin())renderUsers();$('patinadorPanel').classList.toggle('hidden',current.role!=='Patinador');if(canManage)fillPuestos();render();}
 function logout(){if(stream)stream.getTracks().forEach(t=>t.stop());current=null;$('appView').classList.add('hidden');$('loginView').classList.remove('hidden');$('logout').classList.add('hidden');}
 function fillPuestos(){let arr=[];for(let i=1;i<=33;i++)arr.push('PRE '+i);for(let i=1;i<=16;i++){arr.push('Derecho '+i);arr.push('Izquierdo '+i)}for(let i=1;i<=20;i++)arr.push('Final '+i);$('puesto').innerHTML=arr.map(x=>`<option>${x}</option>`).join('');}
 function crearTarea(){let qty=Number($('cantidad').value);if(!$('lpn').value||!$('ean').value||!$('producto').value||qty<1){$('taskMsg').textContent='Completa todos los campos';return}let t=getTasks();t.push({id:Date.now(),lpn:$('lpn').value.trim(),estiba:($('estiba').value.trim()||'Estiba 1'),ean:$('ean').value.trim(),producto:$('producto').value.trim(),cantidad:qty,area:$('area').value,puesto:$('puesto').value,turno:$('turno').value,estado:'Pendiente',creadoPor:current.name,fechaCreacion:new Date().toLocaleString('es-CO'),entrega:null});saveTasks(t);$('taskMsg').textContent='Tarea creada correctamente';render();}
