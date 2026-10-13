@@ -16,23 +16,19 @@
   }
 
   function patinadorAsignado(puesto){
-    const v=String(puesto||'').trim().toLowerCase();
-    const m=v.match(/^(pre|derecho|izquierdo)\s*(\d+)/);
-    if(!m) return '';
-    const area=m[1],n=Number(m[2]);
-    if(area==='pre'){
-      if(n>=1&&n<=10 || n===33) return 'Juan Esteban';
-      if(n>=11&&n<=21) return 'Jorge';
-      if(n>=21&&n<=32) return 'Hamilton';
-    }
-    if(area==='derecho'){
+    const v=String(puesto||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
+    if(/^pre\s*33$/.test(v)) return 'Juan Esteban';
+    const pre=v.match(/^pre\s*(\d+)$/);
+    if(pre){
+      const n=Number(pre[1]);
       if(n>=1&&n<=10) return 'Juan Esteban';
-      if(n>=11&&n<=16) return 'Jorge';
+      if(n>=11&&n<=21) return 'Jorge';
+      if(n>=22&&n<=32) return 'Hamilton';
+      return '';
     }
-    if(area==='izquierdo'){
-      if(n>=1&&n<=10) return 'Hamilton';
-      if(n>=12&&n<=16) return 'Jorge';
-    }
+    if(/^derecho(?:\s+\d+)?$/.test(v)) return 'Juan Esteban';
+    if(/^izquierdo(?:\s+\d+)?$/.test(v)) return 'Hamilton';
+    if(/^final de linea(?:\s+\d+)?$/.test(v)) return 'Jorge';
     return '';
   }
 
