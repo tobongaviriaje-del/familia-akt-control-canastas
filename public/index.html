@@ -416,6 +416,7 @@ async function leerCodigo(){
   if(scannerMode==='adminEan')target='adminScanEan';
   if(scannerMode==='adminPre'||scannerMode==='adminDerecho'||scannerMode==='adminIzquierdo')target='adminScanPuesto';
   if(target&&$(target))$(target).value=valor;
+  if(target==='scanPuesto'&&$('scanPuestoSelect'))$('scanPuestoSelect').value=valor;
   if(isAdminMode()){
     if(scannerMode==='adminPre'||scannerMode==='adminDerecho'||scannerMode==='adminIzquierdo') $('adminScanPuesto').value=normalizarPuestoAdmin(valor,scannerMode);
     $('adminTaskPuesto').value=normalizarPuestoAdmin(($('adminScanPuesto').value||''),scannerMode);
