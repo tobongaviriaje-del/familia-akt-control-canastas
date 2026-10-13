@@ -523,7 +523,7 @@ function deleteTask(id){saveTasks(getTasks().filter(x=>x.id!==id));render()}func
 </script>
 <script>
 if('serviceWorker' in navigator){
-  window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
+  window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js',{updateViaCache:'none'}).then(reg=>reg.update()).catch(()=>{}));
 }
 </script>
 </body></html>
