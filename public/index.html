@@ -418,7 +418,7 @@ async function leerCodigo(){
   if(target==='scanPuesto'&&(scannerMode==='pre'||scannerMode==='derecho'||scannerMode==='izquierdo')){
     const v=String(valor).trim();
     const pref=scannerMode==='pre'?'PRE':scannerMode==='derecho'?'Derecho':'Izquierdo';
-    const m=v.match(/^(?:PRE|Derecho|Izquierdo)?\\s*0*(\\d+)$/i);
+    const m=v.match(/^(?:PRE|Derecho|Izquierdo)?\s*0*(\d+)$/i);
     const normalizado=m?pref+' '+Number(m[1]):v;
     if($(target))$(target).value=normalizado;
     const sel=$('scanPuestoSelect');
