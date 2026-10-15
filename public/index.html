@@ -523,7 +523,7 @@ function renderPatinadorChecklist(){
  const left=Math.max(0,target-units);
  progress.innerHTML='<b>Modelo:</b> '+modelo+' · <b>Referencias:</b> '+done+' de '+total+' completadas · <b>Unidades:</b> '+units+' entregadas · '+left+' pendientes';
  if(!total){wrap.innerHTML='<p class="muted">Todavía no hay referencias cargadas para '+modelo+' en tus puestos. El mesanín o administrador debe seleccionar '+modelo+' y subir su Excel.</p>';return;}
- wrap.innerHTML='<div class="scroll"><table><thead><tr><th>Referencia / producto</th><th>Puesto</th><th>Cant. unidad (Cant.)</th><th>Lote (LOTE)</th><th>Cantidad (CANTIDAD)</th><th>Tipo canasta</th><th># Canastas</th><th>Entregado</th><th>Falta</th><th>Registrar</th></tr></thead><tbody>'+assigned.map(x=>{const qty=Number(x.cantidad)||0,del=Number(x.entregado)||0,rest=Math.max(0,qty-del),complete=rest===0;return '<tr><td><b>'+x.producto+'</b><br><small>EAN: '+(x.ean||'-')+'</small></td><td>'+x.puesto+'</td><td>'+(x.cantidadUnidad||'-')+'</td><td>'+(x.lote||'-')+'</td><td>'+(x.cantidadCanastaRaw||x.cantidadCanasta||'-')+'</td><td>'+(x.canasta||'-')+'</td><td>'+(x.numCanastasRaw||x.numCanastas||'-')+'</td><td>'+del+'</td><td><b>'+rest+'</b></td><td>'+(complete?'<span class="pill">✓ Entregada</span>':'<input aria-label="Cantidad a entregar" id="stdQty'+x.id+'" type="number" min="1" max="'+rest+'" value="'+rest+'" style="width:90px;margin:2px 0"><button type="button" class="small" onclick="registrarEntregaEstandar(\''+x.id+'\')">✓ Entregar</button>')+'</td></tr>'}).join('')+'</tbody></table></div>';
+ wrap.innerHTML='<div class="scroll"><table><thead><tr><th>Referencia / producto</th><th>Puesto</th><th>Cant. unidad (Cant.)</th><th>Lote (LOTE)</th><th>Cantidad (CANTIDAD)</th><th>Tipo canasta</th><th># Canastas estándar</th><th>Canastas confirmadas</th><th>Entregado</th><th>Falta</th><th>Registrar / confirmar canastas</th></tr></thead><tbody>'+assigned.map(x=>{const qty=Number(x.cantidad)||0,del=Number(x.entregado)||0,rest=Math.max(0,qty-del),complete=rest===0;return '<tr><td><b>'+x.producto+'</b><br><small>EAN: '+(x.ean||'-')+'</small></td><td>'+x.puesto+'</td><td>'+(x.cantidadUnidad||'-')+'</td><td>'+(x.lote||'-')+'</td><td>'+(x.cantidadCanastaRaw||x.cantidadCanasta||'-')+'</td><td>'+(x.canasta||'-')+'</td><td>'+(x.numCanastasRaw||x.numCanastas||'-')+'</td><td><b>'+(Number(x.canastasEntregadas)||0)+'</b><br><small>canastas</small></td><td>'+del+'</td><td><b>'+rest+'</b></td><td>'+(complete?'<span class="pill">✓ Unidades completas</span>':'<input aria-label="Cantidad a entregar" id="stdQty'+x.id+'" type="number" min="1" max="'+rest+'" value="'+rest+'" style="width:90px;margin:2px 0"><button type="button" class="small" onclick="registrarEntregaEstandar(\''+x.id+'\')">✓ Entregar unidades</button>')+'<input aria-label="Canastas entregadas ahora" id="stdCanastasQty'+x.id+'" type="number" min="1" value="1" style="width:90px;margin:4px 0"><button type="button" class="small secondary" onclick="confirmarCanastasEstandar(\''+x.id+'\')">📦 Confirmar canastas</button></td></tr>'}).join('')+'</tbody></table></div>';
 }
 function registrarEntregaEstandar(id){
  const x=getTasks().find(a=>String(a.id)===String(id));
@@ -534,6 +534,21 @@ function registrarEntregaEstandar(id){
  const input=$('stdQty'+id),qty=Number(input?.value),rest=Math.max(0,Number(x.cantidad||0)-(Number(x.entregado)||0));
  if(!Number.isInteger(qty)||qty<1||qty>rest){alert('Ingresa una cantidad entre 1 y '+rest+'.');if(input){input.focus();input.select();}return;}
  confirmarEntrega(x.id,qty,'Entrega registrada desde el estándar NKD');
+}
+function confirmarCanastasEstandar(id){
+ const x=getTasks().find(a=>String(a.id)===String(id));
+ if(!x||!x.standardNKD){alert('No encontré esta referencia del estándar.');return;}
+ if(!current){alert('Inicia sesión para confirmar canastas.');return;}
+ if(current.role==='Patinador'&&(!Array.isArray(current.puestos)||!current.puestos.includes(x.puesto))){alert('Esta referencia no está asignada a tu puesto.');return;}
+ if(current.role!=='Patinador'&&current.role!=='Admin'&&current.role!=='Mesanín'){alert('Tu usuario no tiene permiso para confirmar canastas.');return;}
+ const input=$('stdCanastasQty'+id),qty=Number(input?.value);
+ if(!Number.isInteger(qty)||qty<1){alert('Ingresa una cantidad de canastas mayor que cero.');if(input){input.focus();input.select();}return;}
+ if(!confirm('¿Confirmas que entregaste '+qty+' canasta(s) para '+x.producto+' en '+x.puesto+'?'))return;
+ const tasks=getTasks(),target=tasks.find(a=>String(a.id)===String(id));
+ target.canastasEntregadas=(Number(target.canastasEntregadas)||0)+qty;
+ target.confirmacionesCanastas=Array.isArray(target.confirmacionesCanastas)?target.confirmacionesCanastas:[];
+ target.confirmacionesCanastas.push({cantidad:qty,usuario:current.name,fechaHora:new Date().toLocaleString('es-CO'),puesto:target.puesto,modelo:target.standardMoto||'NKD'});
+ saveTasks(tasks);cloudSave().then(()=>{render();const msg=$('estandarNKDMsg');if(msg)msg.textContent='📦 Canastas confirmadas para '+target.producto+': '+target.canastasEntregadas+'. Última confirmación: '+qty+' por '+current.name+'.';});
 }
 function registrarEntregaEstandarAdmin(id){
  const x=getTasks().find(a=>String(a.id)===String(id));
