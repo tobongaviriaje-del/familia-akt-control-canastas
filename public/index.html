@@ -139,7 +139,7 @@ function seleccionarProductoLpnAdmin(id){
 
 
 cloudLoad();
-setInterval(async()=>{const active=document.activeElement;const editingInPatinador=active&&$('patinadorPanel')?.contains(active)&&/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName);if(!cloudSyncBusy&&!editingInPatinador) await cloudLoad();},5000);
+setInterval(async()=>{const active=document.activeElement;const editingField=active&&$('appView')?.contains(active)&&/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName);if(!cloudSyncBusy&&!editingField) await cloudLoad();},5000);
 function isAdmin(){return current&&current.role==='Admin';}
 function renderUsers(){if(!isAdmin())return;const body=$('usersBody');body.innerHTML=Object.entries(users).map(([key,u])=>`<tr><td>${key}</td><td>${u.name}</td><td>${u.role}</td><td>${u.turno||'Todos'}</td><td><button type="button" class="small" onclick="editUser('${key}')">Cambiar contraseña</button> ${u.role==='Patinador'?`<button type="button" class="small" onclick="editAssignment('${key}')">🛠️ Cambiar asignación</button>`:''} <button type="button" class="small danger" onclick="deleteUser('${key}')" ${key==='admin'?'disabled':''}>Eliminar</button></td></tr>`).join('');}
 let assignmentEditingKey=null;
