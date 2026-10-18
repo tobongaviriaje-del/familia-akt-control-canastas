@@ -300,7 +300,7 @@ function crearTareaDesdeAdmin(){
   render();
 }
 
-async async function login(){let u=$('user').value.trim().toLowerCase(),p=$('pass').value;
+async function login(){let u=$('user').value.trim().toLowerCase(),p=$('pass').value;
 if(!cloudReady) await cloudLoad();
 users=loadUsers();
 // Garantizar las dos cuentas administrativas de los turnos en la nube y en equipos nuevos.
