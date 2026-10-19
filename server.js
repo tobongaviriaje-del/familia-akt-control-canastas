@@ -6,6 +6,7 @@ const PORT=process.env.PORT||8080;
 const ROOT=path.join(__dirname,'public');
 const DATA_DIR=path.join(__dirname,'data');
 const STATE_FILE=path.join(DATA_DIR,'state.json');
+const HISTORY_DIR=path.join(DATA_DIR,'history');
 
 const defaultUsers={
 admin:{pass:'admin',role:'Admin',name:'Administrador'},
@@ -30,7 +31,8 @@ if(!Array.isArray(s.lpnCatalog))s.lpnCatalog=[];
 return s;
 }catch{return {users:defaultUsers,tasks:[]};}
 }
-function writeState(s){ensureState();fs.writeFileSync(STATE_FILE,JSON.stringify(s,null,2));}
+function writeState(s){ensureState();const tmp=STATE_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(s,null,2));fs.renameSync(tmp,STATE_FILE);}
+function archiveTasks(tasks,meta={}){fs.mkdirSync(HISTORY_DIR,{recursive:true});const stamp=new Date().toISOString().replace(/[:.]/g,'-');const file=path.join(HISTORY_DIR,'jornada-'+stamp+'.json');fs.writeFileSync(file,JSON.stringify({app:'Familia AKT Control de Canastas',fechaCierre:new Date().toISOString(),meta,tasks},null,2));return {file:path.basename(file),count:tasks.length};}
 const mime={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.json':'application/json; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.jpg':'image/jpeg'};
 const server=http.createServer((req,res)=>{
 const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);const p=decodeURIComponent(url.pathname);
@@ -38,6 +40,9 @@ res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Permissions-Poli
 if(req.method==='OPTIONS'){res.setHeader('Access-Control-Allow-Methods','GET,PUT,OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type');return res.end();}
 if(p==='/health'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify({ok:true,service:'familia-akt-control-canastas'}));}
 if(p==='/api/state'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify(readState()));}
+if(p==='/api/jornada/cerrar'&&req.method==='POST'){
+let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{const incoming=JSON.parse(body||'{}');const state=readState();if(!Array.isArray(state.tasks))state.tasks=[];if(incoming.confirmacion!=='CERRAR JORNADA'){res.writeHead(400,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify({ok:false,error:'Confirmación inválida'}));}if(!state.tasks.length){res.writeHead(409,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify({ok:false,error:'No hay tareas activas para archivar'}));}const archived=archiveTasks(state.tasks,{usuario:String(incoming.usuario||'Admin'),motivo:'Cierre de jornada'});state.tasks=[];writeState(state);res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify({ok:true,archived:archived.file,count:archived.count,tasks:[]}));}catch(e){console.error('Error cerrando jornada:',e);res.writeHead(500,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify({ok:false,error:'No se pudo cerrar la jornada'}));}});return;
+}
 if(p==='/api/state'&&req.method==='PUT'){
 let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{const incoming=JSON.parse(body||'{}');const current=readState();const state={users:incoming.users||current.users,tasks:Array.isArray(incoming.tasks)?incoming.tasks:current.tasks,lpnCatalog:Array.isArray(incoming.lpnCatalog)?incoming.lpnCatalog:current.lpnCatalog};writeState(state);res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(state));}catch{res.writeHead(400);res.end(JSON.stringify({error:'JSON invalido'}));}});return;
 }
