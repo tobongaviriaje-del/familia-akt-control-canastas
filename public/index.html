@@ -46,14 +46,11 @@ async function cloudLoad(){
     render();
     return true;
   }catch(e){
-    const su=localStorage.getItem('cc_users');
-    const st=localStorage.getItem('cc_tasks');
-    const sl=localStorage.getItem('cc_lpn_catalog');
-    users=su?JSON.parse(su):defaultUsers;
-    cloudTasks=st?JSON.parse(st):[];
-    lpnCatalog=sl?JSON.parse(sl):[];
+    // Si hay datos locales dañados, no bloquear el botón de ingreso.
+    try{const su=localStorage.getItem('cc_users');users=su?JSON.parse(su):defaultUsers;if(!users||typeof users!=='object')users=defaultUsers;}catch(_){users=defaultUsers;}
+    try{const st=localStorage.getItem('cc_tasks');cloudTasks=st?JSON.parse(st):[];if(!Array.isArray(cloudTasks))cloudTasks=[];}catch(_){cloudTasks=[];}
+    try{const sl=localStorage.getItem('cc_lpn_catalog');lpnCatalog=sl?JSON.parse(sl):[];if(!Array.isArray(lpnCatalog))lpnCatalog=[];}catch(_){lpnCatalog=[];}
     cloudReady=false;
-    render();
     return false;
   }
 }
