@@ -298,43 +298,33 @@ function crearTareaDesdeAdmin(){
 }
 
 async function login(){
-  const btn=document.querySelector('#loginView button[onclick="login()"]');
-  const err=$('loginError');
-  if(err)err.textContent='';
-  if(btn){btn.disabled=true;btn.textContent='Ingresando…';}
-  try{
-    let u=$('user').value.trim().toLowerCase(),p=$('pass').value;
-    if(!cloudReady){
-      await Promise.race([
-        cloudLoad(),
-        new Promise(resolve=>setTimeout(()=>resolve(false),4000))
-      ]);
-    }
-    users=loadUsers();
-    for(const k of ['juandavid','fredy']){users[k]={...(users[k]||{}),...defaultUsers[k],pass:defaultUsers[k].pass,role:'Admin'};}
-    saveUsers();
-    if(!users[u]&&defaultUsers[u]){users[u]={...defaultUsers[u]};saveUsers();}
-    if(users[u]&&defaultUsers[u]&&p===defaultUsers[u].pass&&users[u].pass!==p){
-      users[u]={...defaultUsers[u],...users[u],pass:p};
-      saveUsers();
-    }
-    if(!users[u]||users[u].pass!==p){if(err)err.textContent='Usuario o contraseña incorrectos. Verifica usuario y mayúsculas de la contraseña.';return;}
-    if(['juanesteban','jorge','hamilton'].includes(u)){users[u]={...users[u],puestos:[...defaultUsers[u].puestos],areas:[...defaultUsers[u].areas]};saveUsers();}
-    current={...users[u],username:u};
-    $('loginView').classList.add('hidden');$('appView').classList.remove('hidden');$('logout').classList.remove('hidden');
-    $('welcome').textContent='Hola, '+current.name;$('rolePill').textContent=current.role;
-    const canManage=current.role==='Mesanín'||current.role==='Admin'||current.role==='Supervisor';
-    $('mesaninPanel').classList.toggle('hidden',!canManage);$('adminPanel').classList.toggle('hidden',!isAdmin());
-    if(isAdmin())renderUsers();
-    $('patinadorPanel').classList.toggle('hidden',current.role!=='Patinador');
-    if(canManage)fillPuestos();
-    render();
-  }catch(e){
-    console.error('Error al ingresar:',e);
-    if(err)err.textContent='No se pudo completar el ingreso. Recarga la página e inténtalo otra vez.';
-  }finally{
-    if(btn){btn.disabled=false;btn.textContent='Ingresar';}
-  }
+ const btn=document.querySelector('#loginView button[onclick="login()"]');
+ const err=$('loginError');
+ const u=String($('user')?.value||'').trim().toLowerCase();
+ const p=String($('pass')?.value||'');
+ if(err)err.textContent='';
+ if(btn){btn.disabled=true;btn.textContent='Ingresando…';}
+ try{
+  if(!cloudReady) await Promise.race([cloudLoad(),new Promise(resolve=>setTimeout(resolve,3500))]);
+  users=loadUsers();
+  if(!users||typeof users!=='object')users={...defaultUsers};
+  for(const k of ['juandavid','fredy'])users[k]={...(users[k]||{}),...defaultUsers[k],pass:defaultUsers[k].pass,role:'Admin'};
+  try{saveUsers();}catch(e){console.warn('No se pudieron guardar usuarios localmente',e);}
+  if(!users[u]&&defaultUsers[u]){users[u]={...defaultUsers[u]};try{saveUsers();}catch(e){}}
+  if(users[u]&&defaultUsers[u]&&p===defaultUsers[u].pass&&users[u].pass!==p){users[u]={...defaultUsers[u],...users[u],pass:p};try{saveUsers();}catch(e){}}
+  if(!users[u]||users[u].pass!==p){if(err)err.textContent='Usuario o contraseña incorrectos. Verifica los datos e inténtalo de nuevo.';return;}
+  if(['juanesteban','jorge','hamilton'].includes(u)){users[u]={...users[u],puestos:[...(defaultUsers[u].puestos||[])],areas:[...(defaultUsers[u].areas||[])]};try{saveUsers();}catch(e){}}
+  current={...users[u],username:u};
+  $('loginView').classList.add('hidden');$('appView').classList.remove('hidden');$('logout').classList.remove('hidden');
+  $('welcome').textContent='Hola, '+(current.name||u);$('rolePill').textContent=current.role||'Usuario';
+  const canManage=['Mesanín','Admin','Supervisor'].includes(current.role);
+  $('mesaninPanel').classList.toggle('hidden',!canManage);$('adminPanel').classList.toggle('hidden',!isAdmin());
+  if(isAdmin())renderUsers();
+  $('patinadorPanel').classList.toggle('hidden',current.role!=='Patinador');
+  if(canManage)fillPuestos();
+  render();
+ }catch(e){console.error('Error al ingresar:',e);if(err)err.textContent='No se pudo completar el ingreso. Recarga la página e inténtalo otra vez.';}
+ finally{if(btn){btn.disabled=false;btn.textContent='Ingresar';}}
 }
 function logout(){if(stream)stream.getTracks().forEach(t=>t.stop());current=null;$('appView').classList.add('hidden');$('loginView').classList.remove('hidden');$('logout').classList.add('hidden');}
 function fillPuestos(){let arr=[];for(let i=1;i<=33;i++)arr.push('PRE '+i);for(let i=1;i<=16;i++){arr.push('Derecho '+i);arr.push('Izquierdo '+i)}for(let i=1;i<=20;i++)arr.push('Final '+i);$('puesto').innerHTML=arr.map(x=>`<option>${x}</option>`).join('');}
