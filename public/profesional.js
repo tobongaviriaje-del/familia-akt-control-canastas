@@ -13,13 +13,13 @@ function mount(){
  if(mounted||!$('appView'))return;
  const app=$('appView'),top=app.querySelector('.topbar'),panel=document.createElement('section');
  panel.className='card';panel.id='professionalControl';
- panel.innerHTML='<div class="topbar"><div><h2>📊 Centro de control</h2><p class="pro-note">Seguimiento operativo, búsqueda rápida y respaldos.</p></div><span id="proHealth" class="pro-status">Verificando nube…</span></div><div class="pro-kpis" id="proKpis"></div><div class="pro-toolbar"><label>🔎 Buscar LPN, EAN, mercancía o puesto<input id="proSearch" placeholder="Ej. LPN00123, EAN, PRE 12" autocomplete="off"></label><label>Estado<select id="proStatusFilter"><option value="all">Todos</option><option value="pending">Pendientes</option><option value="partial">Parciales</option><option value="done">Completadas</option></select></label></div><div class="pro-actions"><button id="proExportCsv" type="button" class="secondary">📄 Exportar tareas CSV</button><button id="proBackup" type="button" class="secondary">🛡️ Descargar respaldo</button><button id="proRefresh" type="button" class="secondary">🔄 Actualizar desde nube</button></div><p class="pro-note">El respaldo contiene usuarios y datos operativos internos. Guárdalo de forma segura.</p><p id="proNotice" class="pro-note"></p>';
+ panel.innerHTML='<div class="topbar"><div><h2>📊 Centro de control</h2><p class="pro-note">Seguimiento operativo, búsqueda rápida y respaldos.</p></div><span id="proHealth" class="pro-status">Verificando nube…</span></div><div class="pro-kpis" id="proKpis"></div><div class="pro-toolbar"><label>🔎 Buscar LPN, EAN, mercancía o puesto<input id="proSearch" placeholder="Ej. LPN00123, EAN, PRE 12" autocomplete="off"></label><label>Estado<select id="proStatusFilter"><option value="all">Todos</option><option value="pending">Pendientes</option><option value="partial">Parciales</option><option value="done">Completadas</option></select></label></div><div class="pro-actions"><button id="proExportCsv" type="button" class="secondary">📄 Exportar tareas CSV</button><button id="proBackup" type="button" class="secondary">🛡️ Descargar respaldo</button><button id="proRefresh" type="button" class="secondary">🔄 Actualizar desde nube</button><button id="proCloseShift" type="button" class="secondary">🌙 Cerrar jornada e iniciar de nuevo</button></div><p class="pro-note">El respaldo contiene usuarios y datos operativos internos. Guárdalo de forma segura.</p><p id="proNotice" class="pro-note"></p>';
  if(top&&top.parentNode)top.parentNode.insertBefore(panel,top.nextSibling);else app.prepend(panel);
  const activity=document.createElement('section');activity.className='card';activity.id='proActivity';activity.innerHTML='<h2>🧾 Actividad reciente</h2><p class="pro-note">Últimas entregas registradas.</p><div id="proActivityBody" class="pro-table"></div>';
  const delivery=$('mesaninEntregas');if(delivery&&delivery.parentNode)delivery.parentNode.insertBefore(activity,delivery.nextSibling);else panel.after(activity);
  $('proSearch').addEventListener('input',e=>{query=e.target.value;refreshView();});
  $('proStatusFilter').addEventListener('change',e=>{status=e.target.value;refreshView();});
- $('proExportCsv').addEventListener('click',exportCSV);$('proBackup').addEventListener('click',backup);$('proRefresh').addEventListener('click',refreshCloud);
+ $('proExportCsv').addEventListener('click',exportCSV);$('proBackup').addEventListener('click',backup);$('proRefresh').addEventListener('click',refreshCloud);$('proCloseShift').addEventListener('click',closeShift);
  mounted=true;checkHealth();setInterval(checkHealth,45000);
 }
 function allTasks(){return typeof getTasks==='function'?getTasks():[];}
@@ -40,6 +40,19 @@ async function backup(){try{const r=await fetch('/api/state',{cache:'no-store'})
 async function refreshCloud(){if(!confirm('Se reemplazará la copia local por el estado compartido del servidor. ¿Deseas continuar?'))return;const b=$('proRefresh');b.disabled=true;b.textContent='Actualizando…';try{const r=await fetch('/api/state',{cache:'no-store'});if(!r.ok)throw Error();const s=await r.json();if(!s||!s.users||!Array.isArray(s.tasks))throw Error();users=s.users;cloudTasks=s.tasks;lpnCatalog=Array.isArray(s.lpnCatalog)?s.lpnCatalog:[];localStorage.setItem('cc_users',JSON.stringify(users));localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));cloudReady=true;if(typeof render==='function')render();notify('Datos actualizados desde el servidor.',true);}catch(e){notify('No se pudo actualizar. Los datos locales se conservaron.',false);}finally{b.disabled=false;b.textContent='🔄 Actualizar desde nube';}}
 function notify(msg,ok){const el=$('proNotice');if(el){el.textContent=msg;el.style.color=ok?'#166534':'#991b1b';}}
 async function checkHealth(){const el=$('proHealth');if(!el)return;try{const r=await fetch('/health',{cache:'no-store'}),j=await r.json();if(!r.ok||!j.ok)throw Error();el.className='pro-status ok';el.textContent='Servidor conectado';}catch(e){el.className='pro-status bad';el.textContent='Sin conexión con el servidor';}}
+
+function closeShift(){
+ const tasks=allTasks();
+ if(!tasks.length){notify('No hay tareas activas para cerrar.',false);return;}
+ const phrase=prompt('Esta acción archivará '+tasks.length+' tareas en el servidor y dejará la lista activa vacía. El historial se conservará en el servidor.\n\nEscribe CERRAR JORNADA para confirmar:');
+ if(phrase!=='CERRAR JORNADA'){if(phrase!==null)notify('Confirmación incorrecta. No se borró nada.',false);return;}
+ const btn=$('proCloseShift');if(btn){btn.disabled=true;btn.textContent='Cerrando jornada…';}
+ fetch('/api/jornada/cerrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmacion:phrase,usuario:(typeof current!=='undefined'&&current&&(current.name||current.username))||'Admin'})})
+ .then(async r=>{const data=await r.json();if(!r.ok||!data.ok)throw new Error(data.error||'No se pudo cerrar la jornada');cloudTasks=[];localStorage.setItem('cc_tasks','[]');if(typeof render==='function')render();notify('Jornada cerrada. '+data.count+' tareas quedaron archivadas en el servidor ('+data.archived+').',true);})
+ .catch(()=>notify('No se pudo cerrar la jornada. Las tareas siguen activas; no intentes borrarlas manualmente.',false))
+ .finally(()=>{if(btn){btn.disabled=false;btn.textContent='🌙 Cerrar jornada e iniciar de nuevo';}});
+}
+
 function start(){addStyle();mount();if(typeof render==='function'&&!render.__proWrapped){const original=render;const wrapped=function(){const v=original.apply(this,arguments);try{mount();refreshView();}catch(e){console.warn('Centro de control:',e);}return v;};wrapped.__proWrapped=true;render=wrapped;}refreshView();}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(start,0));else setTimeout(start,0);
 window.addEventListener('online',checkHealth);window.addEventListener('offline',()=>{const e=$('proHealth');if(e){e.className='pro-status bad';e.textContent='Dispositivo sin internet';}});
