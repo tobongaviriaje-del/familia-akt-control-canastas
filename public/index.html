@@ -321,10 +321,13 @@ function autorizadoParaTarea(t){return !current||current.role!=='Patinador'||(cu
 let zonaEntregaActiva=null;
 let deliverySaving=false;
 function tareaPerteneceZona(t,zona){
- const normal=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+ const normal=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');
  const area=normal(t.area),puesto=normal(t.puesto),z=normal(zona);
- if(z==='pre')return area==='pre'||/^pre\s*\d*/.test(puesto);
- return area===z||new RegExp('^'+z+'(?:\\s*\\d+)?
+ if(z==='pre')return area==='pre'||/^pre\\s*\\d*/.test(puesto);
+ return area===z||new RegExp('^'+z+'(?:\\\\s*\\d+)?$').test(puesto);
+}
+function mostrarEntregasZona(zona){
+ zonaEntregaActiva=zona;
  const panel=$('entregasZonaPanel');
  if(!panel){alert('No se encontró el panel de entregas. Recarga la aplicación e intenta de nuevo.');return;}
  const normal=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
