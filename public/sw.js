@@ -1,5 +1,5 @@
-const CACHE='familia-akt-v29';
-const APP_SCRIPT='/patinador-estiba.js';
+const CACHE='familia-akt-v30';
+const APP_SCRIPT='/patinador-estiba.js?v=30';
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['/','/index.html','/manifest.json',APP_SCRIPT])))});
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',e=>{
