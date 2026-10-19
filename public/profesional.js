@@ -44,11 +44,11 @@ async function checkHealth(){const el=$('proHealth');if(!el)return;try{const r=a
 function closeShift(){
  const tasks=allTasks();
  if(!tasks.length){notify('No hay tareas activas para cerrar.',false);return;}
- const phrase=prompt('Esta acción archivará '+tasks.length+' tareas en el servidor y dejará la lista activa vacía. El historial se conservará en el servidor.\n\nEscribe CERRAR JORNADA para confirmar:');
+ const phrase=prompt('Se archivarán '+tasks.length+' tareas (completadas y pendientes). Las completadas saldrán de la lista activa; las pendientes y parciales conservarán su avance para el siguiente turno.\n\nEscribe CERRAR JORNADA para confirmar:');
  if(phrase!=='CERRAR JORNADA'){if(phrase!==null)notify('Confirmación incorrecta. No se borró nada.',false);return;}
  const btn=$('proCloseShift');if(btn){btn.disabled=true;btn.textContent='Cerrando jornada…';}
  fetch('/api/jornada/cerrar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmacion:phrase,usuario:(typeof current!=='undefined'&&current&&(current.name||current.username))||'Admin'})})
- .then(async r=>{const data=await r.json();if(!r.ok||!data.ok)throw new Error(data.error||'No se pudo cerrar la jornada');cloudTasks=[];localStorage.setItem('cc_tasks','[]');if(typeof render==='function')render();notify('Jornada cerrada. '+data.count+' tareas quedaron archivadas en el servidor ('+data.archived+').',true);})
+ .then(async r=>{const data=await r.json();if(!r.ok||!data.ok)throw new Error(data.error||'No se pudo cerrar la jornada');cloudTasks=Array.isArray(data.tasks)?data.tasks:[];localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));if(typeof render==='function')render();notify('Jornada archivada: '+data.count+' tareas guardadas ('+data.archived+'). Completadas retiradas: '+(data.completedRemoved||0)+'. Pendientes/parciales que siguen activas: '+(data.remainingCount||0)+'.',true);})
  .catch(()=>notify('No se pudo cerrar la jornada. Las tareas siguen activas; no intentes borrarlas manualmente.',false))
  .finally(()=>{if(btn){btn.disabled=false;btn.textContent='🌙 Cerrar jornada e iniciar de nuevo';}});
 }
