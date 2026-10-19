@@ -348,15 +348,14 @@ function mostrarEntregasZona(zona){
  const tasks=getTasks().filter(x=>{
   if(x.estado==='Entregada'||Number(x.entregado||0)>=Number(x.cantidad||0))return false;
   const area=normal(x.area),puesto=normal(x.puesto),z=normal(zona);
-  // Para patinadores, exigir el puesto exacto asignado. No basta con coincidir en el área,
-  // porque eso mostraría también las tareas de los demás patinadores.
-  if(puestosUsuario){
-   if(!puestosUsuario.includes(puesto))return false;
-  }else if(!autorizadoParaTarea(x))return false;
+  if(puestosUsuario){if(!puestosUsuario.includes(puesto))return false;}
+  else if(!autorizadoParaTarea(x))return false;
   if(z==='pre')return area==='pre'||/^pre\s*\d*/.test(puesto);
-  return area===z||new RegExp('^'+z+'(?:\\s*\\d+)?
+  return area===z||new RegExp('^'+z+'(?:\\s*\\d+)?$').test(puesto);
+ });
  if(!tasks.length){panel.innerHTML='<p class="notice">No hay tareas pendientes para '+zona+'. Si esperabas ver tareas, verifica que estén cargadas y asignadas a tu puesto.</p>';panel.scrollIntoView({behavior:'smooth',block:'center'});return;}
- panel.innerHTML='<h3>📦 Pendientes: '+zona+'</h3><div class="scroll"><table><thead><tr><th>LPN / Producto</th><th>Puesto</th><th>Solicitado</th><th>Entregado</th><th>Falta</th><th>Cantidad ahora</th><th>Acción</th></tr></thead><tbody>'+tasks.map(x=>{const rest=Math.max(0,Number(x.cantidad||0)-Number(x.entregado||0));return '<tr><td><b>'+x.lpn+'</b><br>'+x.producto+'<br><small>EAN: '+(x.ean||'-')+' · '+(x.estiba||'Estiba 1')+'</small></td><td>'+x.puesto+'</td><td>'+x.cantidad+'</td><td>'+(x.entregado||0)+'</td><td><b>'+rest+'</b></td><td><input id="zonaQty'+x.id+'" type="number" min="1" max="'+rest+'" value="'+rest+'" style="min-width:85px"></td><td><button type="button" class="small" onclick="entregarDesdeZona(\''+x.id+'\',\''+zona+'\')">✓ ENTREGAR</button></td></tr>';}).join('')+'</tbody></table></div>';panel.scrollIntoView({behavior:'smooth',block:'center'});
+ panel.innerHTML='<h3>📦 Pendientes: '+zona+'</h3><div class="scroll"><table><thead><tr><th>LPN / Producto</th><th>Puesto</th><th>Solicitado</th><th>Entregado</th><th>Falta</th><th>Cantidad ahora</th><th>Acción</th></tr></thead><tbody>'+tasks.map(x=>{const rest=Math.max(0,Number(x.cantidad||0)-Number(x.entregado||0));return '<tr><td><b>'+x.lpn+'</b><br>'+x.producto+'<br><small>EAN: '+(x.ean||'-')+' · '+(x.estiba||'Estiba 1')+'</small></td><td>'+x.puesto+'</td><td>'+x.cantidad+'</td><td>'+(x.entregado||0)+'</td><td><b>'+rest+'</b></td><td><input id="zonaQty'+x.id+'" type="number" min="1" max="'+rest+'" value="'+rest+'" style="min-width:85px"></td><td><button type="button" class="small" onclick="entregarDesdeZona(\''+x.id+'\',\''+zona+'\')">✓ ENTREGAR</button></td></tr>';}).join('')+'</tbody></table></div>';
+ panel.scrollIntoView({behavior:'smooth',block:'center'});
 }
 function entregarDesdeZona(id,zona){
  const x=getTasks().find(a=>String(a.id)===String(id));
