@@ -373,8 +373,9 @@ function entregarDesdeZona(id,zona){
 }
 
 function mostrarLpn(lpn){
+ const lpnBuscado=String(lpn||'').trim().toLowerCase();
  const ean=($('scanEan')?.value||'').trim().toLowerCase();
- const todas=getTasks().filter(x=>x.lpn===lpn&&x.estado!=='Entregada'&&autorizadoParaTarea(x));
+ const todas=getTasks().filter(x=>String(x.lpn||'').trim().toLowerCase()===lpnBuscado&&Number(x.entregado||0)<Number(x.cantidad||0)&&x.estado!=='Entregada'&&autorizadoParaTarea(x));
  const filtradas=ean?todas.filter(x=>String(x.ean||'').toLowerCase()===ean):todas;
  if(!filtradas.length){
   $('foundTask').innerHTML='<p class="error">'+(todas.length?'No hay un producto con ese EAN dentro del LPN.':'No se encontraron productos pendientes en el LPN '+lpn+'.')+'</p>';
