@@ -308,7 +308,7 @@ async function login(){
   if(!cloudReady) await Promise.race([cloudLoad(),new Promise(resolve=>setTimeout(resolve,3500))]);
   users=loadUsers();
   if(!users||typeof users!=='object')users={...defaultUsers};
-  for(const k of ['juandavid','fredy'])users[k]={...(users[k]||{}),...defaultUsers[k],pass:defaultUsers[k].pass,role:'Admin'};
+  for(const k of ['juandavid','fredy']){if(defaultUsers[k])users[k]={...(users[k]||{}),...defaultUsers[k],pass:defaultUsers[k].pass,role:'Admin'};}
   try{saveUsers();}catch(e){console.warn('No se pudieron guardar usuarios localmente',e);}
   if(!users[u]&&defaultUsers[u]){users[u]={...defaultUsers[u]};try{saveUsers();}catch(e){}}
   if(users[u]&&defaultUsers[u]&&p===defaultUsers[u].pass&&users[u].pass!==p){users[u]={...defaultUsers[u],...users[u],pass:p};try{saveUsers();}catch(e){}}
