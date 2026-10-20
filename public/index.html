@@ -420,6 +420,7 @@ function buscarTarea(){
 
 function unidadesObjetivoEstandar(x){if(!x)return 0;const lote=Number(String(x.lote??'').replace(',','.'))||0;if(lote>0)return lote;const porCanasta=Number(String(x.cantidadCanasta??'').replace(',','.'))||0;const canastas=Number(String(x.numCanastas??'').replace(',','.'))||0;const unidad=Number(String(x.cantidadUnidad??'').replace(',','.'))||0;const cantidad=Number(String(x.cantidad??'').replace(',','.'))||0;if(porCanasta>0&&canastas>0)return porCanasta*canastas;return unidad>0?unidad:(porCanasta>0?porCanasta:cantidad);}
 function unidadesPorCanastaEstandar(x){if(!x)return 0;const porCanasta=Number(String(x.cantidadCanasta??'').replace(',','.'))||0;if(porCanasta>0)return porCanasta;const lote=Number(String(x.lote??'').replace(',','.'))||0;const canastas=Number(String(x.numCanastas??'').replace(',','.'))||0;return lote>0&&canastas>0?lote/canastas:0;}
+function canastasObjetivoEstandar(x){if(!x)return 0;const n=Number(String(x.numCanastas??'').replace(',','.'))||0;return n>0?n:0;}
 function claveLoteCompleto(x){if(!x||!x.standardNKD)return '';const lote=Number(String(x.lote??'').replace(',','.'))||0;if(lote<=0)return '';return String(x.id||'');}
 function resumenCantidadLote(x,tareas=getTasks()){const total=Number(String(x?.lote??'').replace(',','.'))||unidadesObjetivoEstandar(x);if(!x||!x.standardNKD||total<=0)return {total:0,entregado:0,restante:0,aplica:false};const entregado=Number(x.entregado)||0;return {total,entregado,restante:Math.max(0,total-entregado),aplica:true};}
 function celdaSaldoLote(x,tareas=getTasks()){const s=resumenCantidadLote(x,tareas);return s.aplica?'<b>'+s.restante+'</b><br><small>de '+s.total+' unidades</small>':(x?.lote||'-');}
@@ -611,10 +612,13 @@ function confirmarCanastasEstandar(id){
  const input=$('stdCanastasQty'+id),qty=Number(input?.value);
  if(!Number.isInteger(qty)||qty<1){alert('Ingresa una cantidad de canastas mayor que cero.');if(input){input.focus();input.select();}return;}
  const porCanasta=unidadesPorCanastaEstandar(x),restante=Math.max(0,unidadesObjetivoEstandar(x)-(Number(x.entregado)||0));
- if(!(porCanasta>0)){alert('No puedo calcular las unidades por canasta de esta referencia. Revisa la columna CANTIDAD del Excel o # CANASTAS.');return;}
+ const objetivoCanastas=canastasObjetivoEstandar(x),yaConfirmadas=Number(x.canastasEntregadas)||0;
+ if(!(porCanasta>0)){alert('No puedo calcular las unidades por canasta de esta referencia. Revisa la columna Cantidad por canasta del Excel.');return;}
  const unidades=qty*porCanasta;
  if(!Number.isInteger(unidades)){alert('Las unidades por canasta no dan un número entero. Revisa los datos del Excel.');return;}
- if(unidades>restante){alert('Estas canastas equivalen a '+unidades+' unidades, pero solo quedan '+restante+' unidades en el lote.');return;}
+ if(objetivoCanastas>0&&yaConfirmadas+qty>objetivoCanastas){alert('Esta referencia necesita '+objetivoCanastas+' canasta(s) en total y ya confirmaste '+yaConfirmadas+'. Solo puedes confirmar '+Math.max(0,objetivoCanastas-yaConfirmadas)+' canasta(s) más.');return;}
+ if(unidades>restante){alert('Estas canastas equivalen a '+unidades+' unidades, pero solo quedan '+restante+' unidades en el lote. Revisa la cantidad por canasta y el lote del Excel.');return;}
+ if(objetivoCanastas>0&&porCanasta*objetivoCanastas!==unidadesObjetivoEstandar(x)){console.warn('El Excel indica '+objetivoCanastas+' canastas x '+porCanasta+' unidades, pero el lote es '+unidadesObjetivoEstandar(x)+'. Se conserva el lote como saldo objetivo y no se permite excederlo.');}
  if(!confirm('¿Confirmas '+qty+' canasta(s) de '+x.producto+'? Se descontarán automáticamente '+unidades+' unidades del lote. No registres esas mismas unidades por separado.'))return;
  const tasks=getTasks(),target=tasks.find(a=>String(a.id)===String(id));
  target.canastasEntregadas=(Number(target.canastasEntregadas)||0)+qty;
@@ -623,7 +627,7 @@ function confirmarCanastasEstandar(id){
  target.entregas=Array.isArray(target.entregas)?target.entregas:[];
  const registro={patinador:current?.name||'Administrador',cantidad:unidades,fechaHora:new Date().toLocaleString('es-CO'),metodo:'Confirmación de canastas ('+qty+' canasta(s))',observaciones:'Descuento automático de '+unidades+' unidades del lote.'};
  target.entregas.push(registro);target.entrega=registro;
- if(!(Number(target.numCanastas)>0)){target.numCanastas=qty;target.numCanastasRaw=String(qty);target.canastasDefinidasEnEntrega=true;target.fechaDefinicionCanastas=new Date().toLocaleString('es-CO');}
+ if(!(Number(target.numCanastas)>0)&&!target.canastasDefinidasEnEntrega){target.numCanastas=qty;target.numCanastasRaw=String(qty);target.canastasDefinidasEnEntrega=true;target.fechaDefinicionCanastas=new Date().toLocaleString('es-CO');}
  target.confirmacionesCanastas=Array.isArray(target.confirmacionesCanastas)?target.confirmacionesCanastas:[];
  target.confirmacionesCanastas.push({cantidad:qty,unidades,usuario:current.name,fechaHora:new Date().toLocaleString('es-CO'),puesto:target.puesto,modelo:target.standardMoto||'NKD'});
  saveTasks(tasks);cloudSave().then(()=>{render();const msg=$('estandarNKDMsg');if(msg)msg.textContent='📦 Canastas confirmadas para '+target.producto+': '+target.canastasEntregadas+'. Se descontaron '+unidades+' unidades; saldo del lote: '+Math.max(0,unidadesObjetivoEstandar(target)-target.entregado)+'.';});
