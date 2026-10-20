@@ -553,7 +553,7 @@ function prepararEstandarNKD(input){
      const loteRaw=get('lote'),cantidadRaw=get('cantidad'),canasta=get('canasta'),numCanastasRaw=get('numCanastas');
      const lote=Number(String(loteRaw).replace(',','.'))||0;
      let cantidadCanasta=Number(String(cantidadRaw).replace(',','.'))||0;
-     if(/pedal\s+cambios/i.test(producto))cantidadCanasta=30;
+     if(/palanca\s+de\s+cambios/i.test(producto))cantidadCanasta=30;
      const numCanastas=Number(String(numCanastasRaw).replace(',','.'))||0;
      const cantidad=cantidadCanasta>0&&numCanastas>0?cantidadCanasta*numCanastas:(cantidadUnidad>0?cantidadUnidad:(cantidadCanasta>0?cantidadCanasta:0));
      if(!ean||!producto||!puesto||!Number.isFinite(cantidad)||cantidad<0)return;
