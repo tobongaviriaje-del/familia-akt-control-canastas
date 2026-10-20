@@ -74,12 +74,15 @@
     const t=cloudTasks;
     const x=t.find(a=>a.id===id);
     if(!x) throw new Error('La tarea ya no está disponible.');
-    const restante=Number(x.cantidad||0)-Number(x.entregado||0);
-    if(qty<1||qty>restante) throw new Error('La cantidad supera lo pendiente.');
+    const objetivo=x.standardNKD&&typeof unidadesObjetivoEstandar==='function'
+      ? unidadesObjetivoEstandar(x)
+      : Number(x.cantidad||0);
+    const restante=Math.max(0,objetivo-(Number(x.entregado)||0));
+    if(!Number.isInteger(qty)||qty<1||qty>restante) throw new Error('La cantidad supera lo pendiente: quedan '+restante+' unidades en esta referencia.');
     x.entregado=(Number(x.entregado)||0)+qty;
     const capacidad=typeof unidadesPorCanastaEstandar==='function'&&x.standardNKD?unidadesPorCanastaEstandar(x):0;
     if(capacidad>0)x.canastasEntregadas=Number((x.entregado/capacidad).toFixed(4));
-    x.estado=x.entregado>=x.cantidad?'Entregada':'Parcial';
+    x.estado=x.entregado>=objetivo?'Entregada':'Parcial';
     x.entregas=x.entregas||[];
     x.entregas.push({patinador:current.name,cantidad:qty,fechaHora:new Date().toLocaleString('es-CO'),metodo:'EAN / botón ENTREGAR',observaciones:obs||''});
     x.entrega=x.entregas[x.entregas.length-1];
