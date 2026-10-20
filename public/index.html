@@ -626,26 +626,20 @@ function confirmarCanastasEstandar(id){
  if(current.role!=='Patinador'&&current.role!=='Admin'&&current.role!=='Mesanín'&&current.role!=='Supervisor'){alert('Tu usuario no tiene permiso para confirmar canastas.');return;}
  const input=$('stdCanastasQty'+id),qty=Number(input?.value);
  if(!Number.isInteger(qty)||qty<1){alert('Ingresa una cantidad de canastas mayor que cero.');if(input){input.focus();input.select();}return;}
- const porCanasta=unidadesPorCanastaEstandar(x),restante=Math.max(0,unidadesObjetivoEstandar(x)-(Number(x.entregado)||0));
- const objetivoCanastas=canastasObjetivoEstandar(x),yaConfirmadas=Number(x.canastasEntregadas)||0;
- if(!(porCanasta>0)){alert('No puedo calcular las unidades por canasta de esta referencia. Revisa la columna Cantidad por canasta del Excel.');return;}
- const unidades=qty*porCanasta;
- if(!Number.isInteger(unidades)){alert('Las unidades por canasta no dan un número entero. Revisa los datos del Excel.');return;}
- if(objetivoCanastas>0&&yaConfirmadas+qty>objetivoCanastas){alert('Esta referencia necesita '+objetivoCanastas+' canasta(s) en total y ya confirmaste '+yaConfirmadas+'. Solo puedes confirmar '+Math.max(0,objetivoCanastas-yaConfirmadas)+' canasta(s) más.');return;}
- if(unidades>restante){alert('Estas canastas equivalen a '+unidades+' unidades, pero solo quedan '+restante+' unidades en el lote. Revisa la cantidad por canasta y el lote del Excel.');return;}
- if(objetivoCanastas>0&&porCanasta*objetivoCanastas!==unidadesObjetivoEstandar(x)){console.warn('El Excel indica '+objetivoCanastas+' canastas x '+porCanasta+' unidades, pero el lote es '+unidadesObjetivoEstandar(x)+'. Se conserva el lote como saldo objetivo y no se permite excederlo.');}
- if(!confirm('¿Confirmas '+qty+' canasta(s) de '+x.producto+'? Se descontarán automáticamente '+unidades+' unidades del lote. No registres esas mismas unidades por separado.'))return;
+ const porCanasta=unidadesPorCanastaEstandar(x);
+ if(!(porCanasta>0)){alert('Primero define cuántas unidades caben en cada canasta.');return;}
+ const unidadesRegistradas=Number(x.entregado)||0;
+ const equivalentes=unidadesRegistradas/porCanasta;
+ if(Math.abs(equivalentes-qty)>0.0001){
+  alert('No se volverán a descontar unidades. Ya registraste '+unidadesRegistradas+' unidades, equivalentes a '+equivalentes.toLocaleString('es-CO',{maximumFractionDigits:2})+' canastas. Para confirmar '+qty+' canastas, las unidades ya registradas deben ser '+(qty*porCanasta)+'.');
+  return;
+ }
+ if(!confirm('¿Confirmas '+qty+' canasta(s) correspondientes a las '+unidadesRegistradas+' unidades YA registradas? Esta confirmación no agregará ni descontará unidades otra vez.'))return;
  const tasks=getTasks(),target=tasks.find(a=>String(a.id)===String(id));
- target.canastasEntregadas=(Number(target.canastasEntregadas)||0)+qty;
- target.entregado=(Number(target.entregado)||0)+unidades;
- target.estado=target.entregado>=unidadesObjetivoEstandar(target)?'Entregada':'Parcial';
- target.entregas=Array.isArray(target.entregas)?target.entregas:[];
- const registro={patinador:current?.name||'Administrador',cantidad:unidades,fechaHora:new Date().toLocaleString('es-CO'),metodo:'Confirmación de canastas ('+qty+' canasta(s))',observaciones:'Descuento automático de '+unidades+' unidades del lote.'};
- target.entregas.push(registro);target.entrega=registro;
- if(!(Number(target.numCanastas)>0)&&!target.canastasDefinidasEnEntrega){target.numCanastas=qty;target.numCanastasRaw=String(qty);target.canastasDefinidasEnEntrega=true;target.fechaDefinicionCanastas=new Date().toLocaleString('es-CO');}
+ target.canastasEntregadas=qty;
  target.confirmacionesCanastas=Array.isArray(target.confirmacionesCanastas)?target.confirmacionesCanastas:[];
- target.confirmacionesCanastas.push({cantidad:qty,unidades,usuario:current.name,fechaHora:new Date().toLocaleString('es-CO'),puesto:target.puesto,modelo:target.standardMoto||'NKD'});
- saveTasks(tasks);cloudSave().then(()=>{render();const msg=$('estandarNKDMsg');if(msg)msg.textContent='📦 Canastas confirmadas para '+target.producto+': '+target.canastasEntregadas+'. Se descontaron '+unidades+' unidades; saldo del lote: '+Math.max(0,unidadesObjetivoEstandar(target)-target.entregado)+'.';});
+ target.confirmacionesCanastas.push({cantidad:qty,unidades:unidadesRegistradas,usuario:current.name,fechaHora:new Date().toLocaleString('es-CO'),puesto:target.puesto,modelo:target.standardMoto||'NKD',soloConfirmacion:true});
+ saveTasks(tasks);cloudSave().then(()=>{render();const msg=$('estandarNKDMsg');if(msg)msg.textContent='✅ Confirmadas '+qty+' canastas para '+target.producto+'. Las '+unidadesRegistradas+' unidades ya estaban registradas; no se descontaron nuevamente.';});
 }
 function registrarEntregaEstandarAdmin(id){
  const x=getTasks().find(a=>String(a.id)===String(id));
