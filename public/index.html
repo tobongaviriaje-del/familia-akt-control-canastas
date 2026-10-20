@@ -627,21 +627,18 @@ function confirmarCanastasEstandar(id){
  const input=$('stdCanastasQty'+id),qty=Number(input?.value);
  if(!Number.isInteger(qty)||qty<1){alert('Ingresa una cantidad de canastas mayor que cero.');if(input){input.focus();input.select();}return;}
  const porCanasta=unidadesPorCanastaEstandar(x);
- if(!(porCanasta>0)){alert('Primero define cuántas unidades caben en cada canasta.');return;}
- const unidadesRegistradas=Number(x.entregado)||0;
- const equivalentes=unidadesRegistradas/porCanasta;
- if(Math.abs(equivalentes-qty)>0.0001){
-  alert('No se volverán a descontar unidades. Ya registraste '+unidadesRegistradas+' unidades, equivalentes a '+equivalentes.toLocaleString('es-CO',{maximumFractionDigits:2})+' canastas. Para confirmar '+qty+' canastas, las unidades ya registradas deben ser '+(qty*porCanasta)+'.');
+ if(!(porCanasta>0)){alert('No se pudo determinar la capacidad en unidades por canasta. Revisa el dato de capacidad de esta referencia.');return;}
+ const objetivo=unidadesObjetivoEstandar(x);
+ const entregado=Number(x.entregado)||0;
+ const pendiente=Math.max(0,objetivo-entregado);
+ const unidades=qty*porCanasta;
+ if(unidades>pendiente){
+  alert('No puedes confirmar '+qty+' canasta(s): son '+unidades+' unidades y solo quedan '+pendiente+' unidades pendientes ('+Math.floor(pendiente/porCanasta)+' canasta(s) completas).');
+  if(input){input.focus();input.select();}
   return;
  }
- if(!confirm('¿Confirmas '+qty+' canasta(s) correspondientes a las '+unidadesRegistradas+' unidades YA registradas? Esta confirmación no agregará ni descontará unidades otra vez.'))return;
- const tasks=getTasks(),target=tasks.find(a=>String(a.id)===String(id));
- // El conteo de canastas siempre se deriva de las unidades acumuladas; nunca se suma por separado.
- target.canastasEntregadas=Number((unidadesRegistradas/porCanasta).toFixed(4));
- target.confirmacionesCanastas=Array.isArray(target.confirmacionesCanastas)?target.confirmacionesCanastas:[];
- const yaConfirmada=target.confirmacionesCanastas.some(c=>c.soloConfirmacion&&Number(c.unidades)===unidadesRegistradas&&Number(c.cantidad)===qty);
- if(!yaConfirmada)target.confirmacionesCanastas.push({cantidad:qty,unidades:unidadesRegistradas,usuario:current.name,fechaHora:new Date().toLocaleString('es-CO'),puesto:target.puesto,modelo:target.standardMoto||'NKD',soloConfirmacion:true});
- saveTasks(tasks);cloudSave().then(()=>{render();const msg=$('estandarNKDMsg');if(msg)msg.textContent='✅ Confirmadas '+qty+' canastas para '+target.producto+'. Las '+unidadesRegistradas+' unidades ya estaban registradas; no se descontaron nuevamente.';});
+ if(!confirm('¿Confirmas la entrega de '+qty+' canasta(s), equivalente a '+unidades+' unidades? El sistema descontará esas unidades automáticamente. No registres esas mismas unidades por separado.'))return;
+ confirmarEntrega(x.id,unidades,'Entrega confirmada por '+qty+' canasta(s) de '+porCanasta+' unidades cada una. Descuento automático de unidades; no registrar nuevamente.');
 }
 function registrarEntregaEstandarAdmin(id){
  const x=getTasks().find(a=>String(a.id)===String(id));
