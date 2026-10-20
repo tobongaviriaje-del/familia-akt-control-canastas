@@ -636,9 +636,11 @@ function confirmarCanastasEstandar(id){
  }
  if(!confirm('¿Confirmas '+qty+' canasta(s) correspondientes a las '+unidadesRegistradas+' unidades YA registradas? Esta confirmación no agregará ni descontará unidades otra vez.'))return;
  const tasks=getTasks(),target=tasks.find(a=>String(a.id)===String(id));
- target.canastasEntregadas=qty;
+ // El conteo de canastas siempre se deriva de las unidades acumuladas; nunca se suma por separado.
+ target.canastasEntregadas=Number((unidadesRegistradas/porCanasta).toFixed(4));
  target.confirmacionesCanastas=Array.isArray(target.confirmacionesCanastas)?target.confirmacionesCanastas:[];
- target.confirmacionesCanastas.push({cantidad:qty,unidades:unidadesRegistradas,usuario:current.name,fechaHora:new Date().toLocaleString('es-CO'),puesto:target.puesto,modelo:target.standardMoto||'NKD',soloConfirmacion:true});
+ const yaConfirmada=target.confirmacionesCanastas.some(c=>c.soloConfirmacion&&Number(c.unidades)===unidadesRegistradas&&Number(c.cantidad)===qty);
+ if(!yaConfirmada)target.confirmacionesCanastas.push({cantidad:qty,unidades:unidadesRegistradas,usuario:current.name,fechaHora:new Date().toLocaleString('es-CO'),puesto:target.puesto,modelo:target.standardMoto||'NKD',soloConfirmacion:true});
  saveTasks(tasks);cloudSave().then(()=>{render();const msg=$('estandarNKDMsg');if(msg)msg.textContent='✅ Confirmadas '+qty+' canastas para '+target.producto+'. Las '+unidadesRegistradas+' unidades ya estaban registradas; no se descontaron nuevamente.';});
 }
 function registrarEntregaEstandarAdmin(id){
