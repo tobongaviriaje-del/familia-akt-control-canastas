@@ -575,10 +575,12 @@ function prepararEstandarNKD(input){
      const lote=loteModelo>0?loteModelo:loteExcel;
      const cantidadCol=Number(String(cantidadRaw).replace(',','.'))||0;
      const cantidadCanasta=Number(String(cantidadCanastaRaw).replace(',','.'))||0;
-     const numCanastas=Number(String(numCanastasRaw).replace(',','.'))||0;
+     const numCanastasExcel=Number(String(numCanastasRaw).replace(',','.'))||0;
+     const numCanastas=lote>0&&cantidadCanasta>0?Math.ceil(lote/cantidadCanasta):numCanastasExcel;
+     const numCanastasMostrar=lote>0&&cantidadCanasta>0?String(numCanastas):numCanastasRaw;
      const cantidad=lote>0?lote:(cantidadCanasta>0&&numCanastas>0?cantidadCanasta*numCanastas:(cantidadCol>0?cantidadCol:(cantidadUnidad>0?cantidadUnidad:0)));
      if(!ean||!producto||!puesto||!Number.isFinite(cantidad)||cantidad<0)return;
-     parsed.push({id:'std-'+modelo.replace(/[^a-z0-9]/gi,'').toLowerCase()+'-'+Date.now()+'-'+parsed.length,lpn:'ESTANDAR-'+modelo,estiba:sheetName,ean,producto,cantidad,cantidadUnidad,lote:lote>0?lote:cantidad,cantidadCanastaRaw:cantidadCanastaRaw,cantidadCanasta,canasta,numCanastasRaw,numCanastas,area:/^PRE /i.test(puesto)?'PRE':/^Derecho /i.test(puesto)?'Derecho':/^Izquierdo /i.test(puesto)?'Izquierdo':'Final de línea',puesto,turno:'Todos',estado:'Pendiente',entregado:0,entregas:[],standardNKD:true,standardMoto:modelo,hojaEstandar:sheetName,creadoPor:current?.name||'Administrador'});
+     parsed.push({id:'std-'+modelo.replace(/[^a-z0-9]/gi,'').toLowerCase()+'-'+Date.now()+'-'+parsed.length,lpn:'ESTANDAR-'+modelo,estiba:sheetName,ean,producto,cantidad,cantidadUnidad,lote:lote>0?lote:cantidad,cantidadCanastaRaw:cantidadCanastaRaw,cantidadCanasta,canasta,numCanastasRaw:numCanastasMostrar,numCanastas,area:/^PRE /i.test(puesto)?'PRE':/^Derecho /i.test(puesto)?'Derecho':/^Izquierdo /i.test(puesto)?'Izquierdo':'Final de línea',puesto,turno:'Todos',estado:'Pendiente',entregado:0,entregas:[],standardNKD:true,standardMoto:modelo,hojaEstandar:sheetName,creadoPor:current?.name||'Administrador'});
     });
    });
    if(!parsed.length){msg.className='error';msg.textContent='No encontré filas con EAN, Nombre, Cant. y Puesto. No se cambió el estándar guardado.';return;}
@@ -602,7 +604,7 @@ async function aplicarLotesBaseMotos(){
  if(conflictos.length){alert('No se aplicaron cambios porque hay '+conflictos.length+' referencias con entregas mayores que el lote base indicado. Revisa esas referencias primero.');return;}
  if(!confirm('Se establecerá el lote inicial de cada referencia cargada según su modelo: CR4 150 = 110, CR4 125 = 270, VOGE/VOGI 180 = 62 y CH = 300 unidades. Se conservarán las entregas ya registradas y el saldo se recalculará. ¿Continuar?'))return;
  const tasks=getTasks();let actualizadas=0;
- tasks.forEach(x=>{if(!x.standardNKD)return;const lote=loteInicialPorModelo(modeloDeTareaEstandar(x));if(lote<=0)return;x.lote=lote;x.lotePiezas=lote;x.cantidad=lote;actualizadas++;});
+ tasks.forEach(x=>{if(!x.standardNKD)return;const lote=loteInicialPorModelo(modeloDeTareaEstandar(x));if(lote<=0)return;x.lote=lote;x.lotePiezas=lote;x.cantidad=lote;const capacidad=Number(String(x.cantidadCanasta??'').replace(',','.'))||0;if(capacidad>0){x.numCanastas=Math.ceil(lote/capacidad);x.numCanastasRaw=String(x.numCanastas);}actualizadas++;});
  saveTasks(tasks);
  try{const ok=await cloudSave();if(!ok)throw new Error('No se confirmó el guardado en la nube.');render();const msg=$('estandarNKDMsg');if(msg)msg.textContent='✅ Lotes iniciales aplicados a '+actualizadas+' referencias. Se conservaron las unidades ya entregadas.';alert('Listo: lotes iniciales aplicados a '+actualizadas+' referencias.');}
  catch(e){alert('Los cambios no se pudieron confirmar en la nube. No cierres sesión; revisa la conexión y vuelve a intentar.');}
