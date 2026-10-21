@@ -618,7 +618,7 @@ function registrarEntregaEstandar(id){
  if(qty>rest){alert('La cantidad supera lo pendiente de esta referencia: '+rest+' unidades.');if(input){input.focus();input.select();}return;}
  const porCanasta=unidadesPorCanastaEstandar(x);const equivalencia=porCanasta>0?(qty/porCanasta):null;const detalle=equivalencia===null?'Capacidad por canasta no definida.':'Equivale a '+(Number.isInteger(equivalencia)?equivalencia:equivalencia.toFixed(2))+' canastas ('+porCanasta+' unidades por canasta).';confirmarEntrega(x.id,qty,'Entrega parcial registrada en unidades. '+detalle);
 }
-function confirmarCanastasEstandar(id){
+async function confirmarCanastasEstandar(id){
  const x=getTasks().find(a=>String(a.id)===String(id));
  if(!x||!x.standardNKD){alert('No encontré esta referencia del estándar.');return;}
  if(!current){alert('Inicia sesión para confirmar canastas.');return;}
@@ -626,12 +626,17 @@ function confirmarCanastasEstandar(id){
  if(current.role!=='Patinador'&&current.role!=='Admin'&&current.role!=='Mesanín'&&current.role!=='Supervisor'){alert('Tu usuario no tiene permiso para confirmar canastas.');return;}
  const input=$('stdCanastasQty'+id),qty=Number(input?.value);
  if(!Number.isInteger(qty)||qty<1){alert('Ingresa una cantidad de canastas mayor que cero.');if(input){input.focus();input.select();}return;}
- if(!confirm('¿Confirmas '+qty+' canasta(s) físicas entregadas? Esta confirmación NO descontará unidades; las unidades se registran por separado.'))return;
+ if(!confirm('¿Confirmas '+qty+' canasta(s) físicas entregadas? Esta confirmación NO descontará unidades; quedará en Actividades recientes.'))return;
  x.canastasEntregadas=(Number(x.canastasEntregadas)||0)+qty;
  x.confirmacionesCanastas=Array.isArray(x.confirmacionesCanastas)?x.confirmacionesCanastas:[];
- x.confirmacionesCanastas.push({patinador:current?.name||'Usuario',cantidad:qty,fechaHora:new Date().toLocaleString('es-CO'),turno:current?.turno||'',observaciones:'Confirmación física de canastas; sin descuento de unidades.'});
- saveTasks(getTasks());
- cloudSave().then(()=>{render();alert('Canastas confirmadas. Las unidades entregadas no se modificaron.');});
+ x.confirmacionesCanastas.push({patinador:current?.name||'Usuario',cantidad:qty,fechaHora:new Date().toLocaleString('es-CO'),turno:current?.turno||'',observaciones:'Canastas físicas confirmadas; sin descuento de unidades.'});
+ cloudTasks=getTasks();
+ localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
+ try{
+   await cloudSave();
+   render();
+   alert('Canastas confirmadas y guardadas. Las unidades entregadas no se modificaron.');
+ }catch(e){alert('No se pudo confirmar el guardado. Revisa la conexión antes de volver a registrar estas canastas.');}
 }
 function registrarEntregaEstandarAdmin(id){
  const x=getTasks().find(a=>String(a.id)===String(id));
