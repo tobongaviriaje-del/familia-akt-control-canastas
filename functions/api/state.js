@@ -6,6 +6,7 @@ const DELIVERY_FIELDS = [
   "entregado", "estado", "entregas", "entrega",
   "canastasEntregadas", "confirmacionesCanastas"
 ];
+const CAPACITY_FIELDS = ["cantidadCanasta", "cantidadCanastaRaw", "numCanastas", "numCanastasRaw"];
 
 function withoutFields(value, fields) {
   const copy = { ...(value || {}) };
@@ -16,6 +17,14 @@ function withoutFields(value, fields) {
 function numeric(value) {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
+}
+
+function fieldsOnly(value, fields) {
+  const out = {};
+  for (const field of fields) {
+    if (Object.prototype.hasOwnProperty.call(value || {}, field)) out[field] = value[field];
+  }
+  return out;
 }
 
 function mergePatinadorTasks(saved, incoming, user) {
@@ -33,6 +42,7 @@ function mergePatinadorTasks(saved, incoming, user) {
 
   const puestos = new Set(Array.isArray(user.puestos) ? user.puestos.map(String) : []);
   const merged = [];
+  const protectedFields = [...DELIVERY_FIELDS, ...CAPACITY_FIELDS];
 
   for (const previous of saved) {
     const key = String(previous && previous.id);
@@ -49,91 +59,140 @@ function mergePatinadorTasks(saved, incoming, user) {
     }
 
     if (!puestos.has(String(previous.puesto || ""))) {
-      const e = new Error("Solo puedes registrar entregas en los puestos asignados a tu usuario.");
+      const e = new Error("Solo puedes modificar la capacidad o registrar entregas en los puestos asignados a tu usuario.");
       e.status = 403;
       throw e;
     }
 
-    if (stableStringify(withoutFields(previous, DELIVERY_FIELDS)) !==
-        stableStringify(withoutFields(candidate, DELIVERY_FIELDS))) {
-      const e = new Error("La sesión de entrega no puede cambiar el lote, la capacidad ni la referencia. Pide al administrador que haga ese cambio.");
+    if (stableStringify(withoutFields(previous, protectedFields)) !==
+        stableStringify(withoutFields(candidate, protectedFields))) {
+      const e = new Error("El patinador solo puede cambiar la capacidad de su canasta y registrar sus entregas; no puede modificar el lote ni la referencia.");
       e.status = 403;
       throw e;
     }
 
-    const oldDelivered = numeric(previous.entregado);
-    const newDelivered = numeric(candidate.entregado);
-    const target = numeric(previous.lote) || numeric(previous.cantidad);
-    if (newDelivered <= oldDelivered || newDelivered > target) {
-      const e = new Error("La entrega debe aumentar el saldo registrado sin superar el lote pendiente.");
-      e.status = 400;
-      throw e;
+    const capacityChanged = stableStringify(fieldsOnly(previous, CAPACITY_FIELDS)) !==
+      stableStringify(fieldsOnly(candidate, CAPACITY_FIELDS));
+    const deliveryChanged = stableStringify(fieldsOnly(previous, DELIVERY_FIELDS)) !==
+      stableStringify(fieldsOnly(candidate, DELIVERY_FIELDS));
+
+    if (!capacityChanged && !deliveryChanged) {
+      merged.push(previous);
+      continue;
     }
 
-    const oldEvents = Array.isArray(previous.entregas) ? previous.entregas : [];
-    const newEvents = Array.isArray(candidate.entregas) ? candidate.entregas : [];
-    if (newEvents.length !== oldEvents.length + 1 ||
-        !oldEvents.every((event, index) => stableStringify(event) === stableStringify(newEvents[index]))) {
-      const e = new Error("No se pudo validar el movimiento de entrega. No se guardó.");
-      e.status = 400;
-      throw e;
-    }
-    const movement = newEvents[newEvents.length - 1];
-    if (numeric(movement && movement.cantidad) !== newDelivered - oldDelivered) {
-      const e = new Error("Las unidades del movimiento no coinciden con la cantidad entregada.");
-      e.status = 400;
-      throw e;
-    }
-    const expectedStatus = newDelivered >= target ? "Entregada" : "Parcial";
-    if (candidate.estado !== expectedStatus ||
-        stableStringify(candidate.entrega || null) !== stableStringify(movement)) {
-      const e = new Error("El estado de la entrega no coincide con el movimiento.");
-      e.status = 400;
-      throw e;
-    }
-
-    const oldConf = Array.isArray(previous.confirmacionesCanastas) ? previous.confirmacionesCanastas : [];
-    const newConf = Array.isArray(candidate.confirmacionesCanastas) ? candidate.confirmacionesCanastas : [];
-    const physicalCount = numeric(movement.canastasFisicas);
-    const expectedConfLength = oldConf.length + (physicalCount > 0 ? 1 : 0);
-    if (newConf.length !== expectedConfLength ||
-        !oldConf.every((event, index) => stableStringify(event) === stableStringify(newConf[index]))) {
-      const e = new Error("No se pudo validar la cantidad de canastas físicas. No se guardó.");
-      e.status = 400;
-      throw e;
-    }
-    if (physicalCount > 0) {
-      const last = newConf[newConf.length - 1];
-      if (numeric(last && last.cantidad) !== physicalCount ||
-          numeric(last && last.unidades) !== newDelivered - oldDelivered ||
-          numeric(candidate.canastasEntregadas) !== numeric(previous.canastasEntregadas) + physicalCount) {
-        const e = new Error("Las canastas registradas no coinciden con las unidades entregadas.");
+    let newCapacity = numeric(previous.cantidadCanasta);
+    let expectedBaskets = numeric(previous.numCanastas);
+    if (capacityChanged) {
+      newCapacity = Number(candidate.cantidadCanasta);
+      if (!Number.isInteger(newCapacity) || newCapacity < 1) {
+        const e = new Error("La capacidad debe ser un número entero de unidades por canasta, mayor que cero.");
         e.status = 400;
         throw e;
       }
-    } else {
-      if (stableStringify(candidate.confirmacionesCanastas || []) !== stableStringify(previous.confirmacionesCanastas || [])) {
-        const e = new Error("No se pudieron validar las canastas físicas. No se guardó.");
+      if (String(candidate.cantidadCanastaRaw ?? "") !== String(newCapacity)) {
+        const e = new Error("No se pudo validar la capacidad de la canasta. Vuelve a escribirla y guardarla.");
         e.status = 400;
         throw e;
       }
-      const oldBasketEquivalent = numeric(previous.canastasEntregadas);
-      const newBasketEquivalent = numeric(candidate.canastasEntregadas);
-      const capacity = numeric(previous.cantidadCanasta);
-      const expectedBasketEquivalent = capacity > 0 ? Number((newDelivered / capacity).toFixed(4)) : oldBasketEquivalent;
-      const unchangedEquivalent = newBasketEquivalent === oldBasketEquivalent;
-      const calculatedEquivalent = Math.abs(newBasketEquivalent - expectedBasketEquivalent) < 0.0001;
-      if (!unchangedEquivalent && !calculatedEquivalent) {
-        const e = new Error("El cálculo de canastas equivalentes no coincide con las unidades entregadas.");
+      const target = numeric(previous.lote) || numeric(previous.cantidad);
+      expectedBaskets = target > 0 ? Math.ceil(target / newCapacity) : numeric(previous.numCanastas);
+      if (numeric(candidate.numCanastas) !== expectedBaskets ||
+          String(candidate.numCanastasRaw ?? "") !== String(expectedBaskets)) {
+        const e = new Error("El cálculo de canastas debe coincidir con el lote y la capacidad. Vuelve a guardar la capacidad.");
         e.status = 400;
         throw e;
+      }
+    }
+
+    if (deliveryChanged) {
+      const oldDelivered = numeric(previous.entregado);
+      const newDelivered = numeric(candidate.entregado);
+      const target = numeric(previous.lote) || numeric(previous.cantidad);
+      if (newDelivered <= oldDelivered || newDelivered > target) {
+        const e = new Error("La entrega debe aumentar el saldo registrado sin superar el lote pendiente.");
+        e.status = 400;
+        throw e;
+      }
+
+      const oldEvents = Array.isArray(previous.entregas) ? previous.entregas : [];
+      const newEvents = Array.isArray(candidate.entregas) ? candidate.entregas : [];
+      if (newEvents.length !== oldEvents.length + 1 ||
+          !oldEvents.every((event, index) => stableStringify(event) === stableStringify(newEvents[index]))) {
+        const e = new Error("No se pudo validar el movimiento de entrega. No se guardó.");
+        e.status = 400;
+        throw e;
+      }
+      const movement = newEvents[newEvents.length - 1];
+      if (numeric(movement && movement.cantidad) !== newDelivered - oldDelivered) {
+        const e = new Error("Las unidades del movimiento no coinciden con la cantidad entregada.");
+        e.status = 400;
+        throw e;
+      }
+      const expectedStatus = newDelivered >= target ? "Entregada" : "Parcial";
+      if (candidate.estado !== expectedStatus ||
+          stableStringify(candidate.entrega || null) !== stableStringify(movement)) {
+        const e = new Error("El estado de la entrega no coincide con el movimiento.");
+        e.status = 400;
+        throw e;
+      }
+
+      const oldConf = Array.isArray(previous.confirmacionesCanastas) ? previous.confirmacionesCanastas : [];
+      const newConf = Array.isArray(candidate.confirmacionesCanastas) ? candidate.confirmacionesCanastas : [];
+      const physicalCount = numeric(movement.canastasFisicas);
+      const expectedConfLength = oldConf.length + (physicalCount > 0 ? 1 : 0);
+      if (newConf.length !== expectedConfLength ||
+          !oldConf.every((event, index) => stableStringify(event) === stableStringify(newConf[index]))) {
+        const e = new Error("No se pudo validar la cantidad de canastas físicas. No se guardó.");
+        e.status = 400;
+        throw e;
+      }
+      if (physicalCount > 0) {
+        const last = newConf[newConf.length - 1];
+        if (numeric(last && last.cantidad) !== physicalCount ||
+            numeric(last && last.unidades) !== newDelivered - oldDelivered ||
+            numeric(candidate.canastasEntregadas) !== numeric(previous.canastasEntregadas) + physicalCount) {
+          const e = new Error("Las canastas registradas no coinciden con las unidades entregadas.");
+          e.status = 400;
+          throw e;
+        }
+      } else {
+        if (stableStringify(candidate.confirmacionesCanastas || []) !== stableStringify(previous.confirmacionesCanastas || [])) {
+          const e = new Error("No se pudieron validar las canastas físicas. No se guardó.");
+          e.status = 400;
+          throw e;
+        }
+        const oldBasketEquivalent = numeric(previous.canastasEntregadas);
+        const newBasketEquivalent = numeric(candidate.canastasEntregadas);
+        const effectiveCapacity = capacityChanged ? newCapacity : numeric(previous.cantidadCanasta);
+        const expectedBasketEquivalent = effectiveCapacity > 0
+          ? Number((newDelivered / effectiveCapacity).toFixed(4))
+          : oldBasketEquivalent;
+        const unchangedEquivalent = newBasketEquivalent === oldBasketEquivalent;
+        const calculatedEquivalent = Math.abs(newBasketEquivalent - expectedBasketEquivalent) < 0.0001;
+        if (!unchangedEquivalent && !calculatedEquivalent) {
+          const e = new Error("El cálculo de canastas equivalentes no coincide con las unidades entregadas.");
+          e.status = 400;
+          throw e;
+        }
       }
     }
 
     const updated = { ...previous };
-    for (const field of DELIVERY_FIELDS) {
-      if (Object.prototype.hasOwnProperty.call(candidate, field)) updated[field] = candidate[field];
-      else delete updated[field];
+    if (capacityChanged) {
+      updated.cantidadCanasta = newCapacity;
+      updated.cantidadCanastaRaw = String(newCapacity);
+      const target = numeric(previous.lote) || numeric(previous.cantidad);
+      if (target > 0) {
+        updated.numCanastas = Math.ceil(target / newCapacity);
+        updated.numCanastasRaw = String(updated.numCanastas);
+      }
+    }
+    if (deliveryChanged) {
+      for (const field of DELIVERY_FIELDS) {
+        if (Object.prototype.hasOwnProperty.call(candidate, field)) updated[field] = candidate[field];
+        else delete updated[field];
+      }
     }
     merged.push(updated);
   }
