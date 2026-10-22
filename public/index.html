@@ -584,7 +584,7 @@ function prepararEstandarNKD(input){
     for(let ri=0;ri<Math.min(rows.length,15);ri++){
      const h=rows[ri].map(v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''));
      const find=terms=>h.findIndex(v=>terms.some(t=>v===t||v.includes(t)));
-     const exact=names=>{for(const name of names){const j=h.findIndex(v=>v===name);if(j>=0)return j;}return -1;};const test={ean:find(['ean','codigo de barras','referencia']),producto:find(['nombre','producto','descripcion','mercancia']),cantidad:exact(['cantidad']),cantidadUnidad:exact(['cant.','cant','cantidad por unidad']),lote:exact(['lote','cantidad lote','total lote','saldo lote']),cantidadCanasta:find(['unidades por canasta','unidad por canasta','cantidad por canasta','capacidad canasta','cant. canasta']),canasta:exact(['canasta']),numCanastas:exact(['#canastas','n°canastas','num canastas']),puesto:find(['puesto','ubicacion','posicion'])};if(test.cantidad<0)test.cantidad=find(['cantidad','qty']);if(test.cantidadUnidad<0)test.cantidadUnidad=find(['cant.','cant','cantidad por unidad']);if(test.numCanastas<0)test.numCanastas=find(['canastas']);
+     const exact=names=>{for(const name of names){const j=h.findIndex(v=>v===name);if(j>=0)return j;}return -1;};const test={ean:find(['ean','codigo de barras','referencia']),producto:find(['nombre','producto','descripcion','mercancia']),cantidad:exact(['cantidad']),cantidadUnidad:exact(['cant.','cant','cantidad por unidad']),lote:exact(['lote','cantidad lote','total lote','saldo lote']),cantidadCanasta:find(['unidades por canasta','unidad por canasta','cantidad por canasta','capacidad canasta','cant. canasta']),canasta:exact(['canasta']),numCanastas:exact(['#canastas','n°canastas','num canastas']),puesto:find(['puesto','ubicacion','posicion'])};if(test.cantidad<0)test.cantidad=find(['cantidad','qty']);if(test.cantidadUnidad<0)test.cantidadUnidad=find(['cant.','cant','cantidad por unidad']);if(test.numCanastas<0)test.numCanastas=find(['canastas']);if(test.cantidadCanasta<0&&test.lote>=0&&test.cantidad>=0&&test.canasta>=0&&test.numCanastas>=0)test.cantidadCanasta=test.cantidad;
      if(test.ean>=0&&test.producto>=0&&test.puesto>=0){headerAt=ri;ix=test;break;}
     }
     if(headerAt<0)return;matchedSheets++;
@@ -607,12 +607,38 @@ function prepararEstandarNKD(input){
     });
    });
    if(!parsed.length){msg.className='error';msg.textContent='No encontré filas con EAN, Nombre, Cant. y Puesto. No se cambió el estándar guardado.';return;}
+   const normKeyPart=value=>String(value??'').trim().toLowerCase().replace(/\s+/g,' ');
+   const keyForTask=x=>[normKeyPart(x.ean),normKeyPart(x.producto),normKeyPart(x.puesto)].join('|');
+   const existingForModel=getTasks().filter(x=>x.standardNKD&&modeloDeTareaEstandar(x)===modelo);
+   const existingBuckets=new Map();
+   existingForModel.forEach(x=>{const k=keyForTask(x);if(!existingBuckets.has(k))existingBuckets.set(k,[]);existingBuckets.get(k).push(x);});
+   const deliveryFields=['entregado','estado','entregas','entrega','canastasEntregadas','confirmacionesCanastas'];
+   const updatedParsed=parsed.map(item=>{
+    const bucket=existingBuckets.get(keyForTask(item));
+    const previous=bucket&&bucket.length?bucket.shift():null;
+    if(!previous)return item;
+    const merged={...item,id:previous.id};
+    for(const field of deliveryFields){if(Object.prototype.hasOwnProperty.call(previous,field))merged[field]=previous[field];}
+    for(const field of ['lote','lotePiezas','cantidad']){
+     if(Object.prototype.hasOwnProperty.call(previous,field)&&Number.isFinite(Number(previous[field]))&&Number(previous[field])>0)merged[field]=previous[field];
+    }
+    if(!(Number(merged.cantidadCanasta)>0)&&Number(previous.cantidadCanasta)>0){
+     merged.cantidadCanasta=Number(previous.cantidadCanasta);
+     merged.cantidadCanastaRaw=previous.cantidadCanastaRaw||String(previous.cantidadCanasta);
+    }
+    if(!String(merged.canasta||'').trim()&&String(previous.canasta||'').trim())merged.canasta=previous.canasta;
+    const capacity=Number(merged.cantidadCanasta)||0,lot=Number(merged.lote)||Number(merged.cantidad)||0;
+    if(capacity>0&&lot>0){merged.numCanastas=Math.ceil(lot/capacity);merged.numCanastasRaw=String(merged.numCanastas);}
+    else if(!(Number(merged.numCanastas)>0)&&Number(previous.numCanastas)>0){merged.numCanastas=Number(previous.numCanastas);merged.numCanastasRaw=previous.numCanastasRaw||String(previous.numCanastas);}
+    return merged;
+   });
    const old=getTasks().filter(x=>!(x.standardNKD&&modeloDeTareaEstandar(x)===modelo));
-   const tasks=[...old,...parsed];
+   const preservedCount=updatedParsed.filter(x=>existingForModel.some(p=>String(p.id)===String(x.id))).length;
+   const tasks=[...old,...updatedParsed];
    cloudTasks=tasks;localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
    apiFetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({users,tasks:cloudTasks,lpnCatalog})})
     .then(r=>{if(!r.ok)throw new Error('No se pudo guardar');return r.json();})
-    .then(state=>{users=state.users||users;cloudTasks=Array.isArray(state.tasks)?state.tasks:tasks;lpnCatalog=Array.isArray(state.lpnCatalog)?state.lpnCatalog:lpnCatalog;cloudReady=true;localStorage.setItem('cc_users',JSON.stringify(users));localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));msg.className='pill';msg.textContent='✅ Estándar '+modelo+' guardado permanentemente: '+parsed.length+' referencias en '+matchedSheets+' hojas. Los otros modelos no se modificaron.';render();})
+    .then(state=>{users=state.users||users;cloudTasks=Array.isArray(state.tasks)?state.tasks:tasks;lpnCatalog=Array.isArray(state.lpnCatalog)?state.lpnCatalog:lpnCatalog;cloudReady=true;localStorage.setItem('cc_users',JSON.stringify(users));localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));msg.className='pill';msg.textContent='✅ Estándar '+modelo+' guardado: '+updatedParsed.length+' referencias en '+matchedSheets+' hojas. Se conservaron los movimientos de las referencias coincidentes ('+preservedCount+'). Las capacidades guardadas se mantienen si el Excel no trae esa columna.';render();})
     .catch(()=>{msg.className='error';msg.textContent='No se pudo confirmar el guardado en la nube. Revisa la conexión antes de cerrar esta pantalla.';});
   }catch(err){msg.className='error';msg.textContent='No se pudo leer el Excel. No se cambió el estándar guardado.';}
  };
