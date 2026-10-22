@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Revisión temporal de lotes · Familia AKT</title>
+<style>
+:root{color-scheme:light;--red:#c8102e;--ink:#17202a;--muted:#64748b;--line:#dbe3ea;--bg:#f3f6f8;--green:#166534;--amber:#92400e}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 Arial,Helvetica,sans-serif}
+header{background:linear-gradient(120deg,#171717,var(--red));color:white;padding:22px 18px}
+main{max-width:860px;margin:22px auto;padding:0 14px 28px}
+h1{font-size:24px;margin:0 0 6px}h2{font-size:19px;margin:0 0 12px}
+.card{background:white;border:1px solid var(--line);border-radius:14px;padding:18px;margin:14px 0;box-shadow:0 2px 8px #0000000a}
+p{margin:8px 0}.muted{color:var(--muted);font-size:14px}
+.notice{padding:12px 14px;border-left:4px solid #d97706;background:#fffbeb;border-radius:6px}
+button{border:0;border-radius:9px;background:var(--red);color:#fff;font-weight:700;font-size:16px;padding:13px 16px;cursor:pointer;width:100%;margin-top:9px}
+button.secondary{background:#334155}button:disabled{opacity:.45;cursor:not-allowed}
+table{border-collapse:collapse;width:100%;margin-top:10px}th,td{text-align:left;border-bottom:1px solid var(--line);padding:9px 7px;font-size:14px}th{background:#f8fafc}
+.status{padding:10px 12px;border-radius:8px;background:#eff6ff;color:#1e40af;margin:10px 0;white-space:pre-wrap}
+.status.ok{background:#f0fdf4;color:var(--green)}.status.warn{background:#fffbeb;color:var(--amber)}.status.error{background:#fef2f2;color:#991b1b}
+.check{display:flex;gap:10px;align-items:flex-start;margin:14px 0;font-size:14px}.check input{width:19px;height:19px;margin-top:2px;flex:0 0 auto}
+footer{color:var(--muted);font-size:12px;text-align:center;padding:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Familia AKT · Revisión temporal de lotes</h1>
+  <div>Respaldo primero. Corrección por referencia. Sin reiniciar entregas.</div>
+</header>
+<main>
+  <section class="card">
+    <div class="notice"><strong>Importante:</strong> no cierres ni uses la aplicación de entregas en otro equipo mientras se ejecuta esta corrección. La herramienta descargará primero un respaldo de las entregas. Si detecta que los datos cambiaron, se detendrá sin guardar.</div>
+    <div id="status" class="status">Conectando con el control de canastas…</div>
+    <button id="reload" class="secondary" type="button">Volver a consultar el inventario</button>
+  </section>
+
+  <section class="card">
+    <h2>1. Lotes que se van a revisar</h2>
+    <table>
+      <thead><tr><th>Referencia / modelo</th><th>Lote inicial</th><th>Referencias encontradas</th><th>Unidades ya entregadas</th></tr></thead>
+      <tbody id="summary"><tr><td colspan="4">Consultando…</td></tr></tbody>
+    </table>
+    <p id="extra" class="muted"></p>
+  </section>
+
+  <section class="card">
+    <h2>2. Descargar respaldo</h2>
+    <p>El respaldo contiene las tareas y entregas, además del catálogo LPN. No incluye la lista de usuarios ni sus contraseñas. Guarda el archivo en la carpeta <strong>Descargas</strong> y no lo compartas.</p>
+    <button id="backup" type="button" disabled>Descargar respaldo de entregas (.json)</button>
+    <label class="check"><input id="backupCheck" type="checkbox" disabled><span>Ya comprobé que el archivo de respaldo aparece en Descargas.</span></label>
+  </section>
+
+  <section class="card">
+    <h2>3. Aplicar corrección</h2>
+    <p>Se fijará el lote por referencia: CR4 150 = 110; CR4 125 = 270; VOGE/VOGI 180 = 62; CH = 300. Se conservarán las unidades y el historial de entregas. La cantidad de canastas se recalculará únicamente cuando exista una capacidad configurada mayor que cero.</p>
+    <button id="apply" type="button" disabled>Aplicar corrección después del respaldo</button>
+    <div id="result" class="status" style="display:none"></div>
+  </section>
+  <footer>Herramienta temporal de mantenimiento para Familia AKT. No reemplaza una corrección definitiva de seguridad del servidor.</footer>
+</main>
+<script>
+(function(){
+  "use strict";
+  const API = "https://controlcanastasnube-production-6ad9.up.railway.app";
+  const LOTES = Object.freeze({
+    "CR4 150":110,
+    "CR4 125":270,
+    "VOGE 180":62,
+    "VOGI 180":62,
+    "CH":300
+  });
+  let snapshot = null;
+  let backupRequested = false;
+  let completed = false;
+
+  const $ = id => document.getElementById(id);
+  const norm = v => String(v || "").trim().toUpperCase().replace(/\s+/g," ");
+  function modelOf(t){ return norm(t && t.standardMoto); }
+  function eligible(t){
+    return !!t && t.standardNKD === true &&
+      Object.prototype.hasOwnProperty.call(LOTES, modelOf(t));
+  }
+  function countFor(tasks, model){
+    return tasks.filter(t => eligible(t) && modelOf(t) === model);
+  }
+  function delivered(t){ return Number(t && t.entregado) || 0; }
+  function same(a,b){ return JSON.stringify(a) === JSON.stringify(b); }
+  function say(id,msg,kind){
+    const el=$(id); el.textContent=msg; el.className="status"+(kind?" "+kind:"");
+    if(id==="result")el.style.display="block";
+  }
+  async function getState(){
+    const r=await fetch(API+"/api/state?ts="+Date.now(),{cache:"no-store"});
+    if(!r.ok)throw new Error("El servidor respondió con error HTTP "+r.status+".");
+    const s=await r.json();
+    if(!s || !Array.isArray(s.tasks) || !s.users || typeof s.users!=="object"){
+      throw new Error("La estructura de datos del servidor no coincide con la esperada.");
+    }
+    return s;
+  }
+  function summary(){
+    const body=$("summary");
+    if(!snapshot){body.innerHTML="<tr><td colspan=\"4\">No hay inventario cargado.</td></tr>";return;}
+    const tasks=snapshot.tasks;
+    body.innerHTML=Object.keys(LOTES).map(m=>{
+      const matching=countFor(tasks,m);
+      const units=matching.reduce((sum,t)=>sum+delivered(t),0);
+      return "<tr><td>"+m+"</td><td>"+LOTES[m]+"</td><td>"+matching.length+"</td><td>"+units+"</td></tr>";
+    }).join("");
+    const all=tasks.filter(eligible);
+    const conflicts=all.filter(t=>delivered(t)>LOTES[modelOf(t)]).length;
+    $("extra").textContent="Total de tareas en el sistema: "+tasks.length+". Referencias compatibles con esta corrección: "+all.length+". Conflictos (entregas superiores al nuevo lote): "+conflicts+".";
+    $("backup").disabled=!all.length || completed;
+    $("backupCheck").disabled=!backupRequested || completed;
+    $("apply").disabled=!backupRequested || !$("backupCheck").checked || !all.length || completed || conflicts>0;
+    if(!all.length){
+      say("status","No encontré referencias estándar con esos modelos. No se hará ningún cambio.","warn");
+    }else if(conflicts){
+      say("status","Detecté "+conflicts+" referencias con más unidades entregadas que el nuevo lote. No se permitirá aplicar la corrección.","warn");
+    }else{
+      say("status","Inventario leído correctamente. Revisa los conteos y descarga el respaldo antes de continuar.","ok");
+    }
+  }
+  async function load(){
+    snapshot=null; backupRequested=false; $("backupCheck").checked=false;
+    $("backupCheck").disabled=true; $("backup").disabled=true; $("apply").disabled=true;
+    $("summary").innerHTML="<tr><td colspan=\"4\">Consultando…</td></tr>";
+    say("status","Conectando con el control de canastas…");
+    try{
+      snapshot=await getState();
+      summary();
+    }catch(e){
+      say("status","No pude leer el inventario: "+(e.message||"error de conexión")+". No se modificó nada.","error");
+      $("summary").innerHTML="<tr><td colspan=\"4\">No disponible.</td></tr>";
+    }
+  }
+  function downloadBackup(){
+    if(!snapshot || !snapshot.tasks.some(eligible)){
+      say("result","No hay referencias compatibles para respaldar.","error");return;
+    }
+    const backup={
+      createdAt:new Date().toISOString(),
+      application:"Familia AKT Control de Canastas",
+      note:"Respaldo de tareas, entregas y catálogo LPN antes de corregir lotes iniciales. No incluye usuarios.",
+      tasks:snapshot.tasks,
+      lpnCatalog:Array.isArray(snapshot.lpnCatalog)?snapshot.lpnCatalog:[]
+    };
+    const blob=new Blob([JSON.stringify(backup,null,2)],{type:"application/json;charset=utf-8"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;
+    a.download="respaldo-canastas-antes-de-corregir-"+new Date().toISOString().slice(0,10)+".json";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),5000);
+    backupRequested=true;
+    $("backupCheck").disabled=false;
+    $("backupCheck").checked=false;
+    $("apply").disabled=true;
+    say("result","Se solicitó descargar el respaldo. Abre la carpeta Descargas y confirma que el archivo esté allí. Después marca la casilla.","ok");
+  }
+  async function apply(){
+    if(completed || !snapshot || !backupRequested || !$("backupCheck").checked)return;
+    const targets=snapshot.tasks.filter(eligible);
+    if(!targets.length){say("result","No hay referencias para corregir.","warn");return;}
+    const conflicts=targets.filter(t=>delivered(t)>LOTES[modelOf(t)]);
+    if(conflicts.length){
+      say("result","Hay "+conflicts.length+" referencias con entregas superiores al nuevo lote. No se cambió nada.","error");return;
+    }
+    const counts=Object.keys(LOTES).map(m=>m+": "+countFor(snapshot.tasks,m).length).join("\n");
+    if(!confirm("Se actualizarán "+targets.length+" referencias.\n\n"+counts+"\n\nSe preservarán las entregas y sus observaciones. Confirma solo si descargaste el respaldo."))return;
+    $("apply").disabled=true;
+    say("result","Comprobando que el inventario no haya cambiado…");
+    try{
+      const latest=await getState();
+      if(!same(latest,snapshot)){
+        snapshot=latest; backupRequested=false; $("backupCheck").checked=false;
+        $("backupCheck").disabled=true; summary();
+        say("result","El inventario cambió desde que se descargó el respaldo. Se canceló la corrección. Descarga un respaldo nuevo y vuelve a revisar.","warn");
+        return;
+      }
+      const expected=snapshot.tasks.map(t=>{
+        if(!eligible(t))return {...t};
+        const model=modelOf(t),lot=LOTES[model],copy={...t},del=delivered(t);
+        copy.lote=lot;
+        copy.lotePiezas=lot;
+        copy.cantidad=lot;
+        const cap1=Number(String(t.cantidadCanasta ?? "").replace(",","."));
+        const cap2=Number(String(t.cantidadCanastaRaw ?? "").replace(",","."));
+        const cap=Number.isFinite(cap1)&&cap1>0?cap1:(Number.isFinite(cap2)&&cap2>0?cap2:0);
+        if(cap>0){
+          copy.numCanastas=Math.ceil(lot/cap);
+          copy.numCanastasRaw=String(copy.numCanastas);
+        }
+        copy.estado=del>=lot?"Entregada":(del>0?"Parcial":"Pendiente");
+        return copy;
+      });
+      const put=await fetch(API+"/api/state",{
+        method:"PUT",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          users:snapshot.users,
+          tasks:expected,
+          lpnCatalog:Array.isArray(snapshot.lpnCatalog)?snapshot.lpnCatalog:[]
+        })
+      });
+      if(!put.ok)throw new Error("El servidor no confirmó el guardado (HTTP "+put.status+"). Conserva el respaldo.");
+      await put.json();
+      say("result","El servidor aceptó el guardado. Verificando cantidades e historial…");
+      const verified=await getState();
+      if(verified.tasks.length!==expected.length)throw new Error("Cambió el número de tareas. No repitas el intento; conserva el respaldo.");
+      for(let i=0;i<expected.length;i++){
+        const old=snapshot.tasks[i], exp=expected[i], actual=verified.tasks[i];
+        if(!actual || String(actual.id)!==String(old.id))throw new Error("No se pudo verificar el orden de las tareas. Conserva el respaldo.");
+        if(eligible(old)){
+          const lot=LOTES[modelOf(old)];
+          if(Number(actual.cantidad)!==lot || Number(actual.lote)!==lot ||
+             delivered(actual)!==delivered(old) ||
+             !same(actual.entregas||[],old.entregas||[]) ||
+             !same(actual.entrega||null,old.entrega||null)){
+            throw new Error("No se verificó una referencia o su historial. No vuelvas a ejecutar la corrección; conserva el respaldo.");
+          }
+        }else if(!same(actual,old)){
+          throw new Error("Una tarea no incluida cambió durante el proceso. Conserva el respaldo y no repitas el intento.");
+        }
+      }
+      completed=true;
+      snapshot=verified;
+      summary();
+      $("backup").disabled=true;$("backupCheck").disabled=true;$("apply").disabled=true;
+      say("result","Corrección confirmada. Se actualizaron "+targets.length+" referencias. Las entregas y observaciones se conservaron. Actualiza la página de Familia AKT y revisa los saldos antes de registrar nuevas salidas.","ok");
+    }catch(e){
+      say("result","No puedo confirmar que la operación terminara correctamente: "+(e.message||"error inesperado")+". Conserva el respaldo y no repitas el proceso todavía.","error");
+    }
+  }
+  $("reload").addEventListener("click",load);
+  $("backup").addEventListener("click",downloadBackup);
+  $("backupCheck").addEventListener("change",summary);
+  $("apply").addEventListener("click",apply);
+  load();
+})();
+</script>
+</body>
+</html>
