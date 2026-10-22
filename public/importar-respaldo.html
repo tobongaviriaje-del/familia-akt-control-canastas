@@ -49,10 +49,13 @@ button{width:100%;padding:13px 15px;border:0;border-radius:9px;background:#c8102
  function preview(msg,kind){$("preview").textContent=msg;$("preview").className="status"+(kind?" "+kind:"");}
  try{
    if(!token())throw new Error("No hay sesión de administrador en este navegador. Abre la aplicación, inicia sesión y luego vuelve a esta página.");
+   const mr=await req("/api/auth/me");
+   const me=await mr.json();
+   if(!mr.ok||!me.ok||!me.user||me.user.role!=="Admin")throw new Error(me.error||"Esta operación requiere iniciar sesión como administrador.");
    const r=await req("/api/state");
    const state=await r.json();
    if(!r.ok)throw new Error(state.error||"No se pudo verificar la sesión.");
-   if(!state.users || !state.users.admin || state.users.admin.role!=="Admin")throw new Error("No se pudo confirmar el permiso de administrador.");
+   if(!state.users || !state.users.admin || state.users.admin.role!=="Admin")throw new Error("El respaldo inicial no contiene el administrador esperado.");
    if((state.tasks||[]).length || (state.lpnCatalog||[]).length){
      throw new Error("La base nueva ya contiene tareas o catálogo. Por seguridad, no se sobrescribirá.");
    }
