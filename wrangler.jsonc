@@ -1,13 +1,8 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
+  "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "familia-akt-control-canastas",
-  "main": "worker.js",
+  "pages_build_output_dir": "./public",
   "compatibility_date": "2026-10-22",
-  "assets": {
-    "directory": "./public",
-    "binding": "ASSETS",
-    "run_worker_first": ["/api/*"]
-  },
   "d1_databases": [
     {
       "binding": "DB",
