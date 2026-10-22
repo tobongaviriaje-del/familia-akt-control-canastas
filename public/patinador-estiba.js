@@ -5,7 +5,7 @@
     const lpn=document.getElementById('scanLpn');
     const puesto=document.getElementById('scanPuesto');
     if(!box||!lpn||!puesto||!lpn.value.trim()) return;
-    fetch('/api/state',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(s=>{
+    apiFetch('/api/state',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(s=>{
       if(!s||!Array.isArray(s.tasks)) return;
       const t=s.tasks.find(x=>String(x.lpn||'')===lpn.value.trim() && String(x.puesto||'')===puesto.value.trim() && x.estado!=='Entregada');
       if(!t) return;
@@ -86,7 +86,7 @@
     x.entregas=x.entregas||[];
     x.entregas.push({patinador:current.name,cantidad:qty,fechaHora:new Date().toLocaleString('es-CO'),metodo:'EAN / botón ENTREGAR',observaciones:obs||''});
     x.entrega=x.entregas[x.entregas.length-1];
-    const r=await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({users,tasks:t,lpnCatalog})});
+    const r=await apiFetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({users,tasks:t,lpnCatalog})});
     if(!r.ok) throw new Error('El servidor no pudo guardar la entrega.');
     const s=await r.json();
     users=s.users||users; cloudTasks=Array.isArray(s.tasks)?s.tasks:t;
