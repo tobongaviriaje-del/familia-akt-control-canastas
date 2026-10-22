@@ -1,5 +1,5 @@
-import { json, errorResponse } from "../../../_lib/db.js";
-import { revokeSession } from "../../../_lib/auth.js";
+import { json, errorResponse } from "../../_lib/db.js";
+import { revokeSession } from "../../_lib/auth.js";
 
 export async function onRequestPost({ request, env }) {
   try {
