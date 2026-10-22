@@ -809,6 +809,8 @@ async function guardarEdicionHistorial(taskId, indice, nuevaCantidad, nuevasCana
  if(!cloudReady){alert('No hay conexión confirmada con la nube. No se cambió nada; vuelve a ingresar e inténtalo otra vez.');return false;}
  const original=getTasks().find(t=>String(t.id)===String(taskId));
  if(!original||!Array.isArray(original.entregas)||!original.entregas[indice]){alert('No encontré esa entrega. Actualiza la pantalla e inténtalo de nuevo.');return false;}
+ const baseDelivered=Math.max(0,(Number(original.entregado)||0)-(original.entregas||[]).reduce((sum,e)=>sum+(Number(e.cantidad)||0),0));
+ const baseBaskets=Math.max(0,(Number(original.canastasEntregadas)||0)-(original.entregas||[]).reduce((sum,e)=>sum+(Number(e.canastasFisicas)||0),0));
  const tasks=getTasks().map(t=>({...t,entregas:Array.isArray(t.entregas)?t.entregas.map(e=>({...e})):t.entregas,confirmacionesCanastas:Array.isArray(t.confirmacionesCanastas)?t.confirmacionesCanastas.map(e=>({...e})):t.confirmacionesCanastas}));
  const x=tasks.find(t=>String(t.id)===String(taskId));
  const old=x.entregas[indice];
@@ -823,7 +825,7 @@ async function guardarEdicionHistorial(taskId, indice, nuevaCantidad, nuevasCana
   if(!Number.isInteger(nuevasCanastas)||nuevasCanastas<0){alert('La cantidad de canastas debe ser un entero igual o mayor que cero.');return false;}
   const objetivo=x.standardNKD?unidadesObjetivoEstandar(x):Number(x.cantidad||0);
   const otras=x.entregas.reduce((sum,e,i)=>sum+(i===indice?0:(Number(e.cantidad)||0)),0);
-  if(otras+nuevaCantidad>objetivo){alert('La corrección supera el lote. Máximo permitido para esta entrega: '+Math.max(0,objetivo-otras)+' unidades.');return false;}
+  if(baseDelivered+otras+nuevaCantidad>objetivo){alert('La corrección supera el lote. Máximo permitido para esta entrega: '+Math.max(0,objetivo-baseDelivered-otras)+' unidades.');return false;}
   x.entregas[indice]={...old,cantidad:nuevaCantidad,canastasFisicas:nuevasCanastas||undefined,metodo:nuevasCanastas>0?'Entrega de canastas físicas':(Number(old.canastasFisicas||0)>0?'Corrección manual de unidades':old.metodo)};
   if(confIndex>=0){
    if(nuevasCanastas>0)x.confirmacionesCanastas[confIndex]={...x.confirmacionesCanastas[confIndex],entregaId:old.id,cantidad:nuevasCanastas,unidades:nuevaCantidad};
@@ -833,11 +835,10 @@ async function guardarEdicionHistorial(taskId, indice, nuevaCantidad, nuevasCana
    x.confirmacionesCanastas.push({entregaId:old.id,patinador:old.patinador||current.name,cantidad:nuevasCanastas,unidades:nuevaCantidad,fechaHora:old.fechaHora||new Date().toLocaleString('es-CO'),turno:current.turno||'',observaciones:'Canastas físicas corregidas por administración.'});
   }
  }
- x.entregado=x.entregas.reduce((sum,e)=>sum+(Number(e.cantidad)||0),0);
+ x.entregado=baseDelivered+x.entregas.reduce((sum,e)=>sum+(Number(e.cantidad)||0),0);
  x.entrega=x.entregas.length?x.entregas[x.entregas.length-1]:null;
  const tieneCanastas=x.entregas.some(e=>Number(e.canastasFisicas)>0);
- if(tieneCanastas)x.canastasEntregadas=x.entregas.reduce((sum,e)=>sum+(Number(e.canastasFisicas)||0),0);
- else if(x.confirmacionesCanastas.length===0)x.canastasEntregadas=0;
+ x.canastasEntregadas=baseBaskets+x.entregas.reduce((sum,e)=>sum+(Number(e.canastasFisicas)||0),0);
  const objetivo=x.standardNKD?unidadesObjetivoEstandar(x):Number(x.cantidad||0);
  x.estado=x.entregado<=0?'Pendiente':(x.entregado>=objetivo?'Entregada':'Parcial');
  try{
