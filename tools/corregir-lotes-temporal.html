@@ -192,7 +192,7 @@ footer{color:var(--muted);font-size:12px;text-align:center;padding:12px}
           copy.numCanastas=Math.ceil(lot/cap);
           copy.numCanastasRaw=String(copy.numCanastas);
         }
-        copy.estado=del>=lot?"Entregada":(del>0?"Parcial":"Pendiente");
+        if(del>=lot)copy.estado="Entregada";else if(del>0)copy.estado="Parcial";else if(!copy.estado)copy.estado="Pendiente";
         return copy;
       });
       const put=await fetch(API+"/api/state",{
