@@ -711,7 +711,7 @@ function renderPatinadorChecklist(){
  const left=assigned.length?Math.min(...assigned.map(x=>{const s=resumenCantidadLote(x,assigned);return s.aplica?s.restante:Math.max(0,unidadesObjetivoEstandar(x)-(Number(x.entregado)||0));})):0;
  progress.innerHTML='<b>Modelo:</b> '+modelo+' · <b>Referencias:</b> '+done+' de '+total+' completadas · <b>Unidades:</b> '+units+' entregadas · '+left+' pendientes';
  if(!total){wrap.innerHTML='<p class="muted">Todavía no hay referencias cargadas para '+modelo+' en tus puestos. El mesanín o administrador debe seleccionar '+modelo+' y subir su Excel.</p>';return;}
- wrap.innerHTML='<div class="grid" style="margin:8px 0"><button type="button" class="secondary" onclick="mostrarEntregasZona(\'PRE\')">📍 PRE</button><button type="button" class="secondary" onclick="mostrarEntregasZona(\'Izquierdo\')">📍 IZQUIERDO</button><button type="button" class="secondary" onclick="mostrarEntregasZona(\'Derecho\')">📍 DERECHO</button></div><p class="muted">Usa estos botones para abrir las tareas pendientes de cada zona. Luego registra la cantidad en “Cantidad ahora” y pulsa Entregar.</p><div class="scroll"><table><thead><tr><th>Referencia / producto</th><th>Puesto</th><th>Cant. unidad (Cant.)</th><th>Saldo lote (restante / total)</th><th>Unidades por canasta (editable)</th><th>Tipo canasta</th><th># Canastas estándar</th><th>Canastas equivalentes entregadas</th><th>Canastas equivalentes pendientes</th><th>Unidades entregadas</th><th>Unidades pendientes</th><th>Registrar entrega parcial (unidades)</th><th>Confirmar canastas físicas</th></tr></thead><tbody>'+assigned.map(x=>{const qty=unidadesObjetivoEstandar(x),del=Number(x.entregado)||0,rest=Math.max(0,qty-del),saldoLote=resumenCantidadLote(x),complete=qty>0&&rest===0;return '<tr id="stdRow'+x.id+'"><td><b>'+x.producto+'</b><br><small>EAN: '+(x.ean||'-')+'</small></td><td>'+x.puesto+'</td><td>'+(x.cantidadUnidad||'-')+'</td><td>'+celdaSaldoLote(x,assigned)+'</td><td>'+(Number(x.cantidadCanasta)>0?Number(x.cantidadCanasta)+' unidades por canasta':'Capacidad por definir')+'</td><td>'+(x.canasta||'-')+'</td><td>'+(Number(x.numCanastas)>0?Number(x.numCanastas):'-')+'</td><td><b>'+canastasEquivalentesEntregadas(x)+'</b><br><small>entregadas</small></td><td><b>'+(unidadesPorCanastaEstandar(x)>0?(rest/unidadesPorCanastaEstandar(x)).toLocaleString("es-CO",{maximumFractionDigits:2}):"Definir capacidad")+'</b><br><small>equivalentes pendientes</small></td><td>'+del+'</td><td><b>'+(qty>0?rest:"Por definir")+'</b></td><td>'+(complete?'<span class="pill">✓ Lote agotado</span>':'<input aria-label="Unidades entregadas ahora" id="stdQty'+x.id+'" type="number" min="1" '+(rest>0?'max="'+rest+'"':'')+' value="1" style="width:90px;margin:2px 0"><button type="button" class="small" onclick="registrarEntregaEstandar(\''+x.id+'\')">✓ Registrar unidades</button>')+'</td><td><input aria-label="Canastas físicas confirmadas" id="stdCanastasQty'+x.id+'" type="number" min="1" value="1" style="width:90px;margin:2px 0"><button type="button" class="small secondary" onclick="confirmarCanastasEstandar(\''+x.id+'\')">Confirmar canastas</button><br><small>Sin descontar unidades</small></td></tr>'}).join('')+'</tbody></table></div>';
+ wrap.innerHTML='<div class="grid" style="margin:8px 0"><button type="button" class="secondary" onclick="mostrarEntregasZona(\'PRE\')">📍 PRE</button><button type="button" class="secondary" onclick="mostrarEntregasZona(\'Izquierdo\')">📍 IZQUIERDO</button><button type="button" class="secondary" onclick="mostrarEntregasZona(\'Derecho\')">📍 DERECHO</button></div><p class="muted">Usa los botones para abrir las tareas pendientes de cada zona. En cada referencia, define cuántas unidades caben en la canasta física que usas y pulsa “Guardar capacidad” antes de registrar canastas. La capacidad se comparte con los demás turnos; no adivines el valor.</p><div class="scroll"><table><thead><tr><th>Referencia / producto</th><th>Puesto</th><th>Cant. unidad (Cant.)</th><th>Saldo lote (restante / total)</th><th>Unidades por canasta (editable)</th><th>Tipo canasta</th><th># Canastas estándar</th><th>Canastas equivalentes entregadas</th><th>Canastas equivalentes pendientes</th><th>Unidades entregadas</th><th>Unidades pendientes</th><th>Registrar entrega parcial (unidades)</th><th>Confirmar canastas físicas</th></tr></thead><tbody>'+assigned.map(x=>{const qty=unidadesObjetivoEstandar(x),del=Number(x.entregado)||0,rest=Math.max(0,qty-del),saldoLote=resumenCantidadLote(x),complete=qty>0&&rest===0;return '<tr id="stdRow'+x.id+'"><td><b>'+x.producto+'</b><br><small>EAN: '+(x.ean||'-')+'</small></td><td>'+x.puesto+'</td><td>'+(x.cantidadUnidad||'-')+'</td><td>'+celdaSaldoLote(x,assigned)+'</td><td><input aria-label="Unidades por canasta" id="stdCapCanastaPatinador'+x.id+'" type="number" min="1" step="1" value="'+(Number(x.cantidadCanasta)||'')+'" placeholder="Ej. 24" style="width:125px;margin:2px 0"><button type="button" class="small secondary" onclick="guardarCapacidadCanastaEstandar(\''+x.id+'\')">Guardar capacidad</button></td><td>'+(x.canasta||'-')+'</td><td>'+(Number(x.numCanastas)>0?Number(x.numCanastas):'-')+'</td><td><b>'+canastasEquivalentesEntregadas(x)+'</b><br><small>entregadas</small></td><td><b>'+(unidadesPorCanastaEstandar(x)>0?(rest/unidadesPorCanastaEstandar(x)).toLocaleString("es-CO",{maximumFractionDigits:2}):"Definir capacidad")+'</b><br><small>equivalentes pendientes</small></td><td>'+del+'</td><td><b>'+(qty>0?rest:"Por definir")+'</b></td><td>'+(complete?'<span class="pill">✓ Lote agotado</span>':'<input aria-label="Unidades entregadas ahora" id="stdQty'+x.id+'" type="number" min="1" '+(rest>0?'max="'+rest+'"':'')+' value="1" style="width:90px;margin:2px 0"><button type="button" class="small" onclick="registrarEntregaEstandar(\''+x.id+'\')">✓ Registrar unidades</button>')+'</td><td><input aria-label="Canastas físicas confirmadas" id="stdCanastasQty'+x.id+'" type="number" min="1" value="1" style="width:90px;margin:2px 0"><button type="button" class="small secondary" onclick="confirmarCanastasEstandar(\''+x.id+'\')">Confirmar canastas</button><br><small>Sin descontar unidades</small></td></tr>'}).join('')+'</tbody></table></div>';
 }
 function guardarLoteEstandar(id){
  const x=getTasks().find(a=>String(a.id)===String(id));
@@ -726,20 +726,49 @@ function guardarLoteEstandar(id){
  saveTasks(tasks);
  cloudSave().then(()=>{render();const msg=$('estandarNKDMsg');if(msg)msg.textContent='✅ Lote guardado para '+target.producto+': '+total+' piezas iniciales. Las entregas se descuentan de ese total.';});
 }
-function guardarCapacidadCanastaEstandar(id){
- const scrollAntes=window.scrollY;
+async function guardarCapacidadCanastaEstandar(id){
  const x=getTasks().find(a=>String(a.id)===String(id));
  if(!x||!x.standardNKD){alert('No encontré esta referencia.');return;}
  if(!current){alert('Inicia sesión para guardar la capacidad.');return;}
- if(current.role==='Patinador'&&(!Array.isArray(current.puestos)||!current.puestos.includes(x.puesto))){alert('Esta referencia no está asignada a tu puesto.');return;}
- if(current.role!=='Patinador'&&current.role!=='Admin'&&current.role!=='Mesanín'&&current.role!=='Supervisor'){alert('Tu usuario no tiene permiso para editar esta referencia.');return;}
- const input=$('stdCapCanasta'+id),n=Number(input?.value),basketInput=$('stdNumCanastas'+id),basketQty=basketInput?Number(basketInput.value):Number(x.numCanastas||0);
- if(!Number.isInteger(n)||n<1){alert('Ingresa cuántas unidades caben en una canasta (por ejemplo, 30).');if(input){input.focus();input.select();}return;}
+ const patinador=current.role==='Patinador';
+ if(patinador&&(!Array.isArray(current.puestos)||!current.puestos.includes(x.puesto))){alert('Solo puedes definir la capacidad de una referencia asignada a tu puesto.');return;}
+ if(!patinador&&!['Admin','Mesanín','Supervisor'].includes(current.role)){alert('Tu usuario no tiene permiso para editar esta referencia.');return;}
+ const input=patinador?$('stdCapCanastaPatinador'+id):$('stdCapCanasta'+id);
+ const n=Number(input&&input.value);
+ const basketInput=patinador?null:$('stdNumCanastas'+id);
+ const basketQty=basketInput?Number(basketInput.value):0;
+ if(!Number.isInteger(n)||n<1){alert('Escribe cuántas unidades caben físicamente en una canasta. Debe ser un entero mayor que cero.');if(input){input.focus();input.select();}return;}
  if(basketInput&&(!Number.isInteger(basketQty)||basketQty<1)){alert('Ingresa una cantidad de canastas mayor que cero.');basketInput.focus();basketInput.select();return;}
  const tasks=getTasks(),target=tasks.find(a=>String(a.id)===String(id));
- target.cantidadCanasta=n;target.cantidadCanastaRaw=String(n);if(basketInput){target.numCanastas=basketQty;target.numCanastasRaw=String(basketQty);}
- if(target.standardManual){target.lote=n*basketQty;target.cantidad=n*basketQty;target.cantidadUnidad=n;target.lotePiezas=n*basketQty;}else if(modeloDeTareaEstandar(target)==='NKD'){target.cantidad=n*(Number(target.numCanastas)||0)||Number(target.cantidad)||n;if(!(Number(target.lote)>0))target.lote=target.cantidad;}
- saveTasks(tasks);cloudSave().then(()=>{render();const msg=$('estandarNKDMsg');if(msg)msg.textContent='✅ Capacidad guardada para '+target.producto+': '+n+' unidades por canasta. Las entregas parciales se registrarán en unidades.';});
+ const previous={...target};
+ target.cantidadCanasta=n;
+ target.cantidadCanastaRaw=String(n);
+ const lot=Number(target.lote)||Number(target.lotePiezas)||Number(target.cantidad)||0;
+ if(patinador){
+  if(lot>0){target.numCanastas=Math.ceil(lot/n);target.numCanastasRaw=String(target.numCanastas);}
+ }else if(basketInput){
+  target.numCanastas=basketQty;target.numCanastasRaw=String(basketQty);
+  if(target.standardManual){target.lote=n*basketQty;target.cantidad=n*basketQty;target.cantidadUnidad=n;target.lotePiezas=n*basketQty;}
+ }else if(lot>0){
+  target.numCanastas=Math.ceil(lot/n);target.numCanastasRaw=String(target.numCanastas);
+ }
+ cloudTasks=tasks;
+ localStorage.setItem('cc_tasks',JSON.stringify(tasks));
+ const ok=await cloudSave();
+ if(!ok){
+  Object.assign(target,previous);
+  cloudTasks=tasks;
+  localStorage.setItem('cc_tasks',JSON.stringify(tasks));
+  render();
+  alert('No se confirmó el guardado en la nube. No registres una entrega hasta volver a comprobar la conexión.');
+  return;
+ }
+ render();
+ if(patinador){
+  alert('✅ Capacidad guardada: '+n+' unidades por canasta para '+(target.producto||target.ean)+'. Los demás turnos verán esta capacidad.');
+ }else{
+  const msg=$('estandarNKDMsg');if(msg){msg.className='pill';msg.textContent='✅ Capacidad guardada para '+target.producto+': '+n+' unidades por canasta.';}
+ }
 }
 function registrarEntregaEstandar(id){
  const x=getTasks().find(a=>String(a.id)===String(id));
