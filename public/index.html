@@ -862,7 +862,20 @@ async function eliminarEntregaHistorial(taskId,indice){
  if(!isAdmin())return;
  await guardarEdicionHistorial(taskId,indice,0,0,true);
 }
-function deleteTask(id){if(!isAdmin()){alert('Solo el administrador puede borrar tareas.');return;}if(!confirm('¿Borrar toda la referencia y su historial de entregas? Esta acción no se puede deshacer.'))return;const t=getTasks().filter(x=>String(x.id)!==String(id));saveTasks(t);render()}
+async function deleteTask(id){
+ if(!isAdmin()){alert('Solo el administrador puede borrar tareas.');return;}
+ if(!cloudReady){alert('No hay conexión confirmada con la nube. No se borró nada; vuelve a ingresar e inténtalo otra vez.');return;}
+ const item=getTasks().find(x=>String(x.id)===String(id));if(!item)return;
+ if(!confirm('¿Borrar la referencia '+(item.producto||item.lpn||id)+' y todo su historial de entregas? Esta acción no se puede deshacer.'))return;
+ const tasks=getTasks().filter(x=>String(x.id)!==String(id));
+ try{
+  const response=await apiFetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({users,tasks,lpnCatalog}),cache:'no-store'});
+  const saved=await response.json().catch(()=>({}));
+  if(!response.ok||!Array.isArray(saved.tasks))throw new Error(saved.error||'El servidor rechazó el borrado.');
+  cloudTasks=saved.tasks;if(saved.users)users=saved.users;if(Array.isArray(saved.lpnCatalog))lpnCatalog=saved.lpnCatalog;
+  localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));localStorage.setItem('cc_users',JSON.stringify(users));localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));cloudReady=true;render();
+ }catch(error){alert('No se pudo guardar el borrado en la nube; la referencia sigue en el servidor. '+(error.message||''));}
+}
 </script>
 <script src="/patinador-estiba.js?v=44"></script>
 <script src="/profesional.js?v=4"></script>
