@@ -26,7 +26,7 @@ No hay que copiar SQL a mano: las funciones crean las tablas necesarias en D1 la
 
 ## Traslado de los datos que ya existen
 
-1. En la página anterior de Familia AKT, exporta el estado. Puedes usar `tools/exportar-estado-railway.html` de esta misma rama (ábrela desde la URL raw.githack indicada por el equipo) y descargar el JSON directamente al computador. El archivo contiene información operativa y contraseñas: **no lo adjuntes a chats ni lo compartas**.
+1. En la página anterior de Familia AKT, exporta el estado. Puedes abrir `https://TU-PROYECTO.pages.dev/exportar-respaldo-railway.html` y pulsar el botón de descarga. El archivo se genera en tu navegador y se guarda directamente en el computador. El archivo contiene información operativa y contraseñas: **no lo adjuntes a chats ni lo compartas**.
 2. Abre la nueva aplicación Pages e ingresa como `admin` con la contraseña inicial configurada en `BOOTSTRAP_ADMIN_PASSWORD`.
 3. En la misma cuenta/navegador abre `/importar-respaldo.html`, selecciona el JSON exportado y confirma la importación. El importador se niega a reemplazar una base con tareas existentes.
 4. Cierra sesión e ingresa con las credenciales que estaban en la aplicación anterior.
