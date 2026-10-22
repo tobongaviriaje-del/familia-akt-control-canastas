@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Exportar respaldo Railway · Familia AKT</title>
+<style>*{box-sizing:border-box}body{font:16px/1.5 Arial,sans-serif;max-width:720px;margin:30px auto;padding:0 15px;color:#17202a}h1{color:#c8102e}.note{background:#fffbeb;border-left:4px solid #d97706;padding:13px;border-radius:5px}button{background:#c8102e;color:#fff;border:0;border-radius:8px;padding:13px 16px;font-size:16px;font-weight:bold;cursor:pointer;width:100%}.status{white-space:pre-wrap;background:#eff6ff;border-radius:8px;padding:12px;margin:12px 0}.ok{background:#f0fdf4;color:#166534}.bad{background:#fef2f2;color:#991b1b}</style></head>
+<body>
+<h1>Familia AKT · Exportar respaldo de Railway</h1>
+<p>Esta página consulta la aplicación anterior desde tu navegador y descarga una copia local para migrarla a otro alojamiento gratuito.</p>
+<div class="note"><b>Muy importante:</b> el archivo contiene el historial operativo y las contraseñas guardadas en el sistema actual. La descarga se realiza en tu equipo. No adjuntes el archivo al chat ni lo compartas. Este proceso no modifica ni borra nada en Railway.</div>
+<button id="go">Descargar respaldo desde la aplicación actual</button>
+<div id="status" class="status">Listo para consultar la aplicación actual.</div>
+<script>
+document.getElementById("go").addEventListener("click",async()=>{
+ const b=document.getElementById("go"),s=document.getElementById("status");
+ b.disabled=true;s.className="status";s.textContent="Consultando el estado de la aplicación anterior…";
+ try{
+   const url="https://controlcanastasnube-production-6ad9.up.railway.app/api/state";
+   const r=await fetch(url,{cache:"no-store"});
+   if(!r.ok)throw new Error("La aplicación devolvió HTTP "+r.status+".");
+   const data=await r.json();
+   if(!data||!data.users||!Array.isArray(data.tasks))throw new Error("La respuesta no es un respaldo válido.");
+   const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json;charset=utf-8"});
+   const a=document.createElement("a"),objectUrl=URL.createObjectURL(blob);
+   a.href=objectUrl;a.download="familia-akt-respaldo-"+new Date().toISOString().slice(0,10)+".json";
+   document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(objectUrl),6000);
+   s.className="status ok";s.textContent="Respaldo solicitado.\nUsuarios: "+Object.keys(data.users).length+
+     "\nTareas / referencias: "+data.tasks.length+
+     "\nCatálogo LPN: "+(Array.isArray(data.lpnCatalog)?data.lpnCatalog.length:0)+
+     "\n\nComprueba la carpeta Descargas. No compartas ni adjuntes el archivo.";
+ }catch(e){s.className="status bad";s.textContent="No pude descargar el respaldo: "+(e.message||"error de conexión")+
+   "\nNo se modificó nada en la aplicación anterior."; }
+ finally{b.disabled=false;}
+});
+</script>
+</body></html>
