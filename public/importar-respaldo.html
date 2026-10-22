@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Importar respaldo · Familia AKT</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f6f8;color:#17202a;font:16px/1.45 Arial,sans-serif}
+header{background:linear-gradient(120deg,#171717,#c8102e);color:white;padding:20px}
+main{max-width:760px;margin:22px auto;padding:0 14px 28px}.card{background:#fff;border:1px solid #dbe3ea;border-radius:14px;padding:18px;margin:14px 0}
+h1{margin:0 0 6px;font-size:23px}h2{font-size:18px;margin-top:0}.note{padding:12px;background:#fffbeb;border-left:4px solid #d97706;border-radius:6px}
+input,button{font:inherit;margin-top:10px}input{width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:8px}
+button{width:100%;padding:13px 15px;border:0;border-radius:9px;background:#c8102e;color:white;font-weight:bold;cursor:pointer}button:disabled{opacity:.45}
+.status{white-space:pre-wrap;border-radius:8px;padding:11px;background:#eff6ff;color:#1e40af;margin-top:12px}.ok{background:#f0fdf4;color:#166534}.bad{background:#fef2f2;color:#991b1b}.muted{color:#64748b;font-size:14px}
+</style>
+</head>
+<body>
+<header><h1>Familia AKT · Importar respaldo</h1><div>Solo para el primer traslado a Cloudflare.</div></header>
+<main>
+<section class="card">
+ <div class="note"><b>Privacidad:</b> el archivo tiene los datos de la operación y usuarios. No lo adjuntes al chat ni se lo envíes a otra persona. Esta página lo lee en tu navegador y lo manda solamente a la aplicación nueva después de que confirmes.</div>
+ <p>Antes de abrir esta página, inicia sesión como administrador en la aplicación nueva usando la contraseña inicial configurada para Cloudflare. Si la base ya tiene tareas registradas, esta pantalla se negará a reemplazarlas.</p>
+ <div id="status" class="status">Comprobando sesión y base de datos…</div>
+</section>
+<section class="card">
+ <h2>1. Seleccionar archivo exportado de Railway</h2>
+ <input id="file" type="file" accept=".json,application/json">
+ <p class="muted">El archivo debe ser la respuesta JSON completa de la ruta /api/state de la aplicación anterior.</p>
+ <div id="preview" class="status">Aún no has elegido un archivo.</div>
+ <button id="import" disabled>Importar datos a la aplicación nueva</button>
+</section>
+<section class="card">
+ <h2>2. Después de importar</h2>
+ <p>La herramienta pedirá confirmación y revisará que la base nueva todavía esté vacía. Después importará usuarios, tareas, entregas y catálogo LPN. No cierra la aplicación anterior ni borra el proyecto de Railway.</p>
+ <p class="muted">Cuando termine, entra a la aplicación nueva con el usuario y contraseña que ya usabas en Railway. Si tu empresa requiere proteger más los datos, no compartas el enlace ni el archivo exportado.</p>
+</section>
+</main>
+<script>
+(async()=>{
+ const $=id=>document.getElementById(id);
+ let payload=null,eligible=false;
+ const token=()=>localStorage.getItem("cc_session_token")||"";
+ const req=async(url,opts={})=>{
+   const headers=new Headers(opts.headers||{});
+   if(token())headers.set("Authorization","Bearer "+token());
+   return fetch(url,{...opts,headers,cache:"no-store"});
+ };
+ function status(msg,kind){$("status").textContent=msg;$("status").className="status"+(kind?" "+kind:"");}
+ function preview(msg,kind){$("preview").textContent=msg;$("preview").className="status"+(kind?" "+kind:"");}
+ try{
+   if(!token())throw new Error("No hay sesión de administrador en este navegador. Abre la aplicación, inicia sesión y luego vuelve a esta página.");
+   const r=await req("/api/state");
+   const state=await r.json();
+   if(!r.ok)throw new Error(state.error||"No se pudo verificar la sesión.");
+   if(!state.users || !state.users.admin || state.users.admin.role!=="Admin")throw new Error("No se pudo confirmar el permiso de administrador.");
+   if((state.tasks||[]).length || (state.lpnCatalog||[]).length){
+     throw new Error("La base nueva ya contiene tareas o catálogo. Por seguridad, no se sobrescribirá.");
+   }
+   eligible=true;
+   status("Sesión de administrador confirmada. La base nueva está vacía; puedes seleccionar el archivo exportado.", "ok");
+ }catch(e){status(e.message||"No se pudo verificar la base nueva.","bad");}
+
+ $("file").addEventListener("change",async()=>{
+   payload=null;$("import").disabled=true;
+   const file=$("file").files&&$("file").files[0];if(!file){preview("Aún no has elegido un archivo.");return;}
+   try{
+     const data=JSON.parse(await file.text());
+     const state=data && data.state && Array.isArray(data.state.tasks)?data.state:data;
+     if(!state||!state.users||typeof state.users!=="object"||!Array.isArray(state.tasks)){
+       throw new Error("El archivo no contiene usuarios y una lista de tareas válida.");
+     }
+     state.lpnCatalog=Array.isArray(state.lpnCatalog)?state.lpnCatalog:[];
+     if(!Object.keys(state.users).length)throw new Error("El archivo no trae usuarios.");
+     if(!state.users.admin || state.users.admin.role!=="Admin"){
+       throw new Error("El archivo no incluye el usuario administrador. No se importó.");
+     }
+     payload={users:state.users,tasks:state.tasks,lpnCatalog:state.lpnCatalog};
+     preview("Archivo válido.\nUsuarios: "+Object.keys(payload.users).length+
+       "\nTareas / referencias: "+payload.tasks.length+
+       "\nCatálogo LPN: "+payload.lpnCatalog.length+
+       "\nTamaño: "+file.size.toLocaleString("es-CO")+" bytes","ok");
+     $("import").disabled=!eligible;
+   }catch(e){preview(e.message||"El archivo no es válido.","bad");}
+ });
+ $("import").addEventListener("click",async()=>{
+   if(!eligible||!payload||!token())return;
+   if(!confirm("Se importarán "+payload.tasks.length+" tareas y "+payload.lpnCatalog.length+
+     " entradas de catálogo en la base nueva, que debe seguir vacía. ¿Continuar?"))return;
+   $("import").disabled=true;status("Importando datos. No cierres esta página…");
+   try{
+     const r=await req("/api/state",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+     const out=await r.json().catch(()=>({}));
+     if(!r.ok||!Array.isArray(out.tasks))throw new Error(out.error||"El servidor no confirmó la importación.");
+     status("Importación confirmada.\nTareas: "+out.tasks.length+
+       "\nCatálogo LPN: "+(out.lpnCatalog||[]).length+
+       "\n\nCierra esta pestaña, vuelve a la aplicación, cierra sesión e ingresa con tu usuario de siempre.","ok");
+     eligible=false;payload=null;$("file").value="";
+   }catch(e){status("No se pudo confirmar la importación: "+(e.message||"error inesperado")+
+      "\nNo borres el archivo de respaldo y no repitas la operación hasta comprobar el estado.","bad");}
+ });
+})();
+</script>
+</body></html>
