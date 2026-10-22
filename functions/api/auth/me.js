@@ -1,5 +1,5 @@
-import { json, errorResponse } from "../../../_lib/db.js";
-import { authenticate } from "../../../_lib/auth.js";
+import { json, errorResponse } from "../../_lib/db.js";
+import { authenticate } from "../../_lib/auth.js";
 
 export async function onRequestGet({ request, env }) {
   try {
