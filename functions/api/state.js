@@ -111,11 +111,23 @@ function mergePatinadorTasks(saved, incoming, user) {
         e.status = 400;
         throw e;
       }
-    } else if (stableStringify(candidate.confirmacionesCanastas || []) !== stableStringify(previous.confirmacionesCanastas || []) ||
-               numeric(candidate.canastasEntregadas) !== numeric(previous.canastasEntregadas)) {
-      const e = new Error("No se pudieron validar las canastas físicas. No se guardó.");
-      e.status = 400;
-      throw e;
+    } else {
+      if (stableStringify(candidate.confirmacionesCanastas || []) !== stableStringify(previous.confirmacionesCanastas || [])) {
+        const e = new Error("No se pudieron validar las canastas físicas. No se guardó.");
+        e.status = 400;
+        throw e;
+      }
+      const oldBasketEquivalent = numeric(previous.canastasEntregadas);
+      const newBasketEquivalent = numeric(candidate.canastasEntregadas);
+      const capacity = numeric(previous.cantidadCanasta);
+      const expectedBasketEquivalent = capacity > 0 ? Number((newDelivered / capacity).toFixed(4)) : oldBasketEquivalent;
+      const unchangedEquivalent = newBasketEquivalent === oldBasketEquivalent;
+      const calculatedEquivalent = Math.abs(newBasketEquivalent - expectedBasketEquivalent) < 0.0001;
+      if (!unchangedEquivalent && !calculatedEquivalent) {
+        const e = new Error("El cálculo de canastas equivalentes no coincide con las unidades entregadas.");
+        e.status = 400;
+        throw e;
+      }
     }
 
     const updated = { ...previous };
