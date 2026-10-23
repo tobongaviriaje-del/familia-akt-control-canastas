@@ -713,7 +713,8 @@ async function guardarEntregaSinEstandar(){
 }
 function renderEntregasSinEstandar(){
  const box=$('freeDeliveryHistory');if(!box)return;
- const rows=[...freeDeliveries].reverse().map(x=>'<tr><td>'+x.fechaHora+'</td><td>'+x.moto+'</td><td>'+x.referencia+'</td><td>'+x.cantidad+'</td><td>'+x.canastas+'</td><td>'+x.usuario+'</td><td>'+(x.observacion||'-')+'</td></tr>').join('');
+ const escHtml=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+ const rows=[...freeDeliveries].reverse().map(x=>'<tr><td>'+escHtml(x.fechaHora)+'</td><td>'+escHtml(x.moto)+'</td><td>'+escHtml(x.referencia)+'</td><td>'+escHtml(x.cantidad)+'</td><td>'+escHtml(x.canastas)+'</td><td>'+escHtml(x.usuario)+'</td><td>'+escHtml(x.observacion||'-')+'</td></tr>').join('');
  box.innerHTML='<h3>Historial de entregas sin estándar</h3><div class="scroll"><table><thead><tr><th>Fecha</th><th>Moto</th><th>Referencia</th><th>Unidades</th><th>Canastas</th><th>Registró</th><th>Observación</th></tr></thead><tbody>'+(rows||'<tr><td colspan="7">Aún no hay registros.</td></tr>')+'</tbody></table></div>';
 }
 </script>
