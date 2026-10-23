@@ -28,8 +28,9 @@ if(!s.users)s.users=defaultUsers;
 for(const [key,user] of Object.entries(defaultUsers)){if(!s.users[key])s.users[key]=user;}
 if(!Array.isArray(s.tasks))s.tasks=[];
 if(!Array.isArray(s.lpnCatalog))s.lpnCatalog=[];
+if(!Array.isArray(s.freeDeliveries))s.freeDeliveries=[];
 return s;
-}catch{return {users:defaultUsers,tasks:[]};}
+}catch{return {users:defaultUsers,tasks:[],lpnCatalog:[],freeDeliveries:[]};}
 }
 function writeState(s){ensureState();const tmp=STATE_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(s,null,2));fs.renameSync(tmp,STATE_FILE);}
 function archiveTasks(tasks,meta={}){fs.mkdirSync(HISTORY_DIR,{recursive:true});const stamp=new Date().toISOString().replace(/[:.]/g,'-');const file=path.join(HISTORY_DIR,'jornada-'+stamp+'.json');fs.writeFileSync(file,JSON.stringify({app:'Familia AKT Control de Canastas',fechaCierre:new Date().toISOString(),meta,tasks},null,2));return {file:path.basename(file),count:tasks.length};}
@@ -56,7 +57,7 @@ res.end(JSON.stringify({ok:true,archived:archived.file,count:archived.count,comp
 }catch(e){console.error('Error cerrando jornada:',e);res.writeHead(500,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify({ok:false,error:'No se pudo cerrar la jornada'}));}});return;
 }
 if(p==='/api/state'&&req.method==='PUT'){
-let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{const incoming=JSON.parse(body||'{}');const current=readState();const state={users:incoming.users||current.users,tasks:Array.isArray(incoming.tasks)?incoming.tasks:current.tasks,lpnCatalog:Array.isArray(incoming.lpnCatalog)?incoming.lpnCatalog:current.lpnCatalog};writeState(state);res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(state));}catch{res.writeHead(400);res.end(JSON.stringify({error:'JSON invalido'}));}});return;
+let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{const incoming=JSON.parse(body||'{}');const current=readState();const state={...current,users:incoming.users||current.users,tasks:Array.isArray(incoming.tasks)?incoming.tasks:current.tasks,lpnCatalog:Array.isArray(incoming.lpnCatalog)?incoming.lpnCatalog:current.lpnCatalog,freeDeliveries:Array.isArray(incoming.freeDeliveries)?incoming.freeDeliveries:(current.freeDeliveries||[])};writeState(state);res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(state));}catch{res.writeHead(400);res.end(JSON.stringify({error:'JSON invalido'}));}});return;
 }
 let filePath=p==='/'?'/index.html':p;const file=path.normalize(path.join(ROOT,filePath));
 if(!file.startsWith(ROOT)){res.writeHead(403);return res.end('Forbidden');}
