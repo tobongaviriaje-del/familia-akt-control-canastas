@@ -34,6 +34,9 @@ test('server starts with isolated data directory and serves health + app', async
   assert.ok(health, `server did not start: ${logs}`);
   assert.equal(health.status, 200);
   assert.equal((await health.json()).ok, true);
+  assert.equal(health.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(health.headers.get('x-frame-options'), 'DENY');
+  assert.equal(health.headers.get('access-control-allow-origin'), null);
 
   const app = await fetch(base);
   assert.equal(app.status, 200);
