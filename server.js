@@ -98,7 +98,6 @@ ensureState();
 try{
 const s=JSON.parse(fs.readFileSync(STATE_FILE,'utf8'));
 if(!s.users)s.users=defaultUsers;
-for(const [key,user] of Object.entries(defaultUsers)){if(!s.users[key])s.users[key]=user;}
 if(!Array.isArray(s.tasks))s.tasks=[];
 if(!Array.isArray(s.lpnCatalog))s.lpnCatalog=[];
 if(!Array.isArray(s.freeDeliveries))s.freeDeliveries=[];
