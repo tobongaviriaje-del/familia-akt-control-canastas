@@ -173,8 +173,9 @@ if(p==='/api/entrega'&&req.method==='POST'){
  if(!isSafeSameOrigin(req)){sendJson(res,403,{ok:false,error:'Origen no permitido'});return;}
  readBody(req,res,incoming=>{try{
   if(session.user.role!=='Patinador'&&session.user.role!=='Admin'&&session.user.role!=='Mesanín'){sendJson(res,403,{ok:false,error:'Este rol no puede registrar entregas'});return;}
-  const id=String(incoming.id??'');const qty=Number(incoming.cantidad);const obs=String(incoming.observaciones||'').slice(0,500);
-  if(!id||!Number.isSafeInteger(qty)||qty<1){sendJson(res,400,{ok:false,error:'Tarea o cantidad inválida'});return;}
+  const id=String(incoming.id??'');const qty=Number(incoming.cantidad);const obs=String(incoming.observaciones||'').slice(0,500);const canastasFisicas=Number(incoming.canastasFisicas)||0;
+  if(!id||!Number.isSafeInteger(qty)||qty<1||!Number.isSafeInteger(canastasFisicas)||canastasFisicas<0){sendJson(res,400,{ok:false,error:'Tarea, cantidad o canastas inválidas'});return;}
+  if(canastasFisicas>0&&session.user.role==='Patinador'&& !String(incoming.metodo||'').includes('físicas')){sendJson(res,400,{ok:false,error:'Método de entrega física inválido'});return;}
   const state=readState();const task=state.tasks.find(t=>String(t.id)===id);
   if(!task){sendJson(res,404,{ok:false,error:'La tarea ya no está disponible'});return;}
   if(session.user.role==='Patinador'){
@@ -186,15 +187,25 @@ if(p==='/api/entrega'&&req.method==='POST'){
    if(!assigned&&/^derecho(?:\s+\d+)?$/.test(puesto))assigned='juan esteban';
    if(!assigned&&/^izquierdo(?:\s+\d+)?$/.test(puesto))assigned='hamilton';
    if(!assigned&&/^final de linea(?:\s+\d+)?$/.test(puesto))assigned='jorge';
-   const explicitArea=Array.isArray(session.user.areas)&&session.user.areas.includes(task.area);
    const explicitPost=Array.isArray(session.user.puestos)&&session.user.puestos.includes(task.puesto);
    if((assigned&&norm(assigned)!==name)||(!assigned&&!explicitPost)){sendJson(res,403,{ok:false,error:'La tarea no está asignada a este patinador'});return;}
   }
-  const objetivo=Number(task.cantidad)||0;const entregado=Number(task.entregado)||0;const restante=Math.max(0,objetivo-entregado);
+  const objetivo=task.standardNKD?(Number(task.lote)||((Number(task.cantidadCanasta)||0)*(Number(task.numCanastas)||0))||(Number(task.cantidadUnidad)||0)||Number(task.cantidad)||0):(Number(task.cantidad)||0);
+  const entregado=Number(task.entregado)||0;const restante=Math.max(0,objetivo-entregado);
   if(qty>restante){sendJson(res,409,{ok:false,error:'La cantidad supera lo pendiente: quedan '+restante+' unidades'});return;}
+  if(canastasFisicas>0){
+   const cap=Number(String(task.cantidadCanasta??'').replace(',','.'))||0;
+   if(!task.standardNKD||!Number.isSafeInteger(canastasFisicas)||cap<=0||qty!==canastasFisicas*cap){sendJson(res,400,{ok:false,error:'La cantidad no coincide con la capacidad de las canastas'});return;}
+  }
   task.entregado=entregado+qty;task.estado=task.entregado>=objetivo?'Entregada':'Parcial';
   if(!Array.isArray(task.entregas))task.entregas=[];
-  const entry={patinador:String(session.user.name||session.username),cantidad:qty,fechaHora:new Date().toLocaleString('es-CO'),metodo:'EAN / botón ENTREGAR',observaciones:obs};
+  const entry={patinador:String(session.user.name||session.username),cantidad:qty,fechaHora:new Date().toLocaleString('es-CO'),metodo:canastasFisicas>0?'Entrega de canastas físicas':(String(incoming.metodo||'EAN / botón ENTREGAR').slice(0,100)),observaciones:obs};
+  if(canastasFisicas>0){
+   entry.canastasFisicas=canastasFisicas;
+   task.canastasEntregadas=(Number(task.canastasEntregadas)||0)+canastasFisicas;
+   if(!Array.isArray(task.confirmacionesCanastas))task.confirmacionesCanastas=[];
+   task.confirmacionesCanastas.push({patinador:entry.patinador,cantidad:canastasFisicas,unidades:qty,fechaHora:entry.fechaHora,turno:String(session.user.turno||''),observaciones:'Canastas físicas registradas y descontadas del lote.'});
+  }
   task.entregas.push(entry);task.entrega=entry;
   writeState(state);sendJson(res,200,{ok:true,task});
  }catch(e){console.error('Error registrando entrega:',e);sendJson(res,500,{ok:false,error:'No se pudo registrar la entrega'});}});
