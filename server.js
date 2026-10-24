@@ -121,7 +121,7 @@ async function writeState(s){
  if(pool){const snapshot=JSON.parse(JSON.stringify(s));const serialized=JSON.stringify(snapshot);dbWriteQueue=dbWriteQueue.catch(()=>{}).then(()=>pool.query('INSERT INTO app_state (id, data, updated_at) VALUES (1, $1::jsonb, NOW()) ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, updated_at=NOW()',[serialized]));await dbWriteQueue;stateCache=snapshot;return;}
  ensureState();const tmp=STATE_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(s,null,2));fs.renameSync(tmp,STATE_FILE);
 }
-async async function archiveTasks(tasks,meta={}){const archivedAt=new Date().toISOString();const payload={app:'Familia AKT Control de Canastas',fechaCierre:archivedAt,meta,tasks};const stamp=archivedAt.replace(/[:.]/g,'-');const fileName='jornada-'+stamp+'.json';
+async function archiveTasks(tasks,meta={}){const archivedAt=new Date().toISOString();const payload={app:'Familia AKT Control de Canastas',fechaCierre:archivedAt,meta,tasks};const stamp=archivedAt.replace(/[:.]/g,'-');const fileName='jornada-'+stamp+'.json';
  if(pool){await pool.query('INSERT INTO jornada_history (file_name, archived_at, payload) VALUES ($1, $2, $3::jsonb)',[fileName,archivedAt,JSON.stringify(payload)]);return {file:fileName,count:tasks.length};}
  fs.mkdirSync(HISTORY_DIR,{recursive:true});const file=path.join(HISTORY_DIR,fileName);fs.writeFileSync(file,JSON.stringify(payload,null,2));return {file:path.basename(file),count:tasks.length};
 }
