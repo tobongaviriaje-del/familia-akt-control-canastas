@@ -226,6 +226,27 @@ test('patinador solo registra entregas de tareas asignadas y conserva metadatos'
   assert.equal(result.task.lpn, 'LPN-2');
   assert.equal(result.task.referenciaCanasta, 'Otra canasta');
   assert.equal(result.task.entregas.at(-1).cantidad, 3);
+
+  state.tasks.push({ id: 'std-pre22', puesto: 'PRE 22', area: 'PRE', cantidad: 100, lote: 100, cantidadCanasta: 10, numCanastas: 10, standardNKD: true, entregado: 0, ean: '333', lpn: 'STD-3', referenciaCanasta: 'Ref estándar', entregas: [] });
+  fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+  const physical = await fetch(`${base}/api/entrega`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ id: 'std-pre22', cantidad: 20, canastasFisicas: 2, metodo: 'Entrega de canastas físicas', observaciones: 'prueba canastas' })
+  });
+  assert.equal(physical.status, 200);
+  const physicalResult = await physical.json();
+  assert.equal(physicalResult.task.entregado, 20);
+  assert.equal(physicalResult.task.canastasEntregadas, 2);
+  assert.equal(physicalResult.task.confirmacionesCanastas.at(-1).cantidad, 2);
+  assert.equal(physicalResult.task.confirmacionesCanastas.at(-1).unidades, 20);
+  assert.equal(physicalResult.task.entregas.at(-1).canastasFisicas, 2);
+  assert.equal(physicalResult.task.referenciaCanasta, 'Ref estándar');
+
+  const invalidPhysical = await fetch(`${base}/api/entrega`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ id: 'std-pre22', cantidad: 15, canastasFisicas: 2, metodo: 'Entrega de canastas físicas' })
+  });
+  assert.equal(invalidPhysical.status, 400);
 });
 
 
