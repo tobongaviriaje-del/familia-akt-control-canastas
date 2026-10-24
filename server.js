@@ -18,55 +18,59 @@ juanesteban:{role:'Patinador',name:'Juan Esteban',areas:['PRE','Derecho'],puesto
 jorge:{role:'Patinador',name:'Jorge',areas:['PRE','Derecho','Izquierdo','Final de línea'],puestos:[]}
 };
 
+function ensureDataDir(){fs.mkdirSync(DATA_DIR,{recursive:true});}
 function ensureState(){
-fs.mkdirSync(DATA_DIR,{recursive:true});
-if(!fs.existsSync(STATE_FILE))fs.writeFileSync(STATE_FILE,JSON.stringify({users:defaultUsers,tasks:[]},null,2));
+ensureDataDir();
+if(!fs.existsSync(STATE_FILE))fs.writeFileSync(STATE_FILE,JSON.stringify({users:defaultUsers,tasks:[]},null,2),{flag:'wx'});
 }
-function readFileState(){
-ensureState();
-try{
-const s=JSON.parse(fs.readFileSync(STATE_FILE,'utf8'));
-if(!s.users)s.users={...defaultUsers};
+function normalizeState(input){
+if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('El estado guardado no tiene un formato válido');
+const s=input;
+if(!s.users||typeof s.users!=='object'||Array.isArray(s.users))s.users={...defaultUsers};
 for(const [key,user] of Object.entries(defaultUsers)){if(!s.users[key])s.users[key]=user;}
 if(!Array.isArray(s.tasks))s.tasks=[];
 if(!Array.isArray(s.lpnCatalog))s.lpnCatalog=[];
 if(!Array.isArray(s.freeDeliveries))s.freeDeliveries=[];
 return s;
-}catch{return {users:{...defaultUsers},tasks:[],lpnCatalog:[],freeDeliveries:[]};}
+}
+function readFileState({createIfMissing=false}={}){
+ensureDataDir();
+if(!fs.existsSync(STATE_FILE)){
+if(!createIfMissing)throw new Error('No existe data/state.json en el volumen; se cancela el arranque para proteger los datos.');
+ensureState();
+}
+let parsed;
+try{parsed=JSON.parse(fs.readFileSync(STATE_FILE,'utf8'));}
+catch(e){throw new Error('No se puede leer data/state.json; no se inicializará Neon con datos por defecto. '+e.message);}
+return normalizeState(parsed);
 }
 async function readState(){
-ensureState();
-if(!pool)return readFileState();
+if(!pool)return readFileState({createIfMissing:true});
+ensureDataDir();
 const result=await pool.query('SELECT data FROM app_state WHERE id=1');
-if(result.rows.length){
-const s=result.rows[0].data||{};
-if(!s.users)s.users={...defaultUsers};
-for(const [key,user] of Object.entries(defaultUsers)){if(!s.users[key])s.users[key]=user;}
-if(!Array.isArray(s.tasks))s.tasks=[];
-if(!Array.isArray(s.lpnCatalog))s.lpnCatalog=[];
-if(!Array.isArray(s.freeDeliveries))s.freeDeliveries=[];
-return s;
-}
-// Bootstrap Neon only when the database has no state row.
-const local=readFileState();
+if(result.rows.length)return normalizeState(result.rows[0].data);
+// Neon está vacío: importar únicamente desde un archivo local real y válido.
+const local=readFileState({createIfMissing:false});
 await pool.query('INSERT INTO app_state(id,data) VALUES (1,$1::jsonb) ON CONFLICT (id) DO NOTHING',[JSON.stringify(local)]);
 const seeded=await pool.query('SELECT data FROM app_state WHERE id=1');
 if(!seeded.rows.length)throw new Error('No se pudo inicializar el estado en Neon');
-return seeded.rows[0].data;
+return normalizeState(seeded.rows[0].data);
 }
 async function writeState(s){
-ensureState();
+ensureDataDir();
 if(pool)await pool.query('INSERT INTO app_state(id,data,updated_at) VALUES (1,$1::jsonb,now()) ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data,updated_at=now()',[JSON.stringify(s)]);
+else ensureState();
 const tmp=STATE_FILE+'.tmp';
 fs.writeFileSync(tmp,JSON.stringify(s,null,2));
 fs.renameSync(tmp,STATE_FILE);
 }
 async function archiveTasks(tasks,meta={}){
+ensureDataDir();
 fs.mkdirSync(HISTORY_DIR,{recursive:true});
 const closedAt=new Date().toISOString();
 const fileName='jornada-'+closedAt.replace(/[:.]/g,'-')+'.json';
 const payload={app:'Familia AKT Control de Canastas',fechaCierre:closedAt,meta,tasks};
-if(pool)await pool.query('INSERT INTO jornada_history(id,file_name,archived_at,payload) SELECT COALESCE(MAX(id),0)+1,$1,$2,$3::jsonb FROM jornada_history ON CONFLICT (file_name) DO NOTHING',[fileName,closedAt,JSON.stringify(payload)]);
+if(pool)await pool.query('INSERT INTO jornada_history(file_name,archived_at,payload) VALUES ($1,$2,$3::jsonb) ON CONFLICT (file_name) DO NOTHING',[fileName,closedAt,JSON.stringify(payload)]);
 fs.writeFileSync(path.join(HISTORY_DIR,fileName),JSON.stringify(payload,null,2));
 return {file:fileName,count:tasks.length};
 }
@@ -104,13 +108,16 @@ if(path.extname(file)==='.html'){
 res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream'});res.end(output);});
 });
 async function start(){
-ensureState();
 if(pool){
+  ensureDataDir();
   await pool.query('CREATE TABLE IF NOT EXISTS app_state (id integer PRIMARY KEY CHECK (id=1), data jsonb NOT NULL, updated_at timestamptz NOT NULL DEFAULT now())');
   await pool.query('CREATE TABLE IF NOT EXISTS jornada_history (id bigserial PRIMARY KEY, file_name text NOT NULL UNIQUE, archived_at timestamptz NOT NULL DEFAULT now(), payload jsonb NOT NULL)');
   await readState();
   console.log('Persistencia Neon activada');
-}else{console.log('ADVERTENCIA: DATABASE_URL no configurada; usando almacenamiento local');}
+}else{
+  ensureState();
+  console.log('ADVERTENCIA: DATABASE_URL no configurada; usando almacenamiento local');
+}
 server.listen(PORT,()=>console.log('FAMILIA AKT funcionando en puerto '+PORT));
 }
 start().catch(e=>{console.error('No se pudo iniciar la persistencia:',e);process.exit(1);});
