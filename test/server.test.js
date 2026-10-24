@@ -319,3 +319,12 @@ test('admin user API hashes passwords and blocks non-admin management', async (t
   });
   assert.equal(forbidden.status, 403);
 });
+
+test('frontend saves only fields authorized for the active role', () => {
+  const frontend = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  assert.match(frontend, /if\(current\?\.role==='Admin'\)payload=\{tasks:cloudTasks,lpnCatalog,freeDeliveries\}/);
+  assert.match(frontend, /else if\(current\?\.role==='Mesanín'\)payload=\{freeDeliveries\}/);
+  assert.match(frontend, /else return Promise\.resolve\(false\)/);
+  assert.match(frontend, /JSON\.stringify\(\{tasks:cloudTasks,lpnCatalog\}\)/);
+  assert.doesNotMatch(frontend, /JSON\.stringify\(\{users,tasks:cloudTasks,lpnCatalog\}\)/);
+});
