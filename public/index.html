@@ -56,20 +56,19 @@ async function cloudLoad(){
 }
 let cloudSaveQueue=Promise.resolve(true);
 function cloudSave(){
-  // Enviar únicamente los campos que el rol puede modificar; nunca reenviar
-  // la lista completa de tareas desde sesiones no administrativas.
-  let payload;
-  if(current?.role==='Admin')payload={tasks:cloudTasks,lpnCatalog,freeDeliveries};
-  else if(current?.role==='Mesanín')payload={freeDeliveries};
-  else return Promise.resolve(false);
+  // Admin conserva el guardado completo autorizado. Los demás roles usan
+  // sincronización por identificador: el servidor preserva entregas y bloquea
+  // eliminaciones/cambios fuera del alcance del rol.
+  const role=current?.role;
+  if(!role)return Promise.resolve(false);
+  const payload=role==='Admin'||role==='Mesanín'
+    ?{tasks:cloudTasks,lpnCatalog,freeDeliveries}
+    :{tasks:cloudTasks};
+  const endpoint=role==='Admin'?'/api/state':'/api/tasks/sync';
   const snapshot=JSON.stringify(payload);
   cloudSaveQueue=cloudSaveQueue.catch(()=>false).then(async()=>{
     try{
-      const r=await fetch('/api/state',{
-        method:'PUT',
-        headers:{'Content-Type':'application/json'},
-        body:snapshot
-      });
+      const r=await fetch(endpoint,{method:'PUT',headers:{'Content-Type':'application/json'},body:snapshot,cache:'no-store'});
       if(!r.ok)throw new Error('El servidor rechazó el guardado');
       cloudReady=true;
       return true;
