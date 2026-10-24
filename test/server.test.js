@@ -145,3 +145,58 @@ test('state API requires a session and never returns passwords', async (t) => {
   const afterLogout = await fetch(`${base}/api/state`, { headers: { Cookie: cookie } });
   assert.equal(afterLogout.status, 401);
 });
+
+
+test('patinador solo registra entregas de tareas asignadas y conserva metadatos', async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'familia-akt-delivery-test-'));
+  const port = 34000 + (process.pid % 15000);
+  const child = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
+    env: { ...process.env, PORT: String(port), DATA_DIR: dataDir },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  let logs = '';
+  child.stdout.on('data', chunk => { logs += chunk.toString(); });
+  child.stderr.on('data', chunk => { logs += chunk.toString(); });
+  t.after(() => {
+    child.kill('SIGTERM');
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  });
+  const base = `http://127.0.0.1:${port}`;
+  let ready = false;
+  for (let i = 0; i < 50; i++) {
+    if (child.exitCode !== null) throw new Error(`server exited early: ${logs}`);
+    try { const r = await fetch(`${base}/health`); if (r.ok) { ready = true; break; } } catch {}
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.ok(ready, `server did not start: ${logs}`);
+  const statePath = path.join(dataDir, 'state.json');
+  const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+  state.tasks = [
+    { id: 't-pre1', puesto: 'PRE 1', area: 'PRE', cantidad: 10, entregado: 0, ean: '111', lpn: 'LPN-1', cesta: 'REF-125', referenciaCanasta: 'Canasta original', entregas: [] },
+    { id: 't-pre22', puesto: 'PRE 22', area: 'PRE', cantidad: 10, entregado: 2, ean: '222', lpn: 'LPN-2', cesta: 'REF-150', referenciaCanasta: 'Otra canasta', entregas: [] }
+  ];
+  fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+  const login = await fetch(`${base}/api/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'hamilton', password: 'Hamilton123!' })
+  });
+  assert.equal(login.status, 200);
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  const denied = await fetch(`${base}/api/entrega`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ id: 't-pre1', cantidad: 1 })
+  });
+  assert.equal(denied.status, 403);
+  const allowed = await fetch(`${base}/api/entrega`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ id: 't-pre22', cantidad: 3, observaciones: 'prueba sintética' })
+  });
+  assert.equal(allowed.status, 200);
+  const result = await allowed.json();
+  assert.equal(result.task.entregado, 5);
+  assert.equal(result.task.estado, 'Parcial');
+  assert.equal(result.task.ean, '222');
+  assert.equal(result.task.lpn, 'LPN-2');
+  assert.equal(result.task.referenciaCanasta, 'Otra canasta');
+  assert.equal(result.task.entregas.at(-1).cantidad, 3);
+});
