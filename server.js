@@ -252,61 +252,6 @@ if(p==='/api/users'&&req.method==='POST'){
  }catch(e){console.error('Error administrando usuario:',e);sendJson(res,400,{ok:false,error:'No se pudo guardar el usuario'});}});
  return;
 }
-if(p==='/api/state'&&req.method==='GET'){
- const session=requireSession(req,res);if(!session)return;
- const state=readState();
- const users={};for(const [name,user] of Object.entries(state.users||{}))users[name]=safeUser(name,user);
- sendJson(res,200,{...state,users});return;
-}
-if(p==='/api/jornada/cerrar'&&req.method==='POST'){
-const session=requireAdmin(req,res);if(!session)return;
-if(!isSafeSameOrigin(req)){sendJson(res,403,{ok:false,error:'Origen no permitido'});return;}
-readBody(req,res,incoming=>{try{
-const state=readState();
-if(!Array.isArray(state.tasks))state.tasks=[];
-if(incoming.confirmacion!=='CERRAR JORNADA'){res.writeHead(400,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify({ok:false,error:'Confirmación inválida'}));}
-if(!state.tasks.length){res.writeHead(409,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify({ok:false,error:'No hay tareas activas para archivar'}));}
-const snapshot=state.tasks.map(t=>({...t}));
-const archived=archiveTasks(snapshot,{usuario:String(incoming.usuario||'Admin'),motivo:'Cierre de jornada',regla:'Se archivan todas las tareas; las completadas salen de la lista activa y las pendientes/parciales conservan su avance para el siguiente turno.'});
-const isComplete=t=>{const total=Number(t.cantidad)||0;const delivered=Number(t.entregado)||0;return total>0&&delivered>=total;};
-state.tasks=state.tasks.filter(t=>!isComplete(t));
-writeState(state);
-res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});
-res.end(JSON.stringify({ok:true,archived:archived.file,count:archived.count,completedRemoved:snapshot.filter(isComplete).length,remainingCount:state.tasks.length,tasks:state.tasks}));
-}catch(e){console.error('Error cerrando jornada:',e);sendJson(res,500,{ok:false,error:'No se pudo cerrar la jornada'});}});return;
-}
-if(p==='/api/entrega'&&req.method==='POST'){
- const session=requireSession(req,res);if(!session)return;
- if(!isSafeSameOrigin(req)){sendJson(res,403,{ok:false,error:'Origen no permitido'});return;}
- readBody(req,res,incoming=>{try{
-  if(session.user.role!=='Patinador'&&session.user.role!=='Admin'&&session.user.role!=='Mesanín'){sendJson(res,403,{ok:false,error:'Este rol no puede registrar entregas'});return;}
-  const id=String(incoming.id??'');const qty=Number(incoming.cantidad);const obs=String(incoming.observaciones||'').slice(0,500);
-  if(!id||!Number.isSafeInteger(qty)||qty<1){sendJson(res,400,{ok:false,error:'Tarea o cantidad inválida'});return;}
-  const state=readState();const task=state.tasks.find(t=>String(t.id)===id);
-  if(!task){sendJson(res,404,{ok:false,error:'La tarea ya no está disponible'});return;}
-  if(session.user.role==='Patinador'){
-   const norm=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
-   const puesto=norm(task.puesto), name=norm(session.user.name||session.username);
-   let assigned='';
-   if(/^pre\s*33$/.test(puesto))assigned='juan esteban';
-   else {const pre=puesto.match(/^pre\s*(\d+)$/);if(pre){const n=Number(pre[1]);if(n>=1&&n<=10)assigned='juan esteban';else if(n>=11&&n<=21)assigned='jorge';else if(n>=22&&n<=32)assigned='hamilton';}}
-   if(!assigned&&/^derecho(?:\s+\d+)?$/.test(puesto))assigned='juan esteban';
-   if(!assigned&&/^izquierdo(?:\s+\d+)?$/.test(puesto))assigned='hamilton';
-   if(!assigned&&/^final de linea(?:\s+\d+)?$/.test(puesto))assigned='jorge';
-   const explicitArea=Array.isArray(session.user.areas)&&session.user.areas.includes(task.area);
-   const explicitPost=Array.isArray(session.user.puestos)&&session.user.puestos.includes(task.puesto);
-   if((assigned&&norm(assigned)!==name)||(!assigned&&!explicitPost)){sendJson(res,403,{ok:false,error:'La tarea no está asignada a este patinador'});return;}
-  }
-  const objetivo=Number(task.cantidad)||0;const entregado=Number(task.entregado)||0;const restante=Math.max(0,objetivo-entregado);
-  if(qty>restante){sendJson(res,409,{ok:false,error:'La cantidad supera lo pendiente: quedan '+restante+' unidades'});return;}
-  task.entregado=entregado+qty;task.estado=task.entregado>=objetivo?'Entregada':'Parcial';
-  if(!Array.isArray(task.entregas))task.entregas=[];
-  const entry={patinador:String(session.user.name||session.username),cantidad:qty,fechaHora:new Date().toLocaleString('es-CO'),metodo:'EAN / botón ENTREGAR',observaciones:obs};
-  task.entregas.push(entry);task.entrega=entry;
-  writeState(state);sendJson(res,200,{ok:true,task});
- }catch(e){console.error('Error registrando entrega:',e);sendJson(res,500,{ok:false,error:'No se pudo registrar la entrega'});}});
- return;
-}
 if(p==='/api/tasks/sync'&&req.method==='PUT'){
  const session=requireSession(req,res);if(!session)return;
  if(!isSafeSameOrigin(req)){sendJson(res,403,{ok:false,error:'Origen no permitido'});return;}
