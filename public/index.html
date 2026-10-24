@@ -189,33 +189,37 @@ function closeAssignment(){
   $('assignmentModal').classList.add('hidden');
   document.body.style.overflow='';
 }
-function saveAssignment(){
-  if(!assignmentEditingKey||!users[assignmentEditingKey]){alert('No hay un usuario seleccionado.');return;}
-  const u=users[assignmentEditingKey];
+async function saveAssignment(){
+  if(!isAdmin()||!assignmentEditingKey||!users[assignmentEditingKey]){alert('No hay un usuario autorizado seleccionado.');return;}
   const puestos=[];
   const add=(area,text)=>{for(const n of numbersFromText(text)) puestos.push(area+' '+n);};
-  add('PRE',$('asigPRE').value);
-  add('Derecho',$('asigDerecho').value);
-  add('Izquierdo',$('asigIzquierdo').value);
-  add('Final',$('asigFinal').value);
-  u.puestos=[...new Set(puestos)];
-  u.areas=[];
-  if(numbersFromText($('asigPRE').value).length) u.areas.push('PRE');
-  if(numbersFromText($('asigDerecho').value).length) u.areas.push('Derecho');
-  if(numbersFromText($('asigIzquierdo').value).length) u.areas.push('Izquierdo');
-  if(numbersFromText($('asigFinal').value).length) u.areas.push('Final de línea');
-  u.turno=$('asigTurno').value;
-  saveUsers();
-  renderUsers();
-  $('assignmentMsg').className='pill';
-  $('assignmentMsg').textContent='Asignación guardada correctamente.';
-  current= current && current.username===assignmentEditingKey ? {...users[assignmentEditingKey],username:assignmentEditingKey} : current;
-  render();
+  add('PRE',$('asigPRE').value);add('Derecho',$('asigDerecho').value);add('Izquierdo',$('asigIzquierdo').value);add('Final',$('asigFinal').value);
+  const areas=[];
+  if(numbersFromText($('asigPRE').value).length)areas.push('PRE');
+  if(numbersFromText($('asigDerecho').value).length)areas.push('Derecho');
+  if(numbersFromText($('asigIzquierdo').value).length)areas.push('Izquierdo');
+  if(numbersFromText($('asigFinal').value).length)areas.push('Final de línea');
+  try{
+    const r=await fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'assignment',username:assignmentEditingKey,puestos:[...new Set(puestos)],areas,turno:$('asigTurno').value})});
+    const data=await r.json();if(!r.ok)throw new Error(data.error||'No se pudo guardar');
+    users=data.users||users;saveUsers();renderUsers();
+    $('assignmentMsg').className='pill';$('assignmentMsg').textContent='Asignación guardada correctamente en el servidor.';
+    current=current&&current.username===assignmentEditingKey?{...users[assignmentEditingKey],username:assignmentEditingKey}:current;render();
+  }catch(e){$('assignmentMsg').className='pill danger';$('assignmentMsg').textContent=e.message||'No se pudo guardar la asignación.';}
 }
 
-function createUser(){const username=$('newUsername').value.trim().toLowerCase(),name=$('newName').value.trim(),pass=$('newPass').value,role=$('newRole').value,turno=$('newUserTurno').value,puestos=$('newPuestos').value.split(',').map(x=>x.trim()).filter(Boolean);if(!username||!name||!pass){$('userMsg').textContent='Complete usuario, nombre y contraseña.';return}if(users[username]){ $('userMsg').textContent='Ese usuario ya existe.';return}users[username]={pass,name,role,turno,puestos:role==='Patinador'?puestos:[],areas:role==='Patinador'?['PRE','Derecho','Izquierdo','Final de línea']:[]};saveUsers();$('userMsg').textContent='Usuario creado correctamente.';renderUsers();}
-function editUser(key){const pass=prompt('Nueva contraseña para '+key+':');if(pass===null)return;if(pass.length<4){alert('La contraseña debe tener mínimo 4 caracteres.');return}users[key].pass=pass;saveUsers();alert('Contraseña cambiada correctamente.');renderUsers();}
-function deleteUser(key){if(key==='admin')return;if(confirm('¿Eliminar usuario '+key+'?')){delete users[key];saveUsers();renderUsers();}}
+async function createUser(){
+ if(!isAdmin()){alert('Solo Admin puede administrar usuarios.');return;}
+ const username=$('newUsername').value.trim().toLowerCase(),name=$('newName').value.trim(),password=$('newPass').value,role=$('newRole').value,turno=$('newUserTurno').value,puestos=$('newPuestos').value.split(',').map(x=>x.trim()).filter(Boolean);
+ if(!username||!name||!password){$('userMsg').textContent='Complete usuario, nombre y contraseña.';return}
+ if(password.length<12){$('userMsg').textContent='La contraseña debe tener mínimo 12 caracteres.';return}
+ if(users[username]){$('userMsg').textContent='Ese usuario ya existe.';return}
+ const areas=role==='Patinador'?[...new Set(puestos.map(p=>areaDesdePuesto(p,'' )).filter(a=>['PRE','Derecho','Izquierdo','Final de línea'].includes(a)))]:[];
+ try{const r=await fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'create',username,name,password,role,turno,puestos:role==='Patinador'?puestos:[],areas})});const data=await r.json();if(!r.ok)throw new Error(data.error||'No se pudo crear el usuario');users=data.users||users;saveUsers();$('newPass').value='';$('userMsg').textContent='Usuario creado y guardado de forma segura.';renderUsers();}
+ catch(e){$('userMsg').textContent=e.message||'No se pudo crear el usuario.';}
+}
+async function editUser(key){if(!isAdmin())return;const password=prompt('Nueva contraseña para '+key+' (mínimo 12 caracteres):');if(password===null)return;if(password.length<12){alert('La contraseña debe tener mínimo 12 caracteres.');return}try{const r=await fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'password',username:key,password})});const data=await r.json();if(!r.ok)throw new Error(data.error||'No se pudo cambiar');users=data.users||users;saveUsers();alert('Contraseña actualizada en el servidor.');renderUsers();}catch(e){alert(e.message||'No se pudo cambiar la contraseña.');}}
+async function deleteUser(key){if(!isAdmin()||key==='admin')return;if(confirm('¿Eliminar usuario '+key+'?')){try{const r=await fetch('/api/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete',username:key})});const data=await r.json();if(!r.ok)throw new Error(data.error||'No se pudo eliminar');users=data.users||users;saveUsers();renderUsers();}catch(e){alert(e.message||'No se pudo eliminar el usuario.');}}}
 function normalizarPuestoAdmin(valor,modo){
   const v=String(valor||'').trim();
   if(!v)return '';
