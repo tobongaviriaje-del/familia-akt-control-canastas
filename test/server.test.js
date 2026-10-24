@@ -328,3 +328,52 @@ test('frontend saves only fields authorized for the active role', () => {
   assert.match(frontend, /JSON\.stringify\(\{tasks:cloudTasks,lpnCatalog\}\)/);
   assert.doesNotMatch(frontend, /JSON\.stringify\(\{users,tasks:cloudTasks,lpnCatalog\}\)/);
 });
+
+
+test('role-scoped task sync preserves delivery history and blocks task deletion', async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'familia-akt-task-sync-'));
+  const port = 38000 + (process.pid % 10000);
+  const child = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
+    env: { ...process.env, PORT: String(port), DATA_DIR: dataDir },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  let logs = '';
+  child.stdout.on('data', chunk => { logs += chunk.toString(); });
+  child.stderr.on('data', chunk => { logs += chunk.toString(); });
+  t.after(() => { child.kill('SIGTERM'); fs.rmSync(dataDir, { recursive: true, force: true }); });
+  const base = `http://127.0.0.1:${port}`;
+  let ready = false;
+  for (let i = 0; i < 50; i++) {
+    if (child.exitCode !== null) throw new Error(`server exited early: ${logs}`);
+    try { const r = await fetch(`${base}/health`); if (r.ok) { ready = true; break; } } catch {}
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.ok(ready, `server did not start: ${logs}`);
+  const statePath = path.join(dataDir, 'state.json');
+  const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+  state.tasks = [
+    { id: 'task-a', lpn: 'LPN-A', ean: 'EAN-A', producto: 'Pieza A', cantidad: 10, entregado: 3, estado: 'Parcial', entregas: [{ cantidad: 3, patinador: 'Hamilton' }], puesto: 'PRE 22', area: 'PRE' },
+    { id: 'task-b', lpn: 'LPN-B', ean: 'EAN-B', producto: 'Pieza B', cantidad: 5, entregado: 0, estado: 'Pendiente', entregas: [], puesto: 'PRE 1', area: 'PRE' }
+  ];
+  fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+  const login = await fetch(`${base}/api/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'mesanin', password: 'mesanin123' })
+  });
+  assert.equal(login.status, 200);
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  const submitted = [
+    { ...state.tasks[0], cantidad: 12, entregado: 999, estado: 'Entregada', entregas: [] }
+  ];
+  const sync = await fetch(`${base}/api/tasks/sync`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ tasks: submitted })
+  });
+  assert.equal(sync.status, 200);
+  const stored = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+  assert.equal(stored.tasks.length, 2, 'omitted tasks cannot be deleted by a non-admin');
+  assert.equal(stored.tasks.find(x => x.id === 'task-a').cantidad, 12);
+  assert.equal(stored.tasks.find(x => x.id === 'task-a').entregado, 3, 'delivery count remains server-controlled');
+  assert.equal(stored.tasks.find(x => x.id === 'task-a').entregas.length, 1, 'delivery history remains intact');
+  assert.equal(stored.tasks.find(x => x.id === 'task-a').estado, 'Parcial');
+});
