@@ -303,6 +303,61 @@ if(p==='/api/entrega'&&req.method==='POST'){
  }catch(e){console.error('Error registrando entrega:',e);sendJson(res,500,{ok:false,error:'No se pudo registrar la entrega'});}});
  return;
 }
+if(p==='/api/tasks/sync'&&req.method==='PUT'){
+ const session=requireSession(req,res);if(!session)return;
+ if(!isSafeSameOrigin(req)){sendJson(res,403,{ok:false,error:'Origen no permitido'});return;}
+ readBody(req,res,incoming=>{try{
+  const role=session.user.role;
+  if(!['Admin','Mesanín','Supervisor','Patinador'].includes(role)){sendJson(res,403,{ok:false,error:'Este rol no puede guardar tareas'});return;}
+  if(!Array.isArray(incoming.tasks)){sendJson(res,400,{ok:false,error:'La lista de tareas no es válida'});return;}
+  if(Object.keys(incoming).some(k=>!['tasks','lpnCatalog','freeDeliveries'].includes(k))){sendJson(res,400,{ok:false,error:'Solo se permiten campos conocidos'});return;}
+  const state=readState(),existing=Array.isArray(state.tasks)?state.tasks:[];
+  if(role==='Admin'){
+   state.tasks=incoming.tasks;
+  }else{
+   const protectedFields=['entregado','estado','entregas','entrega','canastasEntregadas','confirmacionesCanastas'];
+   const allowedPatinador=new Set(['cantidad','lote','lotePiezas','cantidadUnidad','cantidadCanasta','cantidadCanastaRaw','numCanastas','numCanastasRaw']);
+   const byId=new Map(existing.map((task,index)=>[String(task.id),index]));
+   const merged=existing.map(task=>({...task}));
+   const seen=new Set();
+   for(const candidate of incoming.tasks){
+    if(!candidate||candidate.id===undefined||candidate.id===null){sendJson(res,400,{ok:false,error:'Cada tarea debe tener identificador'});return;}
+    const id=String(candidate.id);if(seen.has(id)){sendJson(res,400,{ok:false,error:'Hay identificadores de tarea repetidos'});return;}seen.add(id);
+    const idx=byId.get(id);
+    if(idx===undefined){
+     if(role==='Patinador'){sendJson(res,403,{ok:false,error:'Los patinadores no pueden crear tareas'});return;}
+     if(!candidate.lpn||!candidate.ean||!candidate.producto||!candidate.puesto||!Number.isSafeInteger(Number(candidate.cantidad))||Number(candidate.cantidad)<1){sendJson(res,400,{ok:false,error:'Los datos de la nueva tarea no son válidos'});return;}
+     const fresh={...candidate,entregado:0,estado:'Pendiente',entregas:[],entrega:null};
+     merged.push(fresh);byId.set(id,merged.length-1);continue;
+    }
+    const old=merged[idx];
+    if(role==='Patinador'){
+     if(!old.standardNKD||!Array.isArray(session.user.puestos)||!session.user.puestos.includes(old.puesto)||String(candidate.puesto)!==String(old.puesto)){sendJson(res,403,{ok:false,error:'Solo puedes editar el estándar asignado a tu puesto'});return;}
+     for(const key of Object.keys(candidate)){if(key==='id')continue;if(allowedPatinador.has(key))old[key]=candidate[key];}
+    }else{
+     const updated={...old,...candidate};
+     for(const key of protectedFields)updated[key]=old[key];
+     merged[idx]=updated;
+    }
+   }
+   // Non-admin sessions cannot remove existing tasks by submitting a shorter list.
+   state.tasks=merged;
+  }
+  if(Object.prototype.hasOwnProperty.call(incoming,'lpnCatalog')){
+   if(role!=='Admin'&&role!=='Mesanín'){sendJson(res,403,{ok:false,error:'Este rol no puede cambiar el catálogo LPN'});return;}
+   if(!Array.isArray(incoming.lpnCatalog)){sendJson(res,400,{ok:false,error:'El catálogo LPN no es válido'});return;}
+   state.lpnCatalog=incoming.lpnCatalog;
+  }
+  if(Object.prototype.hasOwnProperty.call(incoming,'freeDeliveries')){
+   if(role!=='Admin'&&role!=='Mesanín'){sendJson(res,403,{ok:false,error:'Este rol no puede cambiar entregas libres'});return;}
+   if(!Array.isArray(incoming.freeDeliveries)){sendJson(res,400,{ok:false,error:'Las entregas libres no son válidas'});return;}
+   state.freeDeliveries=incoming.freeDeliveries;
+  }
+  writeState(state);
+  sendJson(res,200,{ok:true,tasks:state.tasks,lpnCatalog:state.lpnCatalog||[],freeDeliveries:state.freeDeliveries||[]});
+ }catch(e){console.error('Error guardando tareas:',e);sendJson(res,400,{ok:false,error:'No se pudieron guardar las tareas'});}});
+ return;
+}
 if(p==='/api/state'&&req.method==='PUT'){
  const session=requireSession(req,res);if(!session)return;
  if(!isSafeSameOrigin(req)){sendJson(res,403,{ok:false,error:'Origen no permitido'});return;}
