@@ -320,12 +320,11 @@ test('admin user API hashes passwords and blocks non-admin management', async (t
   assert.equal(forbidden.status, 403);
 });
 
-test('frontend saves only fields authorized for the active role', () => {
+test('frontend uses role-scoped task sync instead of unauthorized whole-state writes', () => {
   const frontend = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
-  assert.match(frontend, /if\(current\?\.role==='Admin'\)payload=\{tasks:cloudTasks,lpnCatalog,freeDeliveries\}/);
-  assert.match(frontend, /else if\(current\?\.role==='Mesanín'\)payload=\{freeDeliveries\}/);
-  assert.match(frontend, /else return Promise\.resolve\(false\)/);
-  assert.match(frontend, /JSON\.stringify\(\{tasks:cloudTasks,lpnCatalog\}\)/);
+  assert.match(frontend, /const endpoint=role==='Admin'\?'\/api\/state':'\/api\/tasks\/sync'/);
+  assert.match(frontend, /role==='Admin'\|\|role==='Mesanín'/);
+  assert.match(frontend, /\{tasks:cloudTasks,lpnCatalog,freeDeliveries\}/);
   assert.doesNotMatch(frontend, /JSON\.stringify\(\{users,tasks:cloudTasks,lpnCatalog\}\)/);
 });
 
