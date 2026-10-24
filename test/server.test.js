@@ -87,3 +87,54 @@ test('rejects malformed JSON and oversized request bodies', async (t) => {
   });
   assert.equal(oversized.status, 413);
 });
+
+test('state API requires a session and never returns passwords', async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'familia-akt-auth-test-'));
+  const port = 33000 + (process.pid % 17000);
+  const child = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
+    env: { ...process.env, PORT: String(port), DATA_DIR: dataDir },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  let logs = '';
+  child.stdout.on('data', chunk => { logs += chunk.toString(); });
+  child.stderr.on('data', chunk => { logs += chunk.toString(); });
+  t.after(() => {
+    child.kill('SIGTERM');
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  });
+  const base = `http://127.0.0.1:${port}`;
+  let ready = false;
+  for (let i = 0; i < 50; i++) {
+    if (child.exitCode !== null) throw new Error(`server exited early: ${logs}`);
+    try { const r = await fetch(`${base}/health`); if (r.ok) { ready = true; break; } } catch {}
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.ok(ready, `server did not start: ${logs}`);
+
+  const anonymous = await fetch(`${base}/api/state`);
+  assert.equal(anonymous.status, 401);
+  const deniedWrite = await fetch(`${base}/api/state`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tasks: [] })
+  });
+  assert.equal(deniedWrite.status, 401);
+
+  const login = await fetch(`${base}/api/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password: 'admin' })
+  });
+  assert.equal(login.status, 200);
+  const loginBody = await login.json();
+  assert.equal(loginBody.ok, true);
+  assert.equal(Object.hasOwn(loginBody.user, 'pass'), false);
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+
+  const stateResponse = await fetch(`${base}/api/state`, { headers: { Cookie: cookie } });
+  assert.equal(stateResponse.status, 200);
+  const state = await stateResponse.json();
+  assert.equal(Object.hasOwn(state.users.admin, 'pass'), false);
+
+  const logout = await fetch(`${base}/api/logout`, { method: 'POST', headers: { Cookie: cookie } });
+  assert.equal(logout.status, 200);
+  const afterLogout = await fetch(`${base}/api/state`, { headers: { Cookie: cookie } });
+  assert.equal(afterLogout.status, 401);
+});
