@@ -328,6 +328,9 @@ test('frontend uses role-scoped task sync instead of unauthorized whole-state wr
   assert.doesNotMatch(frontend, /JSON\.stringify\(\{users,tasks:cloudTasks,lpnCatalog\}\)/);
   assert.match(frontend, /async function guardarNuevoLPN\(\)[\s\S]*?const saved=await saveTasks\(tasks\);[\s\S]*?if\(!saved\)/);
   assert.doesNotMatch(frontend, /saveTasks\(tasks\);\s*cloudSave\(\);\$\('lpnMsg'\)\.className='pill'/);
+  assert.match(frontend, /async function crearTareaDesdeAdmin\(\)[\s\S]*?const previousTasks=cloudTasks\.slice\(\),previousCatalog=lpnCatalog\.slice\(\);[\s\S]*?if\(!saved\)\{cloudTasks=previousTasks;lpnCatalog=previousCatalog/);
+  assert.match(frontend, /async function crearTarea\(\)[\s\S]*?const before=cloudTasks\.slice\(\);[\s\S]*?if\(!saved\)\{cloudTasks=before/);
+  assert.match(frontend, /async function cargarMasivo\(\)\{const previousTasks=cloudTasks\.slice\(\),previousCatalog=lpnCatalog\.slice\(\);[\s\S]*?if\(!saved\)\{cloudTasks=previousTasks;lpnCatalog=previousCatalog/);
 });
 
 
