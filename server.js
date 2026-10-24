@@ -11,7 +11,7 @@ const MAX_BODY_BYTES=1024*1024;
 const production=process.env.NODE_ENV==='production';
 const crypto=require('crypto');
 const {Pool}=require('pg');
-const pool=process.env.DATABASE_URL?new Pool({connectionString:process.env.DATABASE_URL,ssl:{rejectUnauthorized:false},max:5,idleTimeoutMillis:30000,connectionTimeoutMillis:10000}):null;
+const pool=process.env.DATABASE_URL?new Pool({connectionString:process.env.DATABASE_URL,max:5,idleTimeoutMillis:30000,connectionTimeoutMillis:10000}):null;
 let stateCache=null;
 let dbWriteQueue=Promise.resolve();
 const SESSION_COOKIE='familia_akt_session';
@@ -134,6 +134,7 @@ async function initPersistence(){
  let initial;
  try{ensureState();initial=JSON.parse(fs.readFileSync(STATE_FILE,'utf8'));if(!initial||typeof initial!=='object'||Array.isArray(initial)||!initial.users||!Array.isArray(initial.tasks))throw new Error('estructura de estado inválida');if(!Array.isArray(initial.lpnCatalog))initial.lpnCatalog=[];if(!Array.isArray(initial.freeDeliveries))initial.freeDeliveries=[];}catch(e){throw new StateReadError('No se pudo inicializar Neon con el estado local: '+e.message);}
  await pool.query('INSERT INTO app_state (id,data,updated_at) VALUES (1,$1::jsonb,NOW())',[JSON.stringify(initial)]);
+ if(fs.existsSync(HISTORY_DIR)){for(const name of fs.readdirSync(HISTORY_DIR).filter(n=>n.endsWith('.json'))){try{const full=path.join(HISTORY_DIR,name),payload=JSON.parse(fs.readFileSync(full,'utf8')),archivedAt=payload.fechaCierre||fs.statSync(full).mtime.toISOString();await pool.query('INSERT INTO jornada_history (file_name, archived_at, payload) VALUES ($1,$2,$3::jsonb) ON CONFLICT (file_name) DO NOTHING',[name,archivedAt,JSON.stringify(payload)]);}catch(e){console.error('No se pudo importar un archivo histórico a Neon:',name,e.message);}}}
  stateCache=initial;
 }
 function validateStateCache(){const s=stateCache;if(!s||typeof s!=='object'||Array.isArray(s)||!s.users||typeof s.users!=='object'||Array.isArray(s.users)||!Array.isArray(s.tasks))throw new StateReadError('La fila app_state de Neon no tiene la estructura esperada');if(!Array.isArray(s.lpnCatalog))s.lpnCatalog=[];if(!Array.isArray(s.freeDeliveries))s.freeDeliveries=[];}
