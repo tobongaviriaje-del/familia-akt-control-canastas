@@ -298,11 +298,18 @@ if(p==='/api/state'&&req.method==='PUT'){
  readBody(req,res,incoming=>{try{
   const current=readState();
   if(Object.prototype.hasOwnProperty.call(incoming,'users')){sendJson(res,403,{ok:false,error:'La gestión de usuarios requiere una operación administrativa dedicada'});return;}
-  if(!Array.isArray(incoming.tasks)&&!Array.isArray(incoming.lpnCatalog)&&!Array.isArray(incoming.freeDeliveries)){sendJson(res,400,{ok:false,error:'No hay cambios válidos'});return;}
+  const keys=Object.keys(incoming);
+  if(!keys.length||keys.some(k=>!['tasks','lpnCatalog','freeDeliveries'].includes(k))){sendJson(res,400,{ok:false,error:'Solo se permiten campos de estado conocidos'});return;}
+  if(!keys.some(k=>Array.isArray(incoming[k]))){sendJson(res,400,{ok:false,error:'No hay cambios válidos'});return;}
+  const role=session.user.role;
+  if(role==='Patinador'){sendJson(res,403,{ok:false,error:'Los patinadores solo pueden registrar entregas autorizadas'});return;}
+  if(role!=='Admin'&&role!=='Mesanín'&&role!=='Supervisor'){sendJson(res,403,{ok:false,error:'Este rol no puede guardar el estado'});return;}
+  if(Object.prototype.hasOwnProperty.call(incoming,'lpnCatalog')&&role!=='Admin'){sendJson(res,403,{ok:false,error:'Solo Admin puede cambiar el catálogo'});return;}
+  if(Object.prototype.hasOwnProperty.call(incoming,'tasks')&&role!=='Admin'){sendJson(res,403,{ok:false,error:'Solo Admin puede reemplazar la lista completa de tareas'});return;}
+  if(Object.prototype.hasOwnProperty.call(incoming,'freeDeliveries')&&role!=='Admin'&&role!=='Mesanín'){sendJson(res,403,{ok:false,error:'Este rol no puede cambiar entregas libres'});return;}
   const state={...current};
-  if(session.user.role!=='Admin'&&session.user.role!=='Mesanín'&&session.user.role!=='Supervisor'){sendJson(res,403,{ok:false,error:'Este rol no puede guardar el estado completo'});return;}
   if(Array.isArray(incoming.tasks))state.tasks=incoming.tasks;
-  if(Array.isArray(incoming.lpnCatalog)){if(session.user.role!=='Admin'){sendJson(res,403,{ok:false,error:'Solo Admin puede cambiar el catálogo'});return;}state.lpnCatalog=incoming.lpnCatalog;}
+  if(Array.isArray(incoming.lpnCatalog))state.lpnCatalog=incoming.lpnCatalog;
   if(Array.isArray(incoming.freeDeliveries))state.freeDeliveries=incoming.freeDeliveries;
   writeState(state);
   const safeUsers={};for(const [name,user] of Object.entries(state.users||{}))safeUsers[name]=safeUser(name,user);
