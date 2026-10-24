@@ -613,10 +613,10 @@ async function aplicarLotesBaseMotos(){
  const conflictos=base.filter(x=>(Number(x.entregado)||0)>loteInicialPorModelo(modeloDeTareaEstandar(x)));
  if(conflictos.length){alert('No se aplicaron cambios porque hay '+conflictos.length+' referencias con entregas mayores que el lote base indicado. Revisa esas referencias primero.');return;}
  if(!confirm('Se establecerá el lote inicial de cada referencia cargada según su modelo: CR4 150 = 110, CR4 125 = 270, VOGE/VOGI 180 = 62 y CH = 300 unidades. Se conservarán las entregas ya registradas y el saldo se recalculará. ¿Continuar?'))return;
- const tasks=getTasks();let actualizadas=0;
+ const previousTasks=JSON.parse(JSON.stringify(cloudTasks)),previousCatalog=JSON.parse(JSON.stringify(lpnCatalog));const tasks=getTasks();let actualizadas=0;
  tasks.forEach(x=>{if(!x.standardNKD)return;const lote=loteInicialPorModelo(modeloDeTareaEstandar(x));if(lote<=0)return;x.lote=lote;x.lotePiezas=lote;x.cantidad=lote;const capacidad=Number(String(x.cantidadCanasta??'').replace(',','.'))||0;if(capacidad>0){x.numCanastas=Math.ceil(lote/capacidad);x.numCanastasRaw=String(x.numCanastas);}actualizadas++;});
  try{const ok=await saveTasks(tasks);if(!ok)throw new Error('No se confirmó el guardado en la nube.');render();const msg=$('estandarNKDMsg');if(msg)msg.textContent='✅ Lotes iniciales aplicados a '+actualizadas+' referencias. Se conservaron las unidades ya entregadas.';alert('Listo: lotes iniciales aplicados a '+actualizadas+' referencias.');}
- catch(e){alert('Los cambios no se pudieron confirmar en la nube. No cierres sesión; revisa la conexión y vuelve a intentar.');}
+ catch(e){cloudTasks=previousTasks;lpnCatalog=previousCatalog;localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));render();alert('Los cambios no se pudieron guardar. Se restauró el estándar anterior en pantalla; revisa la conexión y vuelve a intentar.');}
 }
 
 function reiniciarDiaNKD(){
@@ -647,11 +647,11 @@ async function guardarLoteEstandar(id){
  const input=$('stdLote'+id),total=Number(input?.value),entregado=Number(x.entregado)||0;
  if(!Number.isInteger(total)||total<1){alert('Ingresa el total de piezas del lote, mayor que cero.');input?.focus();return;}
  if(total<entregado){alert('El total del lote no puede ser menor que las piezas ya entregadas ('+entregado+').');input?.focus();return;}
- const tasks=getTasks(),target=tasks.find(a=>String(a.id)===String(id));
+ const previousTasks=JSON.parse(JSON.stringify(cloudTasks)),previousCatalog=JSON.parse(JSON.stringify(lpnCatalog));const tasks=getTasks(),target=tasks.find(a=>String(a.id)===String(id));
  target.lote=total;target.lotePiezas=total;target.cantidad=total;
  if(target.standardManual&&Number(target.cantidadCanasta)>0)target.numCanastas=Math.ceil(total/Number(target.cantidadCanasta));
  const ok=await saveTasks(tasks);
- if(!ok){alert('No se confirmó el guardado del lote en el servidor. Revisa la conexión antes de repetir el cambio.');return;}
+ if(!ok){cloudTasks=previousTasks;lpnCatalog=previousCatalog;localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));render();alert('No se confirmó el guardado del lote. Se restauró el valor anterior en pantalla; revisa la conexión antes de repetir el cambio.');return;}
  render();const msg=$('estandarNKDMsg');if(msg)msg.textContent='✅ Lote guardado para '+target.producto+': '+total+' piezas iniciales. Las entregas se descuentan de ese total.';
 }
 async function guardarCapacidadCanastaEstandar(id){
@@ -664,11 +664,11 @@ async function guardarCapacidadCanastaEstandar(id){
  const input=$('stdCapCanasta'+id),n=Number(input?.value),basketInput=$('stdNumCanastas'+id),basketQty=basketInput?Number(basketInput.value):Number(x.numCanastas||0);
  if(!Number.isInteger(n)||n<1){alert('Ingresa cuántas unidades caben en una canasta (por ejemplo, 30).');if(input){input.focus();input.select();}return;}
  if(basketInput&&(!Number.isInteger(basketQty)||basketQty<1)){alert('Ingresa una cantidad de canastas mayor que cero.');basketInput.focus();basketInput.select();return;}
- const tasks=getTasks(),target=tasks.find(a=>String(a.id)===String(id));
+ const previousTasks=JSON.parse(JSON.stringify(cloudTasks)),previousCatalog=JSON.parse(JSON.stringify(lpnCatalog));const tasks=getTasks(),target=tasks.find(a=>String(a.id)===String(id));
  target.cantidadCanasta=n;target.cantidadCanastaRaw=String(n);if(basketInput){target.numCanastas=basketQty;target.numCanastasRaw=String(basketQty);}
  if(target.standardManual){target.lote=n*basketQty;target.cantidad=n*basketQty;target.cantidadUnidad=n;target.lotePiezas=n*basketQty;}else if(modeloDeTareaEstandar(target)==='NKD'){target.cantidad=n*(Number(target.numCanastas)||0)||Number(target.cantidad)||n;if(!(Number(target.lote)>0))target.lote=target.cantidad;}
  const ok=await saveTasks(tasks);
- if(!ok){alert('No se confirmó el guardado de la capacidad en el servidor. Revisa la conexión antes de repetir el cambio.');return;}
+ if(!ok){cloudTasks=previousTasks;lpnCatalog=previousCatalog;localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));render();alert('No se confirmó el guardado de la capacidad. Se restauró el valor anterior en pantalla; revisa la conexión antes de repetir el cambio.');return;}
  render();const msg=$('estandarNKDMsg');if(msg)msg.textContent='✅ Capacidad guardada para '+target.producto+': '+n+' unidades por canasta. Las entregas parciales se registrarán en unidades.';
 }
 function registrarEntregaEstandar(id){
