@@ -159,17 +159,17 @@ if(p==='/api/entrega'&&req.method==='POST'){
   const state=readState();const task=state.tasks.find(t=>String(t.id)===id);
   if(!task){sendJson(res,404,{ok:false,error:'La tarea ya no está disponible'});return;}
   if(session.user.role==='Patinador'){
-   const norm=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/\\s+/g,' ');
+   const norm=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
    const puesto=norm(task.puesto), name=norm(session.user.name||session.username);
    let assigned='';
-   if(/^pre\\s*33$/.test(puesto))assigned='juan esteban';
-   else {const pre=puesto.match(/^pre\\s*(\\d+)$/);if(pre){const n=Number(pre[1]);if(n>=1&&n<=10)assigned='juan esteban';else if(n>=11&&n<=21)assigned='jorge';else if(n>=22&&n<=32)assigned='hamilton';}}
-   if(!assigned&&/^derecho(?:\\s+\\d+)?$/.test(puesto))assigned='juan esteban';
-   if(!assigned&&/^izquierdo(?:\\s+\\d+)?$/.test(puesto))assigned='hamilton';
-   if(!assigned&&/^final de linea(?:\\s+\\d+)?$/.test(puesto))assigned='jorge';
+   if(/^pre\s*33$/.test(puesto))assigned='juan esteban';
+   else {const pre=puesto.match(/^pre\s*(\d+)$/);if(pre){const n=Number(pre[1]);if(n>=1&&n<=10)assigned='juan esteban';else if(n>=11&&n<=21)assigned='jorge';else if(n>=22&&n<=32)assigned='hamilton';}}
+   if(!assigned&&/^derecho(?:\s+\d+)?$/.test(puesto))assigned='juan esteban';
+   if(!assigned&&/^izquierdo(?:\s+\d+)?$/.test(puesto))assigned='hamilton';
+   if(!assigned&&/^final de linea(?:\s+\d+)?$/.test(puesto))assigned='jorge';
    const explicitArea=Array.isArray(session.user.areas)&&session.user.areas.includes(task.area);
    const explicitPost=Array.isArray(session.user.puestos)&&session.user.puestos.includes(task.puesto);
-   if((assigned&&norm(assigned)!==name)||(!assigned&&!explicitArea&&!explicitPost)){sendJson(res,403,{ok:false,error:'La tarea no está asignada a este patinador'});return;}
+   if((assigned&&norm(assigned)!==name)||(!assigned&&!explicitPost)){sendJson(res,403,{ok:false,error:'La tarea no está asignada a este patinador'});return;}
   }
   const objetivo=Number(task.cantidad)||0;const entregado=Number(task.entregado)||0;const restante=Math.max(0,objetivo-entregado);
   if(qty>restante){sendJson(res,409,{ok:false,error:'La cantidad supera lo pendiente: quedan '+restante+' unidades'});return;}
