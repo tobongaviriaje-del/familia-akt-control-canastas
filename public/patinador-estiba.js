@@ -86,7 +86,7 @@
     x.entregas=x.entregas||[];
     x.entregas.push({patinador:current.name,cantidad:qty,fechaHora:new Date().toLocaleString('es-CO'),metodo:'EAN / botón ENTREGAR',observaciones:obs||''});
     x.entrega=x.entregas[x.entregas.length-1];
-    const r=await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({users,tasks:t,lpnCatalog})});
+    const r=await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({tasks:t})});
     if(!r.ok) throw new Error('El servidor no pudo guardar la entrega.');
     const s=await r.json();
     users=s.users||users; cloudTasks=Array.isArray(s.tasks)?s.tasks:t;
