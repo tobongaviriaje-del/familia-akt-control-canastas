@@ -187,6 +187,11 @@ test('patinador solo registra entregas de tareas asignadas y conserva metadatos'
     body: JSON.stringify({ id: 't-pre1', cantidad: 1 })
   });
   assert.equal(denied.status, 403);
+  const deniedUnknown = await fetch(`${base}/api/entrega`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ id: 't-unknown', cantidad: 1 })
+  });
+  assert.equal(deniedUnknown.status, 404);
   const allowed = await fetch(`${base}/api/entrega`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
     body: JSON.stringify({ id: 't-pre22', cantidad: 3, observaciones: 'prueba sintética' })
