@@ -205,3 +205,57 @@ test('patinador solo registra entregas de tareas asignadas y conserva metadatos'
   assert.equal(result.task.referenciaCanasta, 'Otra canasta');
   assert.equal(result.task.entregas.at(-1).cantidad, 3);
 });
+
+
+test('admin user API hashes passwords and blocks non-admin management', async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'familia-akt-users-test-'));
+  const port = 36000 + (process.pid % 12000);
+  const child = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
+    env: { ...process.env, PORT: String(port), DATA_DIR: dataDir },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  let logs = '';
+  child.stdout.on('data', chunk => { logs += chunk.toString(); });
+  child.stderr.on('data', chunk => { logs += chunk.toString(); });
+  t.after(() => { child.kill('SIGTERM'); fs.rmSync(dataDir, { recursive: true, force: true }); });
+  const base = `http://127.0.0.1:${port}`;
+  let ready = false;
+  for (let i = 0; i < 50; i++) {
+    if (child.exitCode !== null) throw new Error(`server exited early: ${logs}`);
+    try { const r = await fetch(`${base}/health`); if (r.ok) { ready = true; break; } } catch {}
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.ok(ready, `server did not start: ${logs}`);
+  const login = await fetch(`${base}/api/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password: 'admin' })
+  });
+  assert.equal(login.status, 200);
+  const cookie = login.headers.get('set-cookie').split(';')[0];
+  const created = await fetch(`${base}/api/users`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ action: 'create', username: 'nuevo.operador', name: 'Operador de prueba', role: 'Patinador', turno: 'Día', password: 'ClaveDePrueba#2026', areas: ['PRE'], puestos: ['PRE 1'] })
+  });
+  assert.equal(created.status, 200);
+  const stored = JSON.parse(fs.readFileSync(path.join(dataDir, 'state.json'), 'utf8'));
+  assert.match(stored.users['nuevo.operador'].pass, /^scrypt\$/);
+  assert.notEqual(stored.users['nuevo.operador'].pass, 'ClaveDePrueba#2026');
+  const response = await created.json();
+  assert.equal(Object.hasOwn(response.users['nuevo.operador'], 'pass'), false);
+  const deleted = await fetch(`${base}/api/users`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ action: 'delete', username: 'nuevo.operador' })
+  });
+  assert.equal(deleted.status, 200);
+  const userLogin = await fetch(`${base}/api/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'hamilton', password: 'Hamilton123!' })
+  });
+  assert.equal(userLogin.status, 200);
+  const userCookie = userLogin.headers.get('set-cookie').split(';')[0];
+  const forbidden = await fetch(`${base}/api/users`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: userCookie },
+    body: JSON.stringify({ action: 'create', username: 'otro.operador', name: 'No autorizado', role: 'Patinador', password: 'OtraClaveSegura#2026' })
+  });
+  assert.equal(forbidden.status, 403);
+});
