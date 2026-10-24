@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, security/full-hardening]
+    branches: [main, security/full-hardening, fix/role-safe-saves]
 
 permissions:
   contents: read
