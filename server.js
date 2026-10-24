@@ -104,8 +104,10 @@ try{raw=fs.readFileSync(STATE_FILE,'utf8');}catch(e){throw new StateReadError('N
 let s;
 try{s=JSON.parse(raw);}catch(e){throw new StateReadError('JSON inválido en '+STATE_FILE+': '+e.message);}
 if(!s||typeof s!=='object'||Array.isArray(s))throw new StateReadError('La raíz del estado guardado no es un objeto');
-if(!s.users||typeof s.users!=='object'||Array.isArray(s.users))s.users=defaultUsers;
-if(!Array.isArray(s.tasks))s.tasks=[];
+if(!s.users||typeof s.users!=='object'||Array.isArray(s.users))throw new StateReadError('El estado guardado no contiene un mapa válido de usuarios');
+if(!Array.isArray(s.tasks))throw new StateReadError('El estado guardado no contiene una lista válida de tareas');
+if(s.lpnCatalog!==undefined&&!Array.isArray(s.lpnCatalog))throw new StateReadError('El catálogo LPN guardado no es válido');
+if(s.freeDeliveries!==undefined&&!Array.isArray(s.freeDeliveries))throw new StateReadError('Las entregas libres guardadas no son válidas');
 if(!Array.isArray(s.lpnCatalog))s.lpnCatalog=[];
 if(!Array.isArray(s.freeDeliveries))s.freeDeliveries=[];
 return s;
