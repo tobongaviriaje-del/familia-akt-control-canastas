@@ -622,7 +622,7 @@ function reiniciarDiaNKD(){
  if(!std.length){alert('Primero carga el estándar '+modelo+'.');return;}
  if(!confirm('¿Reiniciar las entregas del estándar '+modelo+'? Se conservará el estándar y los demás modelos no cambiarán.'))return;
  const tasks=getTasks().map(x=>x.standardNKD&&modeloDeTareaEstandar(x)===modelo?{...x,entregado:0,estado:'Pendiente',entregas:[],entrega:null}:x);
- saveTasks(tasks);cloudSave().then(()=>{render();window.scrollTo(0,scrollAntes);const fila=$('stdRow'+id);if(fila)fila.scrollIntoView({behavior:'auto',block:'center'});const msg=$('estandarNKDMsg');if(msg)msg.textContent='✅ Entregas reiniciadas para '+modelo+'. El estándar se conservó.';});
+ saveTasks(tasks).then(ok=>{if(!ok){alert('No se confirmó el guardado en la nube. No cierres esta pantalla; revisa la conexión.');return;}render();window.scrollTo(0,scrollAntes);const fila=$('stdRow'+id);if(fila)fila.scrollIntoView({behavior:'auto',block:'center'});const msg=$('estandarNKDMsg');if(msg)msg.textContent='✅ Entregas reiniciadas para '+modelo+'. El estándar se conservó.';});
 }
 function renderPatinadorChecklist(){
  const wrap=$('standardItems'),progress=$('standardProgress');if(!wrap||!progress||!current||current.role!=='Patinador')return;
@@ -665,7 +665,7 @@ async function guardarCapacidadCanastaEstandar(id){
  const tasks=getTasks(),target=tasks.find(a=>String(a.id)===String(id));
  target.cantidadCanasta=n;target.cantidadCanastaRaw=String(n);if(basketInput){target.numCanastas=basketQty;target.numCanastasRaw=String(basketQty);}
  if(target.standardManual){target.lote=n*basketQty;target.cantidad=n*basketQty;target.cantidadUnidad=n;target.lotePiezas=n*basketQty;}else if(modeloDeTareaEstandar(target)==='NKD'){target.cantidad=n*(Number(target.numCanastas)||0)||Number(target.cantidad)||n;if(!(Number(target.lote)>0))target.lote=target.cantidad;}
- saveTasks(tasks);const ok=await cloudSave();
+ const ok=await saveTasks(tasks);
  if(!ok){alert('No se confirmó el guardado de la capacidad en el servidor. Revisa la conexión antes de repetir el cambio.');return;}
  render();const msg=$('estandarNKDMsg');if(msg)msg.textContent='✅ Capacidad guardada para '+target.producto+': '+n+' unidades por canasta. Las entregas parciales se registrarán en unidades.';
 }
