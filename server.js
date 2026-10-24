@@ -94,7 +94,7 @@ jorge:{pass:'Jorge123!',role:'Patinador',name:'Jorge',areas:['PRE','Derecho','Iz
 };
 
 function sendJson(res,status,payload){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(payload));}
-function readBody(req,res,callback){let body='';let size=0;let finished=false;req.on('data',chunk=>{if(finished)return;size+=chunk.length;if(size>MAX_BODY_BYTES){finished=true;sendJson(res,413,{ok:false,error:'Solicitud demasiado grande'});req.resume();return;}body+=chunk.toString('utf8');});req.on('end',()=>{if(finished)return;try{callback(JSON.parse(body||'{}'));}catch(e){if(e instanceof StateReadError){console.error('Estado persistente ilegible:',e.message);sendJson(res,500,{ok:false,error:'No se pudo leer el estado guardado. No se modificaron los datos.'});return;}sendJson(res,400,{ok:false,error:'JSON inválido'});}});req.on('error',()=>{if(!finished)sendJson(res,400,{ok:false,error:'Solicitud incompleta'});});}
+function readBody(req,res,callback){let body='';let size=0;let finished=false;req.on('data',chunk=>{if(finished)return;size+=chunk.length;if(size>MAX_BODY_BYTES){finished=true;sendJson(res,413,{ok:false,error:'Solicitud demasiado grande'});req.resume();return;}body+=chunk.toString('utf8');});req.on('end',()=>{if(finished)return;let incoming;try{incoming=JSON.parse(body||'{}');}catch{sendJson(res,400,{ok:false,error:'JSON inválido'});return;}Promise.resolve().then(()=>callback(incoming)).catch(e=>{console.error('Error procesando cuerpo de solicitud:',e);if(!res.writableEnded)sendJson(res,e instanceof StateReadError?500:500,{ok:false,error:e instanceof StateReadError?'No se pudo leer el estado guardado. No se modificaron los datos.':'Error interno del servidor'});});});req.on('error',()=>{if(!finished)sendJson(res,400,{ok:false,error:'Solicitud incompleta'});});}
 
 class StateReadError extends Error{constructor(message){super(message);this.name='StateReadError';}}
 function ensureState(){
@@ -132,7 +132,7 @@ async function initPersistence(){
  const found=await pool.query('SELECT data FROM app_state WHERE id=1');
  if(found.rowCount){stateCache=found.rows[0].data;validateStateCache();return;}
  let initial;
- try{initial=readState();}catch(e){throw new StateReadError('No se pudo inicializar Neon con el estado local: '+e.message);}
+ try{ensureState();initial=JSON.parse(fs.readFileSync(STATE_FILE,'utf8'));if(!initial||typeof initial!=='object'||Array.isArray(initial)||!initial.users||!Array.isArray(initial.tasks))throw new Error('estructura de estado inválida');if(!Array.isArray(initial.lpnCatalog))initial.lpnCatalog=[];if(!Array.isArray(initial.freeDeliveries))initial.freeDeliveries=[];}catch(e){throw new StateReadError('No se pudo inicializar Neon con el estado local: '+e.message);}
  await pool.query('INSERT INTO app_state (id,data,updated_at) VALUES (1,$1::jsonb,NOW())',[JSON.stringify(initial)]);
  stateCache=initial;
 }
@@ -148,7 +148,7 @@ if(p==='/health'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'applica
 if(p==='/api/login'&&req.method==='POST'){
  if(!isSafeSameOrigin(req)){sendJson(res,403,{ok:false,error:'Origen no permitido'});return;}
  const retryAfter=checkLoginLimit(req);if(retryAfter){res.setHeader('Retry-After',String(retryAfter));sendJson(res,429,{ok:false,error:'Demasiados intentos. Espera antes de volver a intentar.'});return;}
- readBody(req,res,incoming=>{
+ readBody(req,res,async incoming=>{
   const username=String(incoming.username||'').trim().toLowerCase();
   const password=String(incoming.password||'');
   const state=readState();
@@ -156,7 +156,7 @@ if(p==='/api/login'&&req.method==='POST'){
   if(!user||!verifyPassword(password,user.pass)){
     sendJson(res,401,{ok:false,error:'Usuario o contraseña incorrectos'});return;
   }
-  if(!String(user.pass).startsWith('scrypt$')){user.pass=hashPassword(password);writeState(state);}
+  if(!String(user.pass).startsWith('scrypt$')){user.pass=hashPassword(password);await writeState(state);}
   const token=crypto.randomBytes(32).toString('base64url');
   sessions.set(token,{username,user:{...user},expires:Date.now()+SESSION_TTL_MS});
   clearLoginAttempts(req);
@@ -189,7 +189,7 @@ if(!Array.isArray(state.tasks))state.tasks=[];
 if(incoming.confirmacion!=='CERRAR JORNADA'){res.writeHead(400,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify({ok:false,error:'Confirmación inválida'}));}
 if(!state.tasks.length){res.writeHead(409,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify({ok:false,error:'No hay tareas activas para archivar'}));}
 const snapshot=state.tasks.map(t=>({...t}));
-const archived=archiveTasks(snapshot,{usuario:String(session.user.name||session.username),motivo:'Cierre de jornada',regla:'Se archivan todas las tareas; las completadas salen de la lista activa y las pendientes/parciales conservan su avance para el siguiente turno.'});
+const archived=await archiveTasks(snapshot,{usuario:String(session.user.name||session.username),motivo:'Cierre de jornada',regla:'Se archivan todas las tareas; las completadas salen de la lista activa y las pendientes/parciales conservan su avance para el siguiente turno.'});
 const isComplete=t=>{const total=Number(t.cantidad)||0;const delivered=Number(t.entregado)||0;return total>0&&delivered>=total;};
 state.tasks=state.tasks.filter(t=>!isComplete(t));
 writeState(state);
@@ -367,4 +367,4 @@ if(path.extname(file)==='.html'){
 res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream'});res.end(output);});
 }catch(e){console.error('Error procesando solicitud:',e);if(!res.headersSent)sendJson(res,e instanceof StateReadError?500:500,{ok:false,error:e instanceof StateReadError?'No se pudo leer el estado guardado. No se modificaron los datos.':'Error interno del servidor'});else if(!res.writableEnded)res.end();}
 });
-ensureState();server.listen(PORT,()=>console.log('FAMILIA AKT funcionando en puerto '+PORT));
+initPersistence().then(()=>server.listen(PORT,()=>console.log('FAMILIA AKT funcionando en puerto '+PORT+(pool?' con Neon PostgreSQL':' con almacenamiento local')))).catch(e=>{console.error('No se pudo inicializar el almacenamiento persistente:',e);process.exitCode=1;});
