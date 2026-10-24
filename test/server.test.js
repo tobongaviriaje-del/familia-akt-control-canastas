@@ -332,7 +332,7 @@ test('frontend uses role-scoped task sync instead of unauthorized whole-state wr
   assert.match(frontend, /async function crearTarea\(\)[\s\S]*?const before=cloudTasks\.slice\(\);[\s\S]*?if\(!saved\)\{cloudTasks=before/);
   assert.match(frontend, /async function cargarMasivo\(\)\{const previousTasks=cloudTasks\.slice\(\),previousCatalog=lpnCatalog\.slice\(\);[\s\S]*?if\(!saved\)\{cloudTasks=previousTasks;lpnCatalog=previousCatalog/);
   assert.match(frontend, /function crearReferenciaManualEstandar\([\s\S]*?previousTasks=JSON\.parse\(JSON\.stringify\(cloudTasks\)\)[\s\S]*?catch\(e\)\{cloudTasks=previousTasks;lpnCatalog=previousCatalog/);
-  assert.match(frontend, /function prepararEstandarNKD\([\s\S]*?cloudSave\(\)\.then\(ok=>\{[\s\S]*?if\(!ok\)throw new Error\([\s\S]*?catch\(\)=>\{cloudTasks=previousTasks;lpnCatalog=previousCatalog/);
+  assert.match(frontend, /function prepararEstandarNKD\([\s\S]*?cloudSave\(\)\.then\(ok=>\{[\s\S]*?if\(!ok\)throw new Error\([\s\S]*?catch\(\(\)=>\{cloudTasks=previousTasks;lpnCatalog=previousCatalog/);
   assert.doesNotMatch(frontend, /fetch\('\/api\/state',\{method:'PUT',headers:\{'Content-Type':'application\/json'\},body:JSON\.stringify\(\{tasks:cloudTasks,lpnCatalog\}\)\}\)/);
 });
 
