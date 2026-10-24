@@ -4,7 +4,7 @@ const path=require('path');
 
 const PORT=process.env.PORT||8080;
 const ROOT=path.join(__dirname,'public');
-const DATA_DIR=path.join(__dirname,'data');
+const DATA_DIR=path.resolve(process.env.DATA_DIR||path.join(__dirname,'data'));
 const STATE_FILE=path.join(DATA_DIR,'state.json');
 const HISTORY_DIR=path.join(DATA_DIR,'history');
 
