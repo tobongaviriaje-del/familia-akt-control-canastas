@@ -144,6 +144,22 @@ test('state API requires a session and never returns passwords', async (t) => {
   assert.equal(logout.status, 200);
   const afterLogout = await fetch(`${base}/api/state`, { headers: { Cookie: cookie } });
   assert.equal(afterLogout.status, 401);
+
+  const patinadorLogin = await fetch(`${base}/api/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'hamilton', password: 'Hamilton123!' })
+  });
+  assert.equal(patinadorLogin.status, 200);
+  const patinadorCookie = patinadorLogin.headers.get('set-cookie').split(';')[0];
+  const forbiddenSnapshot = await fetch(`${base}/api/state`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Cookie: patinadorCookie },
+    body: JSON.stringify({ tasks: [{ id: 'forged-task', cantidad: 999999 }] })
+  });
+  assert.equal(forbiddenSnapshot.status, 403);
+  const afterForbiddenSnapshot = await fetch(`${base}/api/state`, { headers: { Cookie: cookie } });
+  assert.equal(afterForbiddenSnapshot.status, 200);
+  assert.equal((await afterForbiddenSnapshot.json()).tasks.some(task => task.id === 'forged-task'), false);
 });
 
 
