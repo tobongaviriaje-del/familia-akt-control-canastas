@@ -34,33 +34,29 @@ const $=id=>document.getElementById(id);
 
 async function cloudLoad(){
   try{
+    const sessionResponse=await fetch('/api/session',{cache:'no-store'});
+    if(!sessionResponse.ok){cloudReady=false;return false;}
+    const session=await sessionResponse.json();
     const r=await fetch('/api/state',{cache:'no-store'});
-    if(!r.ok) throw new Error('No se pudo conectar con el servidor');
+    if(!r.ok)throw new Error('No se pudo conectar con el servidor');
     const s=await r.json();
-    users=s.users&&Object.keys(s.users).length?s.users:defaultUsers;
+    users=s.users&&Object.keys(s.users).length?s.users:{};
     cloudTasks=Array.isArray(s.tasks)?s.tasks:[];
     lpnCatalog=Array.isArray(s.lpnCatalog)?s.lpnCatalog:[];
     freeDeliveries=Array.isArray(s.freeDeliveries)?s.freeDeliveries:[];
     cloudReady=true;
-    localStorage.setItem('cc_users',JSON.stringify(users));
+    localStorage.removeItem('cc_users');
     localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
     localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));
     localStorage.setItem('cc_free_deliveries',JSON.stringify(freeDeliveries));
+    if(!current&&session.user)current={...session.user};
     render();
     return true;
-  }catch(e){
-    // Si hay datos locales dañados, no bloquear el botón de ingreso.
-    try{const su=localStorage.getItem('cc_users');users=su?JSON.parse(su):defaultUsers;if(!users||typeof users!=='object')users=defaultUsers;}catch(_){users=defaultUsers;}
-    try{const st=localStorage.getItem('cc_tasks');cloudTasks=st?JSON.parse(st):[];if(!Array.isArray(cloudTasks))cloudTasks=[];}catch(_){cloudTasks=[];}
-    try{const sl=localStorage.getItem('cc_lpn_catalog');lpnCatalog=sl?JSON.parse(sl):[];if(!Array.isArray(lpnCatalog))lpnCatalog=[];}catch(_){lpnCatalog=[];}
-    try{const sd=localStorage.getItem('cc_free_deliveries');freeDeliveries=sd?JSON.parse(sd):[];if(!Array.isArray(freeDeliveries))freeDeliveries=[];}catch(_){freeDeliveries=[];}
-    cloudReady=false;
-    return false;
-  }
+  }catch(e){cloudReady=false;return false;}
 }
 let cloudSaveQueue=Promise.resolve(true);
 function cloudSave(){
-  const snapshot=JSON.stringify({users,tasks:cloudTasks,lpnCatalog,freeDeliveries});
+  const snapshot=JSON.stringify({tasks:cloudTasks,lpnCatalog,freeDeliveries});
   cloudSaveQueue=cloudSaveQueue.catch(()=>false).then(async()=>{
     try{
       const r=await fetch('/api/state',{
@@ -79,7 +75,7 @@ function cloudSave(){
   return cloudSaveQueue;
 }
 function loadUsers(){return users;}
-function saveUsers(){localStorage.setItem('cc_users',JSON.stringify(users));cloudSave();}
+function saveUsers(){localStorage.removeItem('cc_users');}
 const getTasks=()=>cloudTasks;
 const saveTasks=t=>{cloudTasks=t;localStorage.setItem('cc_tasks',JSON.stringify(t));cloudSave();};
 function upsertLpnCatalog(item){
@@ -307,16 +303,12 @@ async function login(){
  if(err)err.textContent='';
  if(btn){btn.disabled=true;btn.textContent='Ingresando…';}
  try{
-  if(!cloudReady) await Promise.race([cloudLoad(),new Promise(resolve=>setTimeout(resolve,3500))]);
-  users=loadUsers();
-  if(!users||typeof users!=='object')users={...defaultUsers};
-  for(const k of ['juandavid','fredy']){if(defaultUsers[k])users[k]={...(users[k]||{}),...defaultUsers[k],pass:defaultUsers[k].pass,role:'Admin'};}
-  try{saveUsers();}catch(e){console.warn('No se pudieron guardar usuarios localmente',e);}
-  if(!users[u]&&defaultUsers[u]){users[u]={...defaultUsers[u]};try{saveUsers();}catch(e){}}
-  if(users[u]&&defaultUsers[u]&&p===defaultUsers[u].pass&&users[u].pass!==p){users[u]={...defaultUsers[u],...users[u],pass:p};try{saveUsers();}catch(e){}}
-  if(!users[u]||users[u].pass!==p){if(err)err.textContent='Usuario o contraseña incorrectos. Verifica los datos e inténtalo de nuevo.';return;}
-  if(['juanesteban','jorge','hamilton'].includes(u)){users[u]={...users[u],puestos:[...(defaultUsers[u].puestos||[])],areas:[...(defaultUsers[u].areas||[])]};try{saveUsers();}catch(e){}}
-  current={...users[u],username:u};
+  const response=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+  const result=await response.json().catch(()=>({}));
+  if(!response.ok||!result.user){if(err)err.textContent=result.error||'Usuario o contraseña incorrectos. Verifica los datos e inténtalo de nuevo.';return;}
+  current={...result.user};
+  const loaded=await cloudLoad();
+  if(!loaded){await fetch('/api/logout',{method:'POST'});current=null;if(err)err.textContent='No se pudieron cargar los datos del servidor. Inténtalo de nuevo.';return;}
   $('loginView').classList.add('hidden');$('appView').classList.remove('hidden');$('logout').classList.remove('hidden');
   $('welcome').textContent='Hola, '+(current.name||u);$('rolePill').textContent=current.role||'Usuario';
   const canManage=['Mesanín','Admin','Supervisor'].includes(current.role);
@@ -328,6 +320,7 @@ async function login(){
  }catch(e){console.error('Error al ingresar:',e);if(err)err.textContent='No se pudo completar el ingreso. Recarga la página e inténtalo otra vez.';}
  finally{if(btn){btn.disabled=false;btn.textContent='Ingresar';}}
 }
+
 function logout(){if(stream)stream.getTracks().forEach(t=>t.stop());current=null;$('appView').classList.add('hidden');$('loginView').classList.remove('hidden');$('logout').classList.add('hidden');}
 function fillPuestos(){let arr=[];for(let i=1;i<=33;i++)arr.push('PRE '+i);for(let i=1;i<=16;i++){arr.push('Derecho '+i);arr.push('Izquierdo '+i)}for(let i=1;i<=20;i++)arr.push('Final '+i);$('puesto').innerHTML=arr.map(x=>`<option>${x}</option>`).join('');}
 function crearTarea(){let qty=Number($('cantidad').value);if(!$('lpn').value||!$('ean').value||!$('producto').value||qty<1){$('taskMsg').textContent='Completa todos los campos';return}let t=getTasks();t.push({id:Date.now(),lpn:$('lpn').value.trim(),estiba:($('estiba').value.trim()||'Estiba 1'),ean:$('ean').value.trim(),producto:$('producto').value.trim(),cantidad:qty,area:$('area').value,puesto:$('puesto').value,turno:$('turno').value,estado:'Pendiente',creadoPor:current.name,fechaCreacion:new Date().toLocaleString('es-CO'),entrega:null});saveTasks(t);$('taskMsg').textContent='Tarea creada correctamente';render();}
