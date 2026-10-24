@@ -121,7 +121,7 @@ async function writeState(s){
  if(pool){const snapshot=JSON.parse(JSON.stringify(s));const serialized=JSON.stringify(snapshot);dbWriteQueue=dbWriteQueue.catch(()=>{}).then(()=>pool.query('INSERT INTO app_state (id, data, updated_at) VALUES (1, $1::jsonb, NOW()) ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, updated_at=NOW()',[serialized]));await dbWriteQueue;stateCache=snapshot;return;}
  ensureState();const tmp=STATE_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(s,null,2));fs.renameSync(tmp,STATE_FILE);
 }
-async function archiveTasks(tasks,meta={}){const archivedAt=new Date().toISOString();const payload={app:'Familia AKT Control de Canastas',fechaCierre:archivedAt,meta,tasks};const stamp=archivedAt.replace(/[:.]/g,'-');const fileName='jornada-'+stamp+'.json';
+async async function archiveTasks(tasks,meta={}){const archivedAt=new Date().toISOString();const payload={app:'Familia AKT Control de Canastas',fechaCierre:archivedAt,meta,tasks};const stamp=archivedAt.replace(/[:.]/g,'-');const fileName='jornada-'+stamp+'.json';
  if(pool){await pool.query('INSERT INTO jornada_history (file_name, archived_at, payload) VALUES ($1, $2, $3::jsonb)',[fileName,archivedAt,JSON.stringify(payload)]);return {file:fileName,count:tasks.length};}
  fs.mkdirSync(HISTORY_DIR,{recursive:true});const file=path.join(HISTORY_DIR,fileName);fs.writeFileSync(file,JSON.stringify(payload,null,2));return {file:path.basename(file),count:tasks.length};
 }
@@ -131,11 +131,7 @@ async function initPersistence(){
  await pool.query('CREATE TABLE IF NOT EXISTS jornada_history (id bigserial PRIMARY KEY, file_name text NOT NULL UNIQUE, archived_at timestamptz NOT NULL, payload jsonb NOT NULL)');
  const found=await pool.query('SELECT data FROM app_state WHERE id=1');
  if(found.rowCount){stateCache=found.rows[0].data;validateStateCache();return;}
- let initial;
- try{ensureState();initial=JSON.parse(fs.readFileSync(STATE_FILE,'utf8'));if(!initial||typeof initial!=='object'||Array.isArray(initial)||!initial.users||!Array.isArray(initial.tasks))throw new Error('estructura de estado inválida');if(!Array.isArray(initial.lpnCatalog))initial.lpnCatalog=[];if(!Array.isArray(initial.freeDeliveries))initial.freeDeliveries=[];}catch(e){throw new StateReadError('No se pudo inicializar Neon con el estado local: '+e.message);}
- await pool.query('INSERT INTO app_state (id,data,updated_at) VALUES (1,$1::jsonb,NOW())',[JSON.stringify(initial)]);
- if(fs.existsSync(HISTORY_DIR)){for(const name of fs.readdirSync(HISTORY_DIR).filter(n=>n.endsWith('.json'))){try{const full=path.join(HISTORY_DIR,name),payload=JSON.parse(fs.readFileSync(full,'utf8')),archivedAt=payload.fechaCierre||fs.statSync(full).mtime.toISOString();await pool.query('INSERT INTO jornada_history (file_name, archived_at, payload) VALUES ($1,$2,$3::jsonb) ON CONFLICT (file_name) DO NOTHING',[name,archivedAt,JSON.stringify(payload)]);}catch(e){console.error('No se pudo importar un archivo histórico a Neon:',name,e.message);}}}
- stateCache=initial;
+ throw new StateReadError('La base de datos Neon está vacía. Por seguridad, no se cargarán usuarios ni datos predeterminados automáticamente. Primero debe realizarse una migración verificada de los datos existentes.');
 }
 function validateStateCache(){const s=stateCache;if(!s||typeof s!=='object'||Array.isArray(s)||!s.users||typeof s.users!=='object'||Array.isArray(s.users)||!Array.isArray(s.tasks))throw new StateReadError('La fila app_state de Neon no tiene la estructura esperada');if(!Array.isArray(s.lpnCatalog))s.lpnCatalog=[];if(!Array.isArray(s.freeDeliveries))s.freeDeliveries=[];}
 const mime={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.json':'application/json; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.jpg':'image/jpeg'};
