@@ -225,7 +225,6 @@ if(path.extname(file)==='.html'){
 res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream'});res.end(output);});
 });
 ensureState();server.listen(PORT,()=>console.log('FAMILIA AKT funcionando en puerto '+PORT));
-)){user.pass=hashPassword(password);writeState(state);}
   const token=crypto.randomBytes(32).toString('base64url');
   sessions.set(token,{username,user:{...user},expires:Date.now()+SESSION_TTL_MS});
   clearLoginAttempts(req);
