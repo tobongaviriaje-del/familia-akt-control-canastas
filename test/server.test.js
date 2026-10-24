@@ -73,16 +73,23 @@ test('rejects malformed JSON and oversized request bodies', async (t) => {
   }
   assert.ok(ready, `server did not start: ${logs}`);
 
+  const authResponse = await fetch(`${base}/api/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password: 'admin' })
+  });
+  assert.equal(authResponse.status, 200);
+  const cookie = authResponse.headers.get('set-cookie').split(';')[0];
+
   const malformed = await fetch(`${base}/api/jornada/cerrar`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
     body: '{not-json'
   });
   assert.equal(malformed.status, 400);
 
   const oversized = await fetch(`${base}/api/state`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
     body: JSON.stringify({ tasks: [], padding: 'x'.repeat(1024 * 1024 + 10) })
   });
   assert.equal(oversized.status, 413);
