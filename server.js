@@ -90,22 +90,25 @@ jorge:{pass:'Jorge123!',role:'Patinador',name:'Jorge',areas:['PRE','Derecho','Iz
 };
 
 function sendJson(res,status,payload){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(payload));}
-function readBody(req,res,callback){let body='';let size=0;let finished=false;req.on('data',chunk=>{if(finished)return;size+=chunk.length;if(size>MAX_BODY_BYTES){finished=true;sendJson(res,413,{ok:false,error:'Solicitud demasiado grande'});req.resume();return;}body+=chunk.toString('utf8');});req.on('end',()=>{if(finished)return;try{callback(JSON.parse(body||'{}'));}catch{sendJson(res,400,{ok:false,error:'JSON inválido'});}});req.on('error',()=>{if(!finished)sendJson(res,400,{ok:false,error:'Solicitud incompleta'});});}
+function readBody(req,res,callback){let body='';let size=0;let finished=false;req.on('data',chunk=>{if(finished)return;size+=chunk.length;if(size>MAX_BODY_BYTES){finished=true;sendJson(res,413,{ok:false,error:'Solicitud demasiado grande'});req.resume();return;}body+=chunk.toString('utf8');});req.on('end',()=>{if(finished)return;try{callback(JSON.parse(body||'{}'));}catch(e){if(e instanceof StateReadError){console.error('Estado persistente ilegible:',e.message);sendJson(res,500,{ok:false,error:'No se pudo leer el estado guardado. No se modificaron los datos.'});return;}sendJson(res,400,{ok:false,error:'JSON inválido'});}});req.on('error',()=>{if(!finished)sendJson(res,400,{ok:false,error:'Solicitud incompleta'});});}
 
+class StateReadError extends Error{constructor(message){super(message);this.name='StateReadError';}}
 function ensureState(){
 fs.mkdirSync(DATA_DIR,{recursive:true});
-if(!fs.existsSync(STATE_FILE))fs.writeFileSync(STATE_FILE,JSON.stringify({users:defaultUsers,tasks:[]},null,2));
+if(!fs.existsSync(STATE_FILE))fs.writeFileSync(STATE_FILE,JSON.stringify({users:defaultUsers,tasks:[]},null,2),{flag:'wx'});
 }
 function readState(){
 ensureState();
-try{
-const s=JSON.parse(fs.readFileSync(STATE_FILE,'utf8'));
-if(!s.users)s.users=defaultUsers;
+let raw;
+try{raw=fs.readFileSync(STATE_FILE,'utf8');}catch(e){throw new StateReadError('No se pudo leer '+STATE_FILE+': '+e.message);}
+let s;
+try{s=JSON.parse(raw);}catch(e){throw new StateReadError('JSON inválido en '+STATE_FILE+': '+e.message);}
+if(!s||typeof s!=='object'||Array.isArray(s))throw new StateReadError('La raíz del estado guardado no es un objeto');
+if(!s.users||typeof s.users!=='object'||Array.isArray(s.users))s.users=defaultUsers;
 if(!Array.isArray(s.tasks))s.tasks=[];
 if(!Array.isArray(s.lpnCatalog))s.lpnCatalog=[];
 if(!Array.isArray(s.freeDeliveries))s.freeDeliveries=[];
 return s;
-}catch{return {users:defaultUsers,tasks:[],lpnCatalog:[],freeDeliveries:[]};}
 }
 function writeState(s){ensureState();const tmp=STATE_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(s,null,2));fs.renameSync(tmp,STATE_FILE);}
 function archiveTasks(tasks,meta={}){fs.mkdirSync(HISTORY_DIR,{recursive:true});const stamp=new Date().toISOString().replace(/[:.]/g,'-');const file=path.join(HISTORY_DIR,'jornada-'+stamp+'.json');fs.writeFileSync(file,JSON.stringify({app:'Familia AKT Control de Canastas',fechaCierre:new Date().toISOString(),meta,tasks},null,2));return {file:path.basename(file),count:tasks.length};}
