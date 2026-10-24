@@ -118,7 +118,7 @@ if(!Array.isArray(s.freeDeliveries))s.freeDeliveries=[];
 return s;
 }
 async function writeState(s){
- if(pool){const snapshot=JSON.parse(JSON.stringify(s));const serialized=JSON.stringify(snapshot);dbWriteQueue=dbWriteQueue.then(()=>pool.query('INSERT INTO app_state (id, data, updated_at) VALUES (1, $1::jsonb, NOW()) ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, updated_at=NOW()',[serialized]));await dbWriteQueue;stateCache=snapshot;return;}
+ if(pool){const snapshot=JSON.parse(JSON.stringify(s));const serialized=JSON.stringify(snapshot);dbWriteQueue=dbWriteQueue.catch(()=>{}).then(()=>pool.query('INSERT INTO app_state (id, data, updated_at) VALUES (1, $1::jsonb, NOW()) ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, updated_at=NOW()',[serialized]));await dbWriteQueue;stateCache=snapshot;return;}
  ensureState();const tmp=STATE_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(s,null,2));fs.renameSync(tmp,STATE_FILE);
 }
 async function archiveTasks(tasks,meta={}){const archivedAt=new Date().toISOString();const payload={app:'Familia AKT Control de Canastas',fechaCierre:archivedAt,meta,tasks};const stamp=archivedAt.replace(/[:.]/g,'-');const fileName='jornada-'+stamp+'.json';
@@ -183,7 +183,7 @@ if(p==='/api/state'&&req.method==='GET'){
 if(p==='/api/jornada/cerrar'&&req.method==='POST'){
 const session=requireAdmin(req,res);if(!session)return;
 if(!isSafeSameOrigin(req)){sendJson(res,403,{ok:false,error:'Origen no permitido'});return;}
-readBody(req,res,incoming=>{try{
+readBody(req,res,async incoming=>{try{
 const state=readState();
 if(!Array.isArray(state.tasks))state.tasks=[];
 if(incoming.confirmacion!=='CERRAR JORNADA'){res.writeHead(400,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify({ok:false,error:'Confirmación inválida'}));}
@@ -200,7 +200,7 @@ res.end(JSON.stringify({ok:true,archived:archived.file,count:archived.count,comp
 if(p==='/api/entrega'&&req.method==='POST'){
  const session=requireSession(req,res);if(!session)return;
  if(!isSafeSameOrigin(req)){sendJson(res,403,{ok:false,error:'Origen no permitido'});return;}
- readBody(req,res,incoming=>{try{
+ readBody(req,res,async incoming=>{try{
   if(session.user.role!=='Patinador'&&session.user.role!=='Admin'&&session.user.role!=='Mesanín'){sendJson(res,403,{ok:false,error:'Este rol no puede registrar entregas'});return;}
   const id=String(incoming.id??'');const qty=Number(incoming.cantidad);const obs=String(incoming.observaciones||'').slice(0,500);const canastasFisicas=Number(incoming.canastasFisicas)||0;
   if(!id||!Number.isSafeInteger(qty)||qty<1||!Number.isSafeInteger(canastasFisicas)||canastasFisicas<0){sendJson(res,400,{ok:false,error:'Tarea, cantidad o canastas inválidas'});return;}
@@ -244,7 +244,7 @@ if(p==='/api/users'&&req.method==='POST'){
  const session=requireSession(req,res);if(!session)return;
  if(session.user.role!=='Admin'){sendJson(res,403,{ok:false,error:'Solo Admin puede administrar usuarios'});return;}
  if(!isSafeSameOrigin(req)){sendJson(res,403,{ok:false,error:'Origen no permitido'});return;}
- readBody(req,res,incoming=>{try{
+ readBody(req,res,async incoming=>{try{
   const action=String(incoming.action||'');
   const username=String(incoming.username||'').trim().toLowerCase();
   if(!/^[a-z0-9._-]{3,40}$/.test(username)){sendJson(res,400,{ok:false,error:'Nombre de usuario inválido'});return;}
@@ -280,7 +280,7 @@ if(p==='/api/users'&&req.method==='POST'){
 if(p==='/api/tasks/sync'&&req.method==='PUT'){
  const session=requireSession(req,res);if(!session)return;
  if(!isSafeSameOrigin(req)){sendJson(res,403,{ok:false,error:'Origen no permitido'});return;}
- readBody(req,res,incoming=>{try{
+ readBody(req,res,async incoming=>{try{
   const role=session.user.role;
   if(!['Admin','Mesanín','Supervisor','Patinador'].includes(role)){sendJson(res,403,{ok:false,error:'Este rol no puede guardar tareas'});return;}
   if(!Array.isArray(incoming.tasks)){sendJson(res,400,{ok:false,error:'La lista de tareas no es válida'});return;}
@@ -336,7 +336,7 @@ if(p==='/api/tasks/sync'&&req.method==='PUT'){
 if(p==='/api/state'&&req.method==='PUT'){
  const session=requireSession(req,res);if(!session)return;
  if(!isSafeSameOrigin(req)){sendJson(res,403,{ok:false,error:'Origen no permitido'});return;}
- readBody(req,res,incoming=>{try{
+ readBody(req,res,async incoming=>{try{
   const current=readState();
   if(Object.prototype.hasOwnProperty.call(incoming,'users')){sendJson(res,403,{ok:false,error:'La gestión de usuarios requiere una operación administrativa dedicada'});return;}
   const keys=Object.keys(incoming);
