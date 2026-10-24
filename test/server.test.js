@@ -471,4 +471,18 @@ test('corrupt persisted state fails closed and is never replaced with empty defa
   assert.equal(fs.readFileSync(statePath, 'utf8'), corruptContents, 'corrupt file must remain untouched for recovery');
   const healthAfterFailure = await fetch(`${base}/health`);
   assert.equal(healthAfterFailure.status, 200, 'server should remain available after safe failure');
+
+  for (const invalidState of [
+    JSON.stringify({ users: { admin: { role: 'Admin' } } }),
+    JSON.stringify({ users: [], tasks: [] }),
+    JSON.stringify({ users: { admin: { role: 'Admin' } }, tasks: [], lpnCatalog: {} })
+  ]) {
+    fs.writeFileSync(statePath, invalidState, 'utf8');
+    const failedLogin = await fetch(`${base}/api/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'admin', password: 'admin' })
+    });
+    assert.equal(failedLogin.status, 500, 'structurally invalid state must fail closed');
+    assert.equal(fs.readFileSync(statePath, 'utf8'), invalidState, 'invalid but parseable state must remain untouched');
+  }
 });
