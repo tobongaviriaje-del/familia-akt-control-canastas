@@ -247,11 +247,19 @@ test('admin user API hashes passwords and blocks non-admin management', async (t
     body: JSON.stringify({ action: 'delete', username: 'nuevo.operador' })
   });
   assert.equal(deleted.status, 200);
+  const mesaninLogin = await fetch(`${base}/api/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'mesanin', password: 'mesanin123' })
+  });
+  assert.equal(mesaninLogin.status, 200);
+  const mesaninCookie = mesaninLogin.headers.get('set-cookie').split(';')[0];
   const removeDefault = await fetch(`${base}/api/users`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
     body: JSON.stringify({ action: 'delete', username: 'mesanin' })
   });
   assert.equal(removeDefault.status, 200);
+  const deletedSession = await fetch(`${base}/api/session`, { headers: { Cookie: mesaninCookie } });
+  assert.equal(deletedSession.status, 401);
   const stateAfterDelete = await fetch(`${base}/api/state`, { headers: { Cookie: cookie } });
   assert.equal(stateAfterDelete.status, 200);
   const stateAfterDeleteJson = await stateAfterDelete.json();
