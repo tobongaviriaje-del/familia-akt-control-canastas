@@ -433,3 +433,42 @@ test('patinador can change only standard metadata for assigned posts', async (t)
   assert.equal(stored.tasks[0].entregas.length, 1);
   assert.equal(stored.tasks[1].cantidadCanasta, 5);
 });
+
+
+test('corrupt persisted state fails closed and is never replaced with empty defaults', async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'familia-akt-corrupt-state-'));
+  const port = 41000 + (process.pid % 8000);
+  const child = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
+    env: { ...process.env, PORT: String(port), DATA_DIR: dataDir },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  let logs = '';
+  child.stdout.on('data', chunk => { logs += chunk.toString(); });
+  child.stderr.on('data', chunk => { logs += chunk.toString(); });
+  t.after(() => {
+    child.kill('SIGTERM');
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  });
+  const base = `http://127.0.0.1:${port}`;
+  let ready = false;
+  for (let i = 0; i < 50; i++) {
+    if (child.exitCode !== null) throw new Error(`server exited early: ${logs}`);
+    try { const r = await fetch(`${base}/health`); if (r.ok) { ready = true; break; } } catch {}
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.ok(ready, `server did not start: ${logs}`);
+  const statePath = path.join(dataDir, 'state.json');
+  const corruptContents = '{"tasks":[{"id":"do-not-overwrite","cantidad":27},';
+  fs.writeFileSync(statePath, corruptContents, 'utf8');
+  const login = await fetch(`${base}/api/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password: 'admin' })
+  });
+  assert.equal(login.status, 500);
+  const response = await login.json();
+  assert.equal(response.ok, false);
+  assert.match(response.error, /No se modificaron los datos/);
+  assert.equal(fs.readFileSync(statePath, 'utf8'), corruptContents, 'corrupt file must remain untouched for recovery');
+  const healthAfterFailure = await fetch(`${base}/health`);
+  assert.equal(healthAfterFailure.status, 200, 'server should remain available after safe failure');
+});
