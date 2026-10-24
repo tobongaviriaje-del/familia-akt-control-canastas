@@ -12,6 +12,12 @@ const production=process.env.NODE_ENV==='production';
 const crypto=require('crypto');
 const SESSION_COOKIE='familia_akt_session';
 const sessions=new Map();
+const loginAttempts=new Map();
+const LOGIN_WINDOW_MS=15*60*1000;
+const LOGIN_MAX_ATTEMPTS=8;
+function loginRateLimitKey(req){return String(req.socket.remoteAddress||'unknown').replace(/^::ffff:/,'');}
+function checkLoginLimit(req){const key=loginRateLimitKey(req),now=Date.now();let item=loginAttempts.get(key);if(!item||now-item.start>LOGIN_WINDOW_MS){item={start:now,count:0};loginAttempts.set(key,item);}if(item.count>=LOGIN_MAX_ATTEMPTS)return Math.max(1,Math.ceil((LOGIN_WINDOW_MS-(now-item.start))/1000));item.count++;return 0;}
+function clearLoginAttempts(req){loginAttempts.delete(loginRateLimitKey(req));}
 const SESSION_TTL_MS=8*60*60*1000;
 function safeUser(username,user){
   const {pass,password,...rest}=user||{};
@@ -94,6 +100,7 @@ if(req.method==='OPTIONS'){res.writeHead(405);return res.end();}
 if(p==='/health'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify({ok:true,service:'familia-akt-control-canastas'}));}
 if(p==='/api/login'&&req.method==='POST'){
  if(!isSafeSameOrigin(req)){sendJson(res,403,{ok:false,error:'Origen no permitido'});return;}
+ const retryAfter=checkLoginLimit(req);if(retryAfter){res.setHeader('Retry-After',String(retryAfter));sendJson(res,429,{ok:false,error:'Demasiados intentos. Espera antes de volver a intentar.'});return;}
  readBody(req,res,incoming=>{
   const username=String(incoming.username||'').trim().toLowerCase();
   const password=String(incoming.password||'');
@@ -104,6 +111,7 @@ if(p==='/api/login'&&req.method==='POST'){
   }
   const token=crypto.randomBytes(32).toString('base64url');
   sessions.set(token,{username,user:{...user},expires:Date.now()+SESSION_TTL_MS});
+  clearLoginAttempts(req);
   setSessionCookie(res,token);
   sendJson(res,200,{ok:true,user:safeUser(username,user)});
  });return;
