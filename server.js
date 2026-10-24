@@ -10,6 +10,10 @@ const HISTORY_DIR=path.join(DATA_DIR,'history');
 const MAX_BODY_BYTES=1024*1024;
 const production=process.env.NODE_ENV==='production';
 const crypto=require('crypto');
+const {Pool}=require('pg');
+const pool=process.env.DATABASE_URL?new Pool({connectionString:process.env.DATABASE_URL,ssl:{rejectUnauthorized:false},max:5,idleTimeoutMillis:30000,connectionTimeoutMillis:10000}):null;
+let stateCache=null;
+let dbWriteQueue=Promise.resolve();
 const SESSION_COOKIE='familia_akt_session';
 const sessions=new Map();
 const loginAttempts=new Map();
@@ -98,6 +102,7 @@ fs.mkdirSync(DATA_DIR,{recursive:true});
 if(!fs.existsSync(STATE_FILE))fs.writeFileSync(STATE_FILE,JSON.stringify({users:defaultUsers,tasks:[]},null,2),{flag:'wx'});
 }
 function readState(){
+if(pool){if(!stateCache)throw new StateReadError('La base de datos aún no está inicializada');return JSON.parse(JSON.stringify(stateCache));}
 ensureState();
 let raw;
 try{raw=fs.readFileSync(STATE_FILE,'utf8');}catch(e){throw new StateReadError('No se pudo leer '+STATE_FILE+': '+e.message);}
@@ -112,8 +117,26 @@ if(!Array.isArray(s.lpnCatalog))s.lpnCatalog=[];
 if(!Array.isArray(s.freeDeliveries))s.freeDeliveries=[];
 return s;
 }
-function writeState(s){ensureState();const tmp=STATE_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(s,null,2));fs.renameSync(tmp,STATE_FILE);}
-function archiveTasks(tasks,meta={}){fs.mkdirSync(HISTORY_DIR,{recursive:true});const stamp=new Date().toISOString().replace(/[:.]/g,'-');const file=path.join(HISTORY_DIR,'jornada-'+stamp+'.json');fs.writeFileSync(file,JSON.stringify({app:'Familia AKT Control de Canastas',fechaCierre:new Date().toISOString(),meta,tasks},null,2));return {file:path.basename(file),count:tasks.length};}
+async function writeState(s){
+ if(pool){const snapshot=JSON.parse(JSON.stringify(s));const serialized=JSON.stringify(snapshot);dbWriteQueue=dbWriteQueue.then(()=>pool.query('INSERT INTO app_state (id, data, updated_at) VALUES (1, $1::jsonb, NOW()) ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data, updated_at=NOW()',[serialized]));await dbWriteQueue;stateCache=snapshot;return;}
+ ensureState();const tmp=STATE_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(s,null,2));fs.renameSync(tmp,STATE_FILE);
+}
+async function archiveTasks(tasks,meta={}){const archivedAt=new Date().toISOString();const payload={app:'Familia AKT Control de Canastas',fechaCierre:archivedAt,meta,tasks};const stamp=archivedAt.replace(/[:.]/g,'-');const fileName='jornada-'+stamp+'.json';
+ if(pool){await pool.query('INSERT INTO jornada_history (file_name, archived_at, payload) VALUES ($1, $2, $3::jsonb)',[fileName,archivedAt,JSON.stringify(payload)]);return {file:fileName,count:tasks.length};}
+ fs.mkdirSync(HISTORY_DIR,{recursive:true});const file=path.join(HISTORY_DIR,fileName);fs.writeFileSync(file,JSON.stringify(payload,null,2));return {file:path.basename(file),count:tasks.length};
+}
+async function initPersistence(){
+ if(!pool){ensureState();stateCache=null;return;}
+ await pool.query('CREATE TABLE IF NOT EXISTS app_state (id integer PRIMARY KEY CHECK (id = 1), data jsonb NOT NULL, updated_at timestamptz NOT NULL DEFAULT NOW())');
+ await pool.query('CREATE TABLE IF NOT EXISTS jornada_history (id bigserial PRIMARY KEY, file_name text NOT NULL UNIQUE, archived_at timestamptz NOT NULL, payload jsonb NOT NULL)');
+ const found=await pool.query('SELECT data FROM app_state WHERE id=1');
+ if(found.rowCount){stateCache=found.rows[0].data;validateStateCache();return;}
+ let initial;
+ try{initial=readState();}catch(e){throw new StateReadError('No se pudo inicializar Neon con el estado local: '+e.message);}
+ await pool.query('INSERT INTO app_state (id,data,updated_at) VALUES (1,$1::jsonb,NOW())',[JSON.stringify(initial)]);
+ stateCache=initial;
+}
+function validateStateCache(){const s=stateCache;if(!s||typeof s!=='object'||Array.isArray(s)||!s.users||typeof s.users!=='object'||Array.isArray(s.users)||!Array.isArray(s.tasks))throw new StateReadError('La fila app_state de Neon no tiene la estructura esperada');if(!Array.isArray(s.lpnCatalog))s.lpnCatalog=[];if(!Array.isArray(s.freeDeliveries))s.freeDeliveries=[];}
 const mime={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.json':'application/json; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.jpg':'image/jpeg'};
 const server=http.createServer((req,res)=>{
 try{
