@@ -56,7 +56,13 @@ async function cloudLoad(){
 }
 let cloudSaveQueue=Promise.resolve(true);
 function cloudSave(){
-  const snapshot=JSON.stringify({tasks:cloudTasks,lpnCatalog,freeDeliveries});
+  // Enviar únicamente los campos que el rol puede modificar; nunca reenviar
+  // la lista completa de tareas desde sesiones no administrativas.
+  let payload;
+  if(current?.role==='Admin')payload={tasks:cloudTasks,lpnCatalog,freeDeliveries};
+  else if(current?.role==='Mesanín')payload={freeDeliveries};
+  else return Promise.resolve(false);
+  const snapshot=JSON.stringify(payload);
   cloudSaveQueue=cloudSaveQueue.catch(()=>false).then(async()=>{
     try{
       const r=await fetch('/api/state',{
@@ -588,9 +594,9 @@ function prepararEstandarNKD(input){
    const old=getTasks().filter(x=>!(x.standardNKD&&modeloDeTareaEstandar(x)===modelo));
    const tasks=[...old,...parsed];
    cloudTasks=tasks;localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
-   fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({users,tasks:cloudTasks,lpnCatalog})})
+   fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({tasks:cloudTasks,lpnCatalog})})
     .then(r=>{if(!r.ok)throw new Error('No se pudo guardar');return r.json();})
-    .then(state=>{users=state.users||users;cloudTasks=Array.isArray(state.tasks)?state.tasks:tasks;lpnCatalog=Array.isArray(state.lpnCatalog)?state.lpnCatalog:lpnCatalog;cloudReady=true;localStorage.setItem('cc_users',JSON.stringify(users));localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));msg.className='pill';msg.textContent='✅ Estándar '+modelo+' guardado permanentemente: '+parsed.length+' referencias en '+matchedSheets+' hojas. Los otros modelos no se modificaron.';render();})
+    .then(state=>{cloudTasks=Array.isArray(state.tasks)?state.tasks:tasks;lpnCatalog=Array.isArray(state.lpnCatalog)?state.lpnCatalog:lpnCatalog;cloudReady=true;localStorage.removeItem('cc_users');localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));msg.className='pill';msg.textContent='✅ Estándar '+modelo+' guardado permanentemente: '+parsed.length+' referencias en '+matchedSheets+' hojas. Los otros modelos no se modificaron.';render();})
     .catch(()=>{msg.className='error';msg.textContent='No se pudo confirmar el guardado en la nube. Revisa la conexión antes de cerrar esta pantalla.';});
   }catch(err){msg.className='error';msg.textContent='No se pudo leer el Excel. No se cambió el estándar guardado.';}
  };
