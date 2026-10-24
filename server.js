@@ -52,6 +52,9 @@ function sessionUser(req){
   const item=token&&sessions.get(token);
   if(!item)return null;
   if(item.expires<Date.now()){sessions.delete(token);return null;}
+  const currentUser=readState().users?.[item.username];
+  if(!currentUser){sessions.delete(token);return null;}
+  item.user={...currentUser};
   item.expires=Date.now()+SESSION_TTL_MS;
   return {username:item.username,user:item.user,token};
 }
@@ -157,7 +160,7 @@ if(!Array.isArray(state.tasks))state.tasks=[];
 if(incoming.confirmacion!=='CERRAR JORNADA'){res.writeHead(400,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify({ok:false,error:'Confirmación inválida'}));}
 if(!state.tasks.length){res.writeHead(409,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify({ok:false,error:'No hay tareas activas para archivar'}));}
 const snapshot=state.tasks.map(t=>({...t}));
-const archived=archiveTasks(snapshot,{usuario:String(incoming.usuario||'Admin'),motivo:'Cierre de jornada',regla:'Se archivan todas las tareas; las completadas salen de la lista activa y las pendientes/parciales conservan su avance para el siguiente turno.'});
+const archived=archiveTasks(snapshot,{usuario:String(session.user.name||session.username),motivo:'Cierre de jornada',regla:'Se archivan todas las tareas; las completadas salen de la lista activa y las pendientes/parciales conservan su avance para el siguiente turno.'});
 const isComplete=t=>{const total=Number(t.cantidad)||0;const delivered=Number(t.entregado)||0;return total>0&&delivered>=total;};
 state.tasks=state.tasks.filter(t=>!isComplete(t));
 writeState(state);
