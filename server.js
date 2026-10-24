@@ -66,7 +66,7 @@ fs.mkdirSync(HISTORY_DIR,{recursive:true});
 const closedAt=new Date().toISOString();
 const fileName='jornada-'+closedAt.replace(/[:.]/g,'-')+'.json';
 const payload={app:'Familia AKT Control de Canastas',fechaCierre:closedAt,meta,tasks};
-if(pool)await pool.query('INSERT INTO jornada_history(file_name,archived_at,payload) VALUES ($1,$2,$3::jsonb) ON CONFLICT (file_name) DO NOTHING',[fileName,closedAt,JSON.stringify(payload)]);
+if(pool)await pool.query('INSERT INTO jornada_history(id,file_name,archived_at,payload) SELECT COALESCE(MAX(id),0)+1,$1,$2,$3::jsonb FROM jornada_history ON CONFLICT (file_name) DO NOTHING',[fileName,closedAt,JSON.stringify(payload)]);
 fs.writeFileSync(path.join(HISTORY_DIR,fileName),JSON.stringify(payload,null,2));
 return {file:fileName,count:tasks.length};
 }
