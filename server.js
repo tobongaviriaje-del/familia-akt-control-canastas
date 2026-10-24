@@ -332,7 +332,8 @@ if(p==='/api/tasks/sync'&&req.method==='PUT'){
     }
     const old=merged[idx];
     if(role==='Patinador'){
-     if(!old.standardNKD||!Array.isArray(session.user.puestos)||!session.user.puestos.includes(old.puesto)||String(candidate.puesto)!==String(old.puesto)){sendJson(res,403,{ok:false,error:'Solo puedes editar el estándar asignado a tu puesto'});return;}
+     const assigned=old.standardNKD&&Array.isArray(session.user.puestos)&&session.user.puestos.includes(old.puesto)&&String(candidate.puesto)===String(old.puesto);
+     if(!assigned){if(JSON.stringify(candidate)!==JSON.stringify(old)){sendJson(res,403,{ok:false,error:'Solo puedes editar el estándar asignado a tu puesto'});return;}continue;}
      for(const key of Object.keys(candidate)){if(key==='id')continue;if(allowedPatinador.has(key))old[key]=candidate[key];}
     }else{
      const updated={...old,...candidate};
