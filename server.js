@@ -189,7 +189,7 @@ const snapshot=state.tasks.map(t=>({...t}));
 const archived=await archiveTasks(snapshot,{usuario:String(session.user.name||session.username),motivo:'Cierre de jornada',regla:'Se archivan todas las tareas; las completadas salen de la lista activa y las pendientes/parciales conservan su avance para el siguiente turno.'});
 const isComplete=t=>{const total=Number(t.cantidad)||0;const delivered=Number(t.entregado)||0;return total>0&&delivered>=total;};
 state.tasks=state.tasks.filter(t=>!isComplete(t));
-writeState(state);
+await writeState(state);
 res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});
 res.end(JSON.stringify({ok:true,archived:archived.file,count:archived.count,completedRemoved:snapshot.filter(isComplete).length,remainingCount:state.tasks.length,tasks:state.tasks}));
 }catch(e){console.error('Error cerrando jornada:',e);sendJson(res,500,{ok:false,error:'No se pudo cerrar la jornada'});}});return;
@@ -233,7 +233,7 @@ if(p==='/api/entrega'&&req.method==='POST'){
    task.confirmacionesCanastas.push({patinador:entry.patinador,cantidad:canastasFisicas,unidades:qty,fechaHora:entry.fechaHora,turno:String(session.user.turno||''),observaciones:'Canastas físicas registradas y descontadas del lote.'});
   }
   task.entregas.push(entry);task.entrega=entry;
-  writeState(state);sendJson(res,200,{ok:true,task});
+  await writeState(state);sendJson(res,200,{ok:true,task});
  }catch(e){console.error('Error registrando entrega:',e);sendJson(res,500,{ok:false,error:'No se pudo registrar la entrega'});}});
  return;
 }
@@ -268,7 +268,7 @@ if(p==='/api/users'&&req.method==='POST'){
    delete state.users[username];
    for(const [token,item] of sessions){if(item.username===username)sessions.delete(token);}
   }else{sendJson(res,400,{ok:false,error:'Operación de usuario inválida'});return;}
-  writeState(state);
+  await writeState(state);
   const safeUsers={};for(const [key,value] of Object.entries(state.users))safeUsers[key]=safeUser(key,value);
   sendJson(res,200,{ok:true,users:safeUsers});
  }catch(e){console.error('Error administrando usuario:',e);sendJson(res,400,{ok:false,error:'No se pudo guardar el usuario'});}});
@@ -325,7 +325,7 @@ if(p==='/api/tasks/sync'&&req.method==='PUT'){
    if(!Array.isArray(incoming.freeDeliveries)){sendJson(res,400,{ok:false,error:'Las entregas libres no son válidas'});return;}
    state.freeDeliveries=incoming.freeDeliveries;
   }
-  writeState(state);
+  await writeState(state);
   sendJson(res,200,{ok:true,tasks:state.tasks,lpnCatalog:state.lpnCatalog||[],freeDeliveries:state.freeDeliveries||[]});
  }catch(e){console.error('Error guardando tareas:',e);sendJson(res,400,{ok:false,error:'No se pudieron guardar las tareas'});}});
  return;
@@ -349,7 +349,7 @@ if(p==='/api/state'&&req.method==='PUT'){
   if(Array.isArray(incoming.tasks))state.tasks=incoming.tasks;
   if(Array.isArray(incoming.lpnCatalog))state.lpnCatalog=incoming.lpnCatalog;
   if(Array.isArray(incoming.freeDeliveries))state.freeDeliveries=incoming.freeDeliveries;
-  writeState(state);
+  await writeState(state);
   const safeUsers={};for(const [name,user] of Object.entries(state.users||{}))safeUsers[name]=safeUser(name,user);
   sendJson(res,200,{...state,users:safeUsers});
  }catch{sendJson(res,400,{ok:false,error:'No se pudo guardar el estado'});}});
