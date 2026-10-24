@@ -247,6 +247,15 @@ test('admin user API hashes passwords and blocks non-admin management', async (t
     body: JSON.stringify({ action: 'delete', username: 'nuevo.operador' })
   });
   assert.equal(deleted.status, 200);
+  const removeDefault = await fetch(`${base}/api/users`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify({ action: 'delete', username: 'mesanin' })
+  });
+  assert.equal(removeDefault.status, 200);
+  const stateAfterDelete = await fetch(`${base}/api/state`, { headers: { Cookie: cookie } });
+  assert.equal(stateAfterDelete.status, 200);
+  const stateAfterDeleteJson = await stateAfterDelete.json();
+  assert.equal(Object.hasOwn(stateAfterDeleteJson.users, 'mesanin'), false);
   const userLogin = await fetch(`${base}/api/login`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username: 'hamilton', password: 'Hamilton123!' })
