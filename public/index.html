@@ -537,8 +537,7 @@ async function crearReferenciaManualEstandar(){
  if(!Number.isInteger(lote)||lote<1||!Number.isInteger(cap)||cap<1||!Number.isInteger(canastas)||canastas<1){alert('El lote, las piezas por canasta y la cantidad de canastas deben ser números enteros mayores que cero.');return;}
  const tasks=getTasks(),baseId='manual-'+modelo.replace(/[^a-z0-9]/gi,'').toLowerCase()+'-'+Date.now(),total=cap*canastas;
  puestos.forEach((puesto,i)=>{const area=/^PRE /i.test(puesto)?'PRE':/^Derecho /i.test(puesto)?'Derecho':/^Izquierdo /i.test(puesto)?'Izquierdo':'Final de línea',id=baseId+'-'+i;tasks.push({id,lpn:'MANUAL-'+modelo.replace(/\s+/g,'-'),estiba:'Provisional',ean,producto,cantidad:total,cantidadUnidad:cap,cantidadCanasta:cap,cantidadCanastaRaw:String(cap),lote:total,lotePiezas:lote,numCanastas:canastas,numCanastasRaw:String(canastas),canasta:'Manual',area,puesto,turno:'Todos',estado:'Pendiente',entregado:0,entregas:[],standardNKD:true,standardMoto:modelo,standardManual:true,creadoPor:current.name||'Administrador',fechaCreacion:new Date().toLocaleString('es-CO')});});
- saveTasks(tasks);
- try{const ok=await cloudSave();if(!ok)throw new Error('cloud save failed');render();msg.className='pill';msg.textContent='Referencia provisional guardada para '+modelo+' en '+puestos.length+' puesto(s). Total por puesto: '+total+' piezas ('+cap+' x '+canastas+').';$('manualStdProducto').value='';$('manualStdEan').value='';}
+ try{const ok=await saveTasks(tasks);if(!ok)throw new Error('cloud save failed');render();msg.className='pill';msg.textContent='Referencia provisional guardada para '+modelo+' en '+puestos.length+' puesto(s). Total por puesto: '+total+' piezas ('+cap+' x '+canastas+').';$('manualStdProducto').value='';$('manualStdEan').value='';}
  catch(e){msg.className='error';msg.textContent='Se creó en este dispositivo, pero no se confirmó el guardado compartido. Verifica antes de crearla otra vez.';}
 }
 
@@ -611,8 +610,7 @@ async function aplicarLotesBaseMotos(){
  if(!confirm('Se establecerá el lote inicial de cada referencia cargada según su modelo: CR4 150 = 110, CR4 125 = 270, VOGE/VOGI 180 = 62 y CH = 300 unidades. Se conservarán las entregas ya registradas y el saldo se recalculará. ¿Continuar?'))return;
  const tasks=getTasks();let actualizadas=0;
  tasks.forEach(x=>{if(!x.standardNKD)return;const lote=loteInicialPorModelo(modeloDeTareaEstandar(x));if(lote<=0)return;x.lote=lote;x.lotePiezas=lote;x.cantidad=lote;const capacidad=Number(String(x.cantidadCanasta??'').replace(',','.'))||0;if(capacidad>0){x.numCanastas=Math.ceil(lote/capacidad);x.numCanastasRaw=String(x.numCanastas);}actualizadas++;});
- saveTasks(tasks);
- try{const ok=await cloudSave();if(!ok)throw new Error('No se confirmó el guardado en la nube.');render();const msg=$('estandarNKDMsg');if(msg)msg.textContent='✅ Lotes iniciales aplicados a '+actualizadas+' referencias. Se conservaron las unidades ya entregadas.';alert('Listo: lotes iniciales aplicados a '+actualizadas+' referencias.');}
+ try{const ok=await saveTasks(tasks);if(!ok)throw new Error('No se confirmó el guardado en la nube.');render();const msg=$('estandarNKDMsg');if(msg)msg.textContent='✅ Lotes iniciales aplicados a '+actualizadas+' referencias. Se conservaron las unidades ya entregadas.';alert('Listo: lotes iniciales aplicados a '+actualizadas+' referencias.');}
  catch(e){alert('Los cambios no se pudieron confirmar en la nube. No cierres sesión; revisa la conexión y vuelve a intentar.');}
 }
 
@@ -647,8 +645,7 @@ async function guardarLoteEstandar(id){
  const tasks=getTasks(),target=tasks.find(a=>String(a.id)===String(id));
  target.lote=total;target.lotePiezas=total;target.cantidad=total;
  if(target.standardManual&&Number(target.cantidadCanasta)>0)target.numCanastas=Math.ceil(total/Number(target.cantidadCanasta));
- saveTasks(tasks);
- const ok=await cloudSave();
+ const ok=await saveTasks(tasks);
  if(!ok){alert('No se confirmó el guardado del lote en el servidor. Revisa la conexión antes de repetir el cambio.');return;}
  render();const msg=$('estandarNKDMsg');if(msg)msg.textContent='✅ Lote guardado para '+target.producto+': '+total+' piezas iniciales. Las entregas se descuentan de ese total.';
 }
