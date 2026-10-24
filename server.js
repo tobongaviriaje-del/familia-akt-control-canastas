@@ -114,6 +114,7 @@ function writeState(s){ensureState();const tmp=STATE_FILE+'.tmp';fs.writeFileSyn
 function archiveTasks(tasks,meta={}){fs.mkdirSync(HISTORY_DIR,{recursive:true});const stamp=new Date().toISOString().replace(/[:.]/g,'-');const file=path.join(HISTORY_DIR,'jornada-'+stamp+'.json');fs.writeFileSync(file,JSON.stringify({app:'Familia AKT Control de Canastas',fechaCierre:new Date().toISOString(),meta,tasks},null,2));return {file:path.basename(file),count:tasks.length};}
 const mime={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.json':'application/json; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.jpg':'image/jpeg'};
 const server=http.createServer((req,res)=>{
+try{
 let url,p;
 try{url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);p=decodeURIComponent(url.pathname);}catch{return sendJson(res,400,{error:'Solicitud inválida'});}
 res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('X-Frame-Options','DENY');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('Permissions-Policy','camera=(), microphone=(), geolocation=()');res.setHeader('Cache-Control','no-store');res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");if(production)res.setHeader('Strict-Transport-Security','max-age=31536000; includeSubDomains');
@@ -394,5 +395,6 @@ if(path.extname(file)==='.html'){
   output=Buffer.from(data.toString('utf8').replace('</body>','<style>.estiba-destacada{background:#fff7ed;border:3px solid #f97316;color:#9a3412;border-radius:14px;padding:16px;margin:12px 0;font-size:24px;text-align:center}</style><script src="/patinador-estiba.js?v=43"></script><script src="/profesional.js?v=3"></script></body>'),'utf8');
 }
 res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream'});res.end(output);});
+}catch(e){console.error('Error procesando solicitud:',e);if(!res.headersSent)sendJson(res,e instanceof StateReadError?500:500,{ok:false,error:e instanceof StateReadError?'No se pudo leer el estado guardado. No se modificaron los datos.':'Error interno del servidor'});else if(!res.writableEnded)res.end();}
 });
 ensureState();server.listen(PORT,()=>console.log('FAMILIA AKT funcionando en puerto '+PORT));
