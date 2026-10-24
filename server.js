@@ -7,6 +7,8 @@ const ROOT=path.join(__dirname,'public');
 const DATA_DIR=path.resolve(process.env.DATA_DIR||path.join(__dirname,'data'));
 const STATE_FILE=path.join(DATA_DIR,'state.json');
 const HISTORY_DIR=path.join(DATA_DIR,'history');
+const MAX_BODY_BYTES=1024*1024;
+const production=process.env.NODE_ENV==='production';
 
 const defaultUsers={
 admin:{pass:'admin',role:'Admin',name:'Administrador'},
@@ -15,6 +17,9 @@ hamilton:{pass:'Hamilton123!',role:'Patinador',name:'Hamilton',areas:['PRE','Izq
 juanesteban:{pass:'Juan123!',role:'Patinador',name:'Juan Esteban',areas:['PRE','Derecho'],puestos:[]},
 jorge:{pass:'Jorge123!',role:'Patinador',name:'Jorge',areas:['PRE','Derecho','Izquierdo','Final de línea'],puestos:[]}
 };
+
+function sendJson(res,status,payload){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(payload));}
+function readBody(req,res,callback){let body='';let size=0;let finished=false;req.on('data',chunk=>{if(finished)return;size+=chunk.length;if(size>MAX_BODY_BYTES){finished=true;sendJson(res,413,{ok:false,error:'Solicitud demasiado grande'});req.destroy();return;}body+=chunk.toString('utf8');});req.on('end',()=>{if(finished)return;try{callback(JSON.parse(body||'{}'));}catch{sendJson(res,400,{ok:false,error:'JSON inválido'});}});req.on('error',()=>{if(!finished)sendJson(res,400,{ok:false,error:'Solicitud incompleta'});});}
 
 function ensureState(){
 fs.mkdirSync(DATA_DIR,{recursive:true});
@@ -36,14 +41,15 @@ function writeState(s){ensureState();const tmp=STATE_FILE+'.tmp';fs.writeFileSyn
 function archiveTasks(tasks,meta={}){fs.mkdirSync(HISTORY_DIR,{recursive:true});const stamp=new Date().toISOString().replace(/[:.]/g,'-');const file=path.join(HISTORY_DIR,'jornada-'+stamp+'.json');fs.writeFileSync(file,JSON.stringify({app:'Familia AKT Control de Canastas',fechaCierre:new Date().toISOString(),meta,tasks},null,2));return {file:path.basename(file),count:tasks.length};}
 const mime={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.json':'application/json; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.jpg':'image/jpeg'};
 const server=http.createServer((req,res)=>{
-const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);const p=decodeURIComponent(url.pathname);
-res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Permissions-Policy','camera=(self), microphone=(self)');res.setHeader('Cache-Control','no-store');
-if(req.method==='OPTIONS'){res.setHeader('Access-Control-Allow-Methods','GET,PUT,POST,OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type');return res.end();}
+let url,p;
+try{url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);p=decodeURIComponent(url.pathname);}catch{return sendJson(res,400,{error:'Solicitud inválida'});}
+res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('X-Frame-Options','DENY');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('Permissions-Policy','camera=(), microphone=(), geolocation=()');res.setHeader('Cache-Control','no-store');res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");if(production)res.setHeader('Strict-Transport-Security','max-age=31536000; includeSubDomains');
+if(req.method==='OPTIONS'){res.writeHead(405);return res.end();}
 if(p==='/health'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify({ok:true,service:'familia-akt-control-canastas'}));}
 if(p==='/api/state'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify(readState()));}
 if(p==='/api/jornada/cerrar'&&req.method==='POST'){
-let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{
-const incoming=JSON.parse(body||'{}');const state=readState();
+readBody(req,res,incoming=>{try{
+const state=readState();
 if(!Array.isArray(state.tasks))state.tasks=[];
 if(incoming.confirmacion!=='CERRAR JORNADA'){res.writeHead(400,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify({ok:false,error:'Confirmación inválida'}));}
 if(!state.tasks.length){res.writeHead(409,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify({ok:false,error:'No hay tareas activas para archivar'}));}
@@ -54,10 +60,10 @@ state.tasks=state.tasks.filter(t=>!isComplete(t));
 writeState(state);
 res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});
 res.end(JSON.stringify({ok:true,archived:archived.file,count:archived.count,completedRemoved:snapshot.filter(isComplete).length,remainingCount:state.tasks.length,tasks:state.tasks}));
-}catch(e){console.error('Error cerrando jornada:',e);res.writeHead(500,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify({ok:false,error:'No se pudo cerrar la jornada'}));}});return;
+}catch(e){console.error('Error cerrando jornada:',e);sendJson(res,500,{ok:false,error:'No se pudo cerrar la jornada'});}});return;
 }
 if(p==='/api/state'&&req.method==='PUT'){
-let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{const incoming=JSON.parse(body||'{}');const current=readState();const state={...current,users:incoming.users||current.users,tasks:Array.isArray(incoming.tasks)?incoming.tasks:current.tasks,lpnCatalog:Array.isArray(incoming.lpnCatalog)?incoming.lpnCatalog:current.lpnCatalog,freeDeliveries:Array.isArray(incoming.freeDeliveries)?incoming.freeDeliveries:(current.freeDeliveries||[])};writeState(state);res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(state));}catch{res.writeHead(400);res.end(JSON.stringify({error:'JSON invalido'}));}});return;
+readBody(req,res,incoming=>{try{const current=readState();const state={...current,users:incoming.users||current.users,tasks:Array.isArray(incoming.tasks)?incoming.tasks:current.tasks,lpnCatalog:Array.isArray(incoming.lpnCatalog)?incoming.lpnCatalog:current.lpnCatalog,freeDeliveries:Array.isArray(incoming.freeDeliveries)?incoming.freeDeliveries:(current.freeDeliveries||[])};writeState(state);res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(state));}catch{sendJson(res,400,{error:'No se pudo guardar el estado'});}});return;
 }
 let filePath=p==='/'?'/index.html':p;const file=path.normalize(path.join(ROOT,filePath));
 if(!file.startsWith(ROOT)){res.writeHead(403);return res.end('Forbidden');}
