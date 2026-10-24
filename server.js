@@ -9,6 +9,52 @@ const STATE_FILE=path.join(DATA_DIR,'state.json');
 const HISTORY_DIR=path.join(DATA_DIR,'history');
 const MAX_BODY_BYTES=1024*1024;
 const production=process.env.NODE_ENV==='production';
+const crypto=require('crypto');
+const SESSION_COOKIE='familia_akt_session';
+const sessions=new Map();
+const SESSION_TTL_MS=8*60*60*1000;
+function safeUser(username,user){
+  const {pass,password,...rest}=user||{};
+  return {username,...rest};
+}
+function parseCookies(header=''){
+  const out={};
+  for(const part of header.split(';')){
+    const i=part.indexOf('=');
+    if(i>0)out[part.slice(0,i).trim()]=decodeURIComponent(part.slice(i+1).trim());
+  }
+  return out;
+}
+function sessionUser(req){
+  const token=parseCookies(req.headers.cookie||'')[SESSION_COOKIE];
+  const item=token&&sessions.get(token);
+  if(!item)return null;
+  if(item.expires<Date.now()){sessions.delete(token);return null;}
+  item.expires=Date.now()+SESSION_TTL_MS;
+  return {username:item.username,user:item.user,token};
+}
+function setSessionCookie(res,token,maxAge=SESSION_TTL_MS/1000){
+  const bits=[SESSION_COOKIE+'='+encodeURIComponent(token),'Path=/','HttpOnly','SameSite=Lax','Max-Age='+Math.floor(maxAge)];
+  if(production)bits.push('Secure');
+  res.setHeader('Set-Cookie',bits.join('; '));
+}
+function requireSession(req,res){
+  const session=sessionUser(req);
+  if(!session){sendJson(res,401,{ok:false,error:'Inicia sesión para continuar'});return null;}
+  return session;
+}
+function requireAdmin(req,res){
+  const session=requireSession(req,res);
+  if(!session)return null;
+  if(session.user.role!=='Admin'){sendJson(res,403,{ok:false,error:'Permiso insuficiente'});return null;}
+  return session;
+}
+function isSafeSameOrigin(req){
+  const origin=req.headers.origin;
+  if(!origin)return true;
+  try{return new URL(origin).host===String(req.headers.host||'');}catch{return false;}
+}
+
 
 const defaultUsers={
 admin:{pass:'admin',role:'Admin',name:'Administrador'},
@@ -46,8 +92,41 @@ try{url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);p=decode
 res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('X-Frame-Options','DENY');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('Permissions-Policy','camera=(), microphone=(), geolocation=()');res.setHeader('Cache-Control','no-store');res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");if(production)res.setHeader('Strict-Transport-Security','max-age=31536000; includeSubDomains');
 if(req.method==='OPTIONS'){res.writeHead(405);return res.end();}
 if(p==='/health'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify({ok:true,service:'familia-akt-control-canastas'}));}
-if(p==='/api/state'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify(readState()));}
+if(p==='/api/login'&&req.method==='POST'){
+ if(!isSafeSameOrigin(req)){sendJson(res,403,{ok:false,error:'Origen no permitido'});return;}
+ readBody(req,res,incoming=>{
+  const username=String(incoming.username||'').trim().toLowerCase();
+  const password=String(incoming.password||'');
+  const state=readState();
+  const user=state.users&&state.users[username];
+  if(!user||typeof user.pass!=='string'||!crypto.timingSafeEqual(Buffer.from(user.pass),Buffer.from(password.padEnd(user.pass.length,'\\0').slice(0,user.pass.length)))||password.length!==user.pass.length){
+    sendJson(res,401,{ok:false,error:'Usuario o contraseña incorrectos'});return;
+  }
+  const token=crypto.randomBytes(32).toString('base64url');
+  sessions.set(token,{username,user:{...user},expires:Date.now()+SESSION_TTL_MS});
+  setSessionCookie(res,token);
+  sendJson(res,200,{ok:true,user:safeUser(username,user)});
+ });return;
+}
+if(p==='/api/logout'&&req.method==='POST'){
+ const token=parseCookies(req.headers.cookie||'')[SESSION_COOKIE];
+ if(token)sessions.delete(token);
+ setSessionCookie(res,'',0);sendJson(res,200,{ok:true});return;
+}
+if(p==='/api/session'&&req.method==='GET'){
+ const session=sessionUser(req);
+ if(!session){sendJson(res,401,{ok:false,error:'Sesión no válida'});return;}
+ sendJson(res,200,{ok:true,user:safeUser(session.username,session.user)});return;
+}
+if(p==='/api/state'&&req.method==='GET'){
+ const session=requireSession(req,res);if(!session)return;
+ const state=readState();
+ const users={};for(const [name,user] of Object.entries(state.users||{}))users[name]=safeUser(name,user);
+ sendJson(res,200,{...state,users});return;
+}
 if(p==='/api/jornada/cerrar'&&req.method==='POST'){
+const session=requireAdmin(req,res);if(!session)return;
+if(!isSafeSameOrigin(req)){sendJson(res,403,{ok:false,error:'Origen no permitido'});return;}
 readBody(req,res,incoming=>{try{
 const state=readState();
 if(!Array.isArray(state.tasks))state.tasks=[];
@@ -63,7 +142,22 @@ res.end(JSON.stringify({ok:true,archived:archived.file,count:archived.count,comp
 }catch(e){console.error('Error cerrando jornada:',e);sendJson(res,500,{ok:false,error:'No se pudo cerrar la jornada'});}});return;
 }
 if(p==='/api/state'&&req.method==='PUT'){
-readBody(req,res,incoming=>{try{const current=readState();const state={...current,users:incoming.users||current.users,tasks:Array.isArray(incoming.tasks)?incoming.tasks:current.tasks,lpnCatalog:Array.isArray(incoming.lpnCatalog)?incoming.lpnCatalog:current.lpnCatalog,freeDeliveries:Array.isArray(incoming.freeDeliveries)?incoming.freeDeliveries:(current.freeDeliveries||[])};writeState(state);res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(state));}catch{sendJson(res,400,{error:'No se pudo guardar el estado'});}});return;
+ const session=requireSession(req,res);if(!session)return;
+ if(!isSafeSameOrigin(req)){sendJson(res,403,{ok:false,error:'Origen no permitido'});return;}
+ readBody(req,res,incoming=>{try{
+  const current=readState();
+  if(Object.prototype.hasOwnProperty.call(incoming,'users')){sendJson(res,403,{ok:false,error:'La gestión de usuarios requiere una operación administrativa dedicada'});return;}
+  if(!Array.isArray(incoming.tasks)&&!Array.isArray(incoming.lpnCatalog)&&!Array.isArray(incoming.freeDeliveries)){sendJson(res,400,{ok:false,error:'No hay cambios válidos'});return;}
+  const state={...current};
+  if(session.user.role!=='Admin'&&session.user.role!=='Mesanín'&&session.user.role!=='Supervisor'){sendJson(res,403,{ok:false,error:'Este rol no puede guardar el estado completo'});return;}
+  if(Array.isArray(incoming.tasks))state.tasks=incoming.tasks;
+  if(Array.isArray(incoming.lpnCatalog)){if(session.user.role!=='Admin'){sendJson(res,403,{ok:false,error:'Solo Admin puede cambiar el catálogo'});return;}state.lpnCatalog=incoming.lpnCatalog;}
+  if(Array.isArray(incoming.freeDeliveries))state.freeDeliveries=incoming.freeDeliveries;
+  writeState(state);
+  const safeUsers={};for(const [name,user] of Object.entries(state.users||{}))safeUsers[name]=safeUser(name,user);
+  sendJson(res,200,{...state,users:safeUsers});
+ }catch{sendJson(res,400,{ok:false,error:'No se pudo guardar el estado'});}});
+ return;
 }
 let filePath=p==='/'?'/index.html':p;const file=path.normalize(path.join(ROOT,filePath));
 if(!file.startsWith(ROOT)){res.writeHead(403);return res.end('Forbidden');}
