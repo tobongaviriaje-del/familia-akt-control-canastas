@@ -19,7 +19,7 @@ jorge:{pass:'Jorge123!',role:'Patinador',name:'Jorge',areas:['PRE','Derecho','Iz
 };
 
 function sendJson(res,status,payload){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(payload));}
-function readBody(req,res,callback){let body='';let size=0;let finished=false;req.on('data',chunk=>{if(finished)return;size+=chunk.length;if(size>MAX_BODY_BYTES){finished=true;sendJson(res,413,{ok:false,error:'Solicitud demasiado grande'});req.destroy();return;}body+=chunk.toString('utf8');});req.on('end',()=>{if(finished)return;try{callback(JSON.parse(body||'{}'));}catch{sendJson(res,400,{ok:false,error:'JSON inválido'});}});req.on('error',()=>{if(!finished)sendJson(res,400,{ok:false,error:'Solicitud incompleta'});});}
+function readBody(req,res,callback){let body='';let size=0;let finished=false;req.on('data',chunk=>{if(finished)return;size+=chunk.length;if(size>MAX_BODY_BYTES){finished=true;sendJson(res,413,{ok:false,error:'Solicitud demasiado grande'});req.resume();return;}body+=chunk.toString('utf8');});req.on('end',()=>{if(finished)return;try{callback(JSON.parse(body||'{}'));}catch{sendJson(res,400,{ok:false,error:'JSON inválido'});}});req.on('error',()=>{if(!finished)sendJson(res,400,{ok:false,error:'Solicitud incompleta'});});}
 
 function ensureState(){
 fs.mkdirSync(DATA_DIR,{recursive:true});
