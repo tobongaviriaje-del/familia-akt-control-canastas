@@ -93,10 +93,13 @@ async function cloudLoad(){
     if(!r.ok) throw new Error('No se pudo conectar con el servidor');
     const s=await r.json();
     users=s.users&&Object.keys(s.users).length?s.users:defaultUsers;
-    // Completar solo asignaciones de Jorge ausentes/vacías; no tocar tareas ni entregas guardadas.
-    if(users.jorge&&(!Array.isArray(users.jorge.puestos)||users.jorge.puestos.length===0)){
-      users.jorge={...users.jorge,puestos:[...defaultUsers.jorge.puestos],areas:[...defaultUsers.jorge.areas]};
-    }
+    // Completar asignaciones estándar solo para cuentas conocidas sin puestos guardados.
+    // Si una cuenta ya tiene puestos propios, se respetan; no se modifican tareas ni entregas.
+    ['jorge','hamilton','juanesteban'].forEach(id=>{
+      if(users[id]&&(!Array.isArray(users[id].puestos)||users[id].puestos.length===0)&&Array.isArray(defaultUsers[id]?.puestos)&&defaultUsers[id].puestos.length){
+        users[id]={...users[id],puestos:[...defaultUsers[id].puestos],areas:[...(defaultUsers[id].areas||[])]};
+      }
+    });
     cloudTasks=Array.isArray(s.tasks)?s.tasks:[];
     lpnCatalog=Array.isArray(s.lpnCatalog)?s.lpnCatalog:[];
     freeDeliveries=Array.isArray(s.freeDeliveries)?s.freeDeliveries:[];
