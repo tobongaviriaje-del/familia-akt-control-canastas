@@ -12,7 +12,7 @@ const SESSION_TTL=12*60*60*1000;
 function sendJson(res,status,data){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(data));}
 function getSession(req){const h=String(req.headers.authorization||'');const token=h.startsWith('Bearer ')?h.slice(7):'';const session=sessions.get(token);if(!session)return null;if(session.expires<Date.now()){sessions.delete(token);return null;}session.expires=Date.now()+SESSION_TTL;return session;}
 function authorized(req){return !!getSession(req);}
-function isAdmin(req){const session=getSession(req);if(!session)return false;const user=readState().users[session.username];return !!user&&user.role==='Admin';}
+function isAdmin(req){const session=getSession(req);if(!session)return false;try{const state=readState();const user=state.users[session.username];return !!user&&user.role==='Admin';}catch(error){console.error('No se pudo verificar el rol administrativo:',error.message);return false;}}
 function readRequestBody(req,maxBytes=10*1024*1024){return new Promise((resolve,reject)=>{let body='';req.on('data',chunk=>{body+=chunk;if(Buffer.byteLength(body)>maxBytes){reject(new Error('El archivo supera el límite permitido'));req.destroy();}});req.on('end',()=>resolve(body));req.on('error',reject);});}
 function createBackupBundle(){const state=readState();let history=[];if(fs.existsSync(HISTORY_DIR)){history=fs.readdirSync(HISTORY_DIR).filter(name=>/^jornada-[a-zA-Z0-9T._-]+\.json$/.test(name)).map(name=>({name,content:fs.readFileSync(path.join(HISTORY_DIR,name),'utf8')}));}return {format:'familia-akt-backup-v1',createdAt:new Date().toISOString(),state,history};}
 
