@@ -1,0 +1,21 @@
+name: Test draft security changes
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [feature/backup-restore-json]
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run isolated API integration tests
+        run: npm test
