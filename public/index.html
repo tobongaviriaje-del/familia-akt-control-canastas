@@ -401,11 +401,11 @@ function mostrarEntregasZona(zona){
  const panel=$('entregasZonaPanel');
  if(!panel){alert('No se encontró el panel de entregas. Recarga la aplicación e intenta de nuevo.');return;}
  const normal=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
- const puestosUsuario=(current&&current.role==='Patinador'&&Array.isArray(current.puestos)&&current.puestos.length)?current.puestos.map(normal):null;
+ const puestosUsuario=(current&&current.role==='Patinador'&&Array.isArray(current.puestos)&&current.puestos.length)?current.puestos.map(normalizarPuestoEstandar):null;
  const tasks=getTasks().filter(x=>{
   if(x.estado==='Entregada'||Number(x.entregado||0)>=Number(x.cantidad||0))return false;
   const area=normal(x.area),puesto=normal(x.puesto),z=normal(zona);
-  if(puestosUsuario){if(!puestosUsuario.includes(puesto))return false;}
+  if(current&&current.role==='Patinador'){if(!tareaAsignadaAlPatinador(x))return false;}
   else if(!autorizadoParaTarea(x))return false;
   if(z==='pre')return area==='pre'||/^pre\s*\d*/.test(puesto);
   return area===z||new RegExp('^'+z+'(?:\\s*\\d+)?$').test(puesto);
@@ -677,12 +677,26 @@ function reiniciarDiaNKD(){
  const tasks=getTasks().map(x=>x.standardNKD&&modeloDeTareaEstandar(x)===modelo?{...x,entregado:0,estado:'Pendiente',entregas:[],entrega:null}:x);
  saveTasks(tasks);cloudSave().then(()=>{render();window.scrollTo(0,scrollAntes);const fila=$('stdRow'+id);if(fila)fila.scrollIntoView({behavior:'auto',block:'center'});const msg=$('estandarNKDMsg');if(msg)msg.textContent='✅ Entregas reiniciadas para '+modelo+'. El estándar se conservó.';});
 }
+function tareaAsignadaAlPatinador(tarea){
+ if(!current||current.role!=='Patinador'||!tarea)return false;
+ const normalArea=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+ const puestos=Array.isArray(current.puestos)?current.puestos.map(normalizarPuestoEstandar).filter(Boolean):[];
+ const areas=Array.isArray(current.areas)?current.areas.map(normalArea).filter(Boolean):[];
+ const puesto=normalizarPuestoEstandar(tarea.puesto);
+ const areaTarea=normalArea(tarea.area);
+ if(puestos.length&&!puestos.includes(puesto))return false;
+ if(areas.length){
+  const areaDerivada=areaTarea||(String(puesto).match(/^(PRE|Derecho|Izquierdo|Final)\b/i)||[])[1]||'';
+  if(!areaDerivada||!areas.includes(normalArea(areaDerivada)))return false;
+ }
+ return puestos.length>0||areas.length>0;
+}
 function renderPatinadorChecklist(){
  const wrap=$('standardItems'),progress=$('standardProgress');if(!wrap||!progress||!current||current.role!=='Patinador')return;
  const selector=$('modeloEstandarPatinador');let modelo='NKD';
  try{modelo=localStorage.getItem('cc_modelo_moto')||'NKD';}catch(e){}
  if(selector&&selector.value!==modelo)selector.value=modelo;
- const puestosAsignados=Array.isArray(current.puestos)?current.puestos.map(normalizarPuestoEstandar).filter(Boolean):[];const areaNorm=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');const areasAsignadas=Array.isArray(current.areas)?current.areas.map(areaNorm):[];const assigned=getTasks().filter(x=>x.standardNKD&&modeloDeTareaEstandar(x)===modelo&&(puestosAsignados.length?puestosAsignados.includes(normalizarPuestoEstandar(x.puesto)):areasAsignadas.includes(areaNorm(x.area))));
+ const assigned=getTasks().filter(x=>x.standardNKD&&modeloDeTareaEstandar(x)===modelo&&tareaAsignadaAlPatinador(x));
  const total=assigned.length,done=assigned.filter(x=>(Number(x.entregado)||0)>=unidadesObjetivoEstandar(x)).length;
  const units=assigned.reduce((n,x)=>n+(Number(x.entregado)||0),0),target=assigned.reduce((n,x)=>n+unidadesObjetivoEstandar(x),0);
  const left=assigned.length?Math.min(...assigned.map(x=>{const s=resumenCantidadLote(x,assigned);return s.aplica?s.restante:Math.max(0,unidadesObjetivoEstandar(x)-(Number(x.entregado)||0));})):0;
