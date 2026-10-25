@@ -690,10 +690,9 @@ function tareaAsignadaAlPatinador(tarea){
  // Cuando hay puestos concretos asignados, son la fuente principal de permisos.
  // No exigir además que el campo "area" coincida: algunos Excel guardan variantes.
  if(puestos.length)return puestos.includes(puesto);
- const area=normalArea(tarea.area);
- const canonArea=v=>v==='pre'?'pre':v==='final de linea'?'final':v;
- const areaCanon=canonArea(area);
- return areas.length>0&&areas.some(a=>canonArea(a)===areaCanon);
+ // No ampliar permisos por área: las áreas son compartidas y mostraban tareas de otros patinadores.
+ // Sin puestos explícitos no se muestran tareas hasta que la cuenta tenga asignaciones concretas.
+ return false;
 }
 function renderPatinadorChecklist(){
  const wrap=$('standardItems'),progress=$('standardProgress');if(!wrap||!progress||!current||current.role!=='Patinador')return;
