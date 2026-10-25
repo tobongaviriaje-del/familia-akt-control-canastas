@@ -686,7 +686,7 @@ function tareaAsignadaAlPatinador(tarea){
  const areaTarea=normalArea(tarea.area);
  if(puestos.length&&!puestos.includes(puesto))return false;
  if(areas.length){
-  const areaDerivada=areaTarea||(String(puesto).match(/^(PRE|Derecho|Izquierdo|Final)\b/i)||[])[1]||'';
+  const areaDerivada=(areaTarea.match(/^(pre|derecho|izquierdo|final)\b/i)||[])[1]||(String(puesto).match(/^(PRE|Derecho|Izquierdo|Final)\b/i)||[])[1]||areaTarea;
   if(!areaDerivada||!areas.includes(normalArea(areaDerivada)))return false;
  }
  return puestos.length>0||areas.length>0;
