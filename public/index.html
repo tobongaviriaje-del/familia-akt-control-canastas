@@ -750,7 +750,7 @@ function renderEntregasSinEstandar(){
 <script>
 let familiaAKTInstallPrompt=null;
 function esAppInstalada(){return window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;}
-function mostrarBotonInstalar(){const b=document.getElementById('installAppBtn');if(!b)return;b.hidden=esAppInstalada()||!familiaAKTInstallPrompt;}
+function mostrarBotonInstalar(){const b=document.getElementById('installAppBtn');if(!b)return;b.hidden=esAppInstalada();}
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();familiaAKTInstallPrompt=e;mostrarBotonInstalar();});
 window.addEventListener('appinstalled',()=>{familiaAKTInstallPrompt=null;mostrarBotonInstalar();alert('¡Familia AKT quedó instalada en este dispositivo!');});
 async function instalarFamiliaAKT(){
