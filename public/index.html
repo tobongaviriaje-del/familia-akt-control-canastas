@@ -31,6 +31,14 @@ let freeDeliveries=[];
 let cloudReady=false;
 let cloudSyncBusy=false;
 const $=id=>document.getElementById(id);
+const nativeFetch=window.fetch.bind(window);
+window.fetch=(resource,options={})=>{
+  const url=typeof resource==='string'?resource:(resource&&resource.url)||'';
+  const token=sessionStorage.getItem('cc_session_token');
+  const headers=new Headers(options.headers||(resource instanceof Request?resource.headers:undefined));
+  if(token&&url.startsWith('/api/'))headers.set('Authorization','Bearer '+token);
+  return nativeFetch(resource,{...options,headers});
+};
 
 async function cloudLoad(){
   try{
@@ -307,16 +315,16 @@ async function login(){
  if(err)err.textContent='';
  if(btn){btn.disabled=true;btn.textContent='Ingresando…';}
  try{
-  if(!cloudReady) await Promise.race([cloudLoad(),new Promise(resolve=>setTimeout(resolve,3500))]);
+  const response=await nativeFetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p}),cache:'no-store'});
+  const result=await response.json();
+  if(!response.ok||!result.ok||!result.token){if(err)err.textContent=result.error||'Usuario o contraseña incorrectos.';return;}
+  sessionStorage.setItem('cc_session_token',result.token);
+  cloudReady=false;
+  await cloudLoad();
   users=loadUsers();
-  if(!users||typeof users!=='object')users={...defaultUsers};
-  for(const k of ['juandavid','fredy']){if(defaultUsers[k])users[k]={...(users[k]||{}),...defaultUsers[k],pass:defaultUsers[k].pass,role:'Admin'};}
-  try{saveUsers();}catch(e){console.warn('No se pudieron guardar usuarios localmente',e);}
-  if(!users[u]&&defaultUsers[u]){users[u]={...defaultUsers[u]};try{saveUsers();}catch(e){}}
-  if(users[u]&&defaultUsers[u]&&p===defaultUsers[u].pass&&users[u].pass!==p){users[u]={...defaultUsers[u],...users[u],pass:p};try{saveUsers();}catch(e){}}
-  if(!users[u]||users[u].pass!==p){if(err)err.textContent='Usuario o contraseña incorrectos. Verifica los datos e inténtalo de nuevo.';return;}
-  if(['juanesteban','jorge','hamilton'].includes(u)){users[u]={...users[u],puestos:[...(defaultUsers[u].puestos||[])],areas:[...(defaultUsers[u].areas||[])]};try{saveUsers();}catch(e){}}
-  current={...users[u],username:u};
+  const account=(users&&users[u])||result.user;
+  if(!account){sessionStorage.removeItem('cc_session_token');if(err)err.textContent='No se encontró el usuario. Inténtalo de nuevo.';return;}
+  current={...account,username:u};
   $('loginView').classList.add('hidden');$('appView').classList.remove('hidden');$('logout').classList.remove('hidden');
   $('welcome').textContent='Hola, '+(current.name||u);$('rolePill').textContent=current.role||'Usuario';
   const canManage=['Mesanín','Admin','Supervisor'].includes(current.role);
@@ -325,10 +333,10 @@ async function login(){
   $('patinadorPanel').classList.toggle('hidden',current.role!=='Patinador');
   if(canManage)fillPuestos();
   render();
- }catch(e){console.error('Error al ingresar:',e);if(err)err.textContent='No se pudo completar el ingreso. Recarga la página e inténtalo otra vez.';}
+ }catch(e){console.error('Error al ingresar:',e);sessionStorage.removeItem('cc_session_token');if(err)err.textContent='No se pudo completar el ingreso. Verifica tu conexión e inténtalo de nuevo.';}
  finally{if(btn){btn.disabled=false;btn.textContent='Ingresar';}}
 }
-function logout(){if(stream)stream.getTracks().forEach(t=>t.stop());current=null;$('appView').classList.add('hidden');$('loginView').classList.remove('hidden');$('logout').classList.add('hidden');}
+function logout(){if(stream)stream.getTracks().forEach(t=>t.stop());sessionStorage.removeItem('cc_session_token');current=null;$('appView').classList.add('hidden');$('loginView').classList.remove('hidden');$('logout').classList.add('hidden');}
 function fillPuestos(){let arr=[];for(let i=1;i<=33;i++)arr.push('PRE '+i);for(let i=1;i<=16;i++){arr.push('Derecho '+i);arr.push('Izquierdo '+i)}for(let i=1;i<=20;i++)arr.push('Final '+i);$('puesto').innerHTML=arr.map(x=>`<option>${x}</option>`).join('');}
 function crearTarea(){let qty=Number($('cantidad').value);if(!$('lpn').value||!$('ean').value||!$('producto').value||qty<1){$('taskMsg').textContent='Completa todos los campos';return}let t=getTasks();t.push({id:Date.now(),lpn:$('lpn').value.trim(),estiba:($('estiba').value.trim()||'Estiba 1'),ean:$('ean').value.trim(),producto:$('producto').value.trim(),cantidad:qty,area:$('area').value,puesto:$('puesto').value,turno:$('turno').value,estado:'Pendiente',creadoPor:current.name,fechaCreacion:new Date().toLocaleString('es-CO'),entrega:null});saveTasks(t);$('taskMsg').textContent='Tarea creada correctamente';render();}
 function autorizadoParaTarea(t){return !current||current.role!=='Patinador'||(current.areas&&current.areas.includes(t.area))||(current.puestos&&current.puestos.includes(t.puesto));}
