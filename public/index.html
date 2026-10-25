@@ -679,17 +679,17 @@ function reiniciarDiaNKD(){
 }
 function tareaAsignadaAlPatinador(tarea){
  if(!current||current.role!=='Patinador'||!tarea)return false;
- const normalArea=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+ const normalArea=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
  const puestos=Array.isArray(current.puestos)?current.puestos.map(normalizarPuestoEstandar).filter(Boolean):[];
  const areas=Array.isArray(current.areas)?current.areas.map(normalArea).filter(Boolean):[];
  const puesto=normalizarPuestoEstandar(tarea.puesto);
- const areaTarea=normalArea(tarea.area);
- if(puestos.length&&!puestos.includes(puesto))return false;
- if(areas.length){
-  const areaDerivada=(areaTarea.match(/^(pre|derecho|izquierdo|final)\b/i)||[])[1]||(String(puesto).match(/^(PRE|Derecho|Izquierdo|Final)\b/i)||[])[1]||areaTarea;
-  if(!areaDerivada||!areas.includes(normalArea(areaDerivada)))return false;
- }
- return puestos.length>0||areas.length>0;
+ // Cuando hay puestos concretos asignados, son la fuente principal de permisos.
+ // No exigir además que el campo "area" coincida: algunos Excel guardan variantes.
+ if(puestos.length)return puestos.includes(puesto);
+ const area=normalArea(tarea.area);
+ const canonArea=v=>v==='pre'?'pre':v==='final de linea'?'final':v;
+ const areaCanon=canonArea(area);
+ return areas.length>0&&areas.some(a=>canonArea(a)===areaCanon);
 }
 function renderPatinadorChecklist(){
  const wrap=$('standardItems'),progress=$('standardProgress');if(!wrap||!progress||!current||current.role!=='Patinador')return;
