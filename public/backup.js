@@ -70,9 +70,4 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install); else install();
   const observer = new MutationObserver(install);
   if (document.body) observer.observe(document.body, { childList: true, subtree: true });
-  window.setInterval(() => {
-    const card = document.getElementById('backupRestoreCard');
-    const user = window.current;
-    if (card) card.classList.toggle('hidden', !(user && user.role === 'Admin'));
-  }, 800);
 })();
