@@ -10,13 +10,13 @@
     "minimal-ui"
   ],
   "background_color": "#050b16",
-  "theme_color": "#075ee8",
+  "theme_color": "#07162d",
   "description": "Control de canastas, lotes, tareas y entregas de Familia AKT.",
   "lang": "es-CO",
   "orientation": "any",
   "icons": [
     {
-      "src": "/icon.svg?v=5",
+      "src": "/familia-akt-logo.svg?v=1",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
