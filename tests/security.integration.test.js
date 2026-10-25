@@ -100,6 +100,21 @@ async function waitForServer() {
 
     const invalidRestore = await request('/api/backup/restore', { method: 'POST', auth: token, body: { nope: true } });
     assert.equal(invalidRestore.status, 400, 'invalid backup must be rejected');
+
+    // Restore a valid backup in this temporary test server and verify state remains readable.
+    const validBundle = {
+      format: 'familia-akt-backup-v1',
+      createdAt: new Date().toISOString(),
+      state: { ...backup.body.state, tasks: [{ id: 'test-task', cantidad: 10, entregado: 0 }] },
+      history: [],
+    };
+    const restored = await request('/api/backup/restore', { method: 'POST', auth: token, body: validBundle });
+    assert.equal(restored.status, 200, 'admin should restore a valid backup');
+    assert.equal(restored.body.ok, true);
+    state = await request('/api/state', { auth: token });
+    assert.equal(state.status, 200);
+    assert.equal(state.body.tasks[0].id, 'test-task', 'restored state should be persisted');
+    assert.ok(fs.readdirSync(path.join(temp, 'data')).some(name => name.startsWith('pre-restauracion-')), 'restore should save a pre-restore snapshot');
     const missingAuthClose = await request('/api/jornada/cerrar', { method: 'POST', body: { confirmacion: 'CERRAR JORNADA' } });
     assert.equal(missingAuthClose.status, 401, 'close journey must require authentication');
 
