@@ -62,7 +62,7 @@ if(!isAdmin(req))return sendJson(res,403,{ok:false,error:'Solo el administrador 
 readRequestBody(req).then(body=>{
 let bundle;try{bundle=JSON.parse(body||'{}');}catch{return sendJson(res,400,{ok:false,error:'El archivo no contiene JSON válido.'});}
 if(!bundle||bundle.format!=='familia-akt-backup-v1'||!bundle.state||typeof bundle.state!=='object'||!bundle.state.users||!Array.isArray(bundle.state.tasks))return sendJson(res,400,{ok:false,error:'El archivo no es un respaldo válido de Familia AKT.'});
-if(bundle.history!==undefined&&(!Array.isArray(bundle.history)||bundle.history.some(x=>!x||typeof x.name!=='string'||!/^jornada-[a-zA-Z0-9T._-]+\.json$/.test(x.name)||typeof x.content!=='string')))return sendJson(res,400,{ok:false,error:'El historial del respaldo tiene un formato inválido.'});
+if(bundle.history!==undefined&&(!Array.isArray(bundle.history)||bundle.history.some(x=>{if(!x||typeof x.name!=='string'||!/^jornada-[a-zA-Z0-9T._-]+\.json$/.test(x.name)||typeof x.content!=='string')return true;try{const parsed=JSON.parse(x.content);return !parsed||typeof parsed!=='object'||Array.isArray(parsed);}catch{return true;}})))return sendJson(res,400,{ok:false,error:'El historial del respaldo tiene un formato inválido.'});
 try{
 const current=createBackupBundle();const stamp=new Date().toISOString().replace(/[:.]/g,'-');const preRestore=path.join(DATA_DIR,'pre-restauracion-'+stamp+'.json');fs.writeFileSync(preRestore,JSON.stringify(current,null,2));
 const restored={...bundle.state,users:bundle.state.users,tasks:bundle.state.tasks,lpnCatalog:Array.isArray(bundle.state.lpnCatalog)?bundle.state.lpnCatalog:[],freeDeliveries:Array.isArray(bundle.state.freeDeliveries)?bundle.state.freeDeliveries:[]};
