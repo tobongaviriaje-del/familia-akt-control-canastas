@@ -1,1 +1,48 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><linearGradient id="bg" x2="0.9" y2="1"><stop stop-color="#07162d"/><stop offset="1" stop-color="#02060d"/></linearGradient><linearGradient id="blue" x2="0" y2="1"><stop stop-color="#18c8ff"/><stop offset="1" stop-color="#0754ff"/></linearGradient><linearGradient id="metal" x2="0" y2="1"><stop stop-color="#fff"/><stop offset="1" stop-color="#9caec7"/></linearGradient></defs><circle cx="256" cy="256" r="249" fill="url(#bg)" stroke="#087cff" stroke-width="8"/><circle cx="256" cy="205" r="170" fill="#062d72" stroke="#0baeff" stroke-width="5"/><path d="M90 240 170 175 220 215 270 160 340 225 400 190 440 255v78H75z" fill="#0754cf" opacity=".75"/><path d="M104 325 165 282 212 315 280 255 340 302 407 265v75H104z" fill="#031b4d"/><g stroke="#d9eaff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"><circle cx="159" cy="292" r="47"/><circle cx="365" cy="292" r="47"/><path d="M159 292 207 233 270 292 220 292 190 253 250 253 294 292 330 231 365 292M207 233h-28m151-2 20-21m-28 19h-32"/></g><path d="M203 227q-12-17 8-22l72-3 33 27-17 19h-72z" fill="#050a12" stroke="#168cff" stroke-width="5"/><path d="M245 204l35-18 36 10 16 25-33 8-27-10z" fill="#0a101b" stroke="#dcecff" stroke-width="4"/><path d="M295 224l40 10 20 32-24 11-28-34-28 18-26-19z" fill="#087cff" stroke="#dcecff" stroke-width="4"/><path d="M133 195h115l-10 56H135z" fill="url(#blue)" stroke="#6bdcff" stroke-width="5"/><path d="M150 207v32m20-32v32m20-32v32m20-32v32m20-32v32" stroke="#06265b" stroke-width="7"/><g fill="#ffbe32" stroke="#fff" stroke-width="2"><circle cx="148" cy="190" r="12"/><rect x="170" y="174" width="20" height="23" rx="4"/><path d="M198 196l8-22 17 22z"/></g><text x="256" y="355" text-anchor="middle" font-family="Arial,sans-serif" font-size="53" font-weight="900" font-style="italic" fill="#fff" stroke="#087cff" stroke-width="2">Familia</text><text x="256" y="414" text-anchor="middle" font-family="Arial,sans-serif" font-size="69" font-weight="900" font-style="italic" fill="url(#metal)" stroke="#086cff" stroke-width="2">AKT</text><path d="M84 431h344" stroke="#08baff" stroke-width="5"/><text x="256" y="459" text-anchor="middle" font-family="Arial,sans-serif" font-size="19" font-weight="800" letter-spacing="2" fill="#fff">CONTROL DE CANASTAS</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">Familia AKT — moto NKD con canasta</title><desc id="desc">Logo azul eléctrico con motocicleta de perfil cargando una canasta de mercado.</desc>
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#092858"/><stop offset="1" stop-color="#020712"/></linearGradient><linearGradient id="blue" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#31d5ff"/><stop offset="1" stop-color="#0765ff"/></linearGradient><linearGradient id="steel" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fff"/><stop offset="1" stop-color="#8fa9ca"/></linearGradient></defs>
+<circle cx="256" cy="256" r="249" fill="url(#bg)" stroke="#087cff" stroke-width="8"/>
+<circle cx="256" cy="205" r="171" fill="#062c69" stroke="#0baeff" stroke-width="4"/>
+<path d="M80 237 145 178 194 216 253 157 305 207 360 173 433 236v91H80Z" fill="#0754cf" opacity=".52"/>
+<path d="M104 280 166 244 208 266 268 223 319 260 395 224v74H104Z" fill="#041a40"/>
+<!-- market crate, large and unmistakable -->
+<path d="M106 151h125l-9 75H115Z" fill="url(#blue)" stroke="#b5f0ff" stroke-width="5" stroke-linejoin="round"/>
+<path d="M126 163v48m24-48v48m24-48v48m24-48v48" stroke="#07326e" stroke-width="8" stroke-linecap="round"/>
+<path d="M112 151l7-16h105l8 16" fill="none" stroke="#d7f8ff" stroke-width="5" stroke-linejoin="round"/>
+<!-- groceries peeking above crate -->
+<path d="M124 137q-10-28 12-34 19 7 10 34" fill="#41d66e" stroke="#d8ffe2" stroke-width="3"/>
+<path d="M151 136l11-31 19 31Z" fill="#ffbd35" stroke="#fff0b7" stroke-width="3"/>
+<rect x="181" y="112" width="23" height="25" rx="5" fill="#ff5d61" stroke="#ffe2e2" stroke-width="3"/>
+<!-- bold side-profile motorcycle -->
+<g stroke-linecap="round" stroke-linejoin="round">
+<!-- wheels -->
+<circle cx="151" cy="285" r="48" fill="#07111f" stroke="#f0f7ff" stroke-width="9"/>
+<circle cx="151" cy="285" r="30" fill="#0b2d61" stroke="#13baff" stroke-width="6"/>
+<circle cx="151" cy="285" r="8" fill="#fff"/>
+<circle cx="363" cy="285" r="48" fill="#07111f" stroke="#f0f7ff" stroke-width="9"/>
+<circle cx="363" cy="285" r="30" fill="#0b2d61" stroke="#13baff" stroke-width="6"/>
+<circle cx="363" cy="285" r="8" fill="#fff"/>
+<!-- rear swingarm, frame and engine -->
+<path d="M151 285 214 221 276 285 215 285 190 246 270 246 315 285 363 285" fill="none" stroke="#e9f5ff" stroke-width="12"/>
+<path d="M210 224 256 207 292 224 276 264 231 266 207 245Z" fill="#087cff" stroke="#bdeeff" stroke-width="5"/>
+<path d="M235 239h34l-4 22h-35Z" fill="#07111f" stroke="#dcecff" stroke-width="4"/>
+<!-- fuel tank -->
+<path d="M225 209q12-25 43-22l35 16-10 27-43 4-28-13Z" fill="url(#blue)" stroke="#e7f7ff" stroke-width="5"/>
+<!-- seat -->
+<path d="M205 206h-42q-12 0-17-10l-3-7h68l17 13Z" fill="#070d17" stroke="#dcecff" stroke-width="4"/>
+<!-- front fork and front fender -->
+<path d="M294 226 336 266 354 281M309 219l34 37" fill="none" stroke="#eaf5ff" stroke-width="10"/>
+<path d="M323 249q34-17 55 15" fill="none" stroke="#087cff" stroke-width="9"/>
+<!-- handlebar / mirror -->
+<path d="M292 199l16-18 20 1m-10-2-2-16" fill="none" stroke="#eaf5ff" stroke-width="6"/>
+<circle cx="315" cy="160" r="5" fill="#fff"/>
+<!-- headlight -->
+<path d="M321 202l18 3 7 15-17 4Z" fill="#ffe98a" stroke="#fff" stroke-width="3"/>
+<!-- exhaust -->
+<path d="M204 268l35 17 30-2" fill="none" stroke="#a9c6e8" stroke-width="9"/>
+</g>
+<text x="256" y="363" text-anchor="middle" font-family="Arial,sans-serif" font-size="50" font-weight="900" font-style="italic" fill="#fff" stroke="#087cff" stroke-width="2">Familia</text>
+<text x="256" y="416" text-anchor="middle" font-family="Arial,sans-serif" font-size="69" font-weight="900" font-style="italic" fill="url(#steel)" stroke="#086cff" stroke-width="2">AKT</text>
+<path d="M84 432h344" stroke="#08baff" stroke-width="5"/>
+<text x="256" y="459" text-anchor="middle" font-family="Arial,sans-serif" font-size="19" font-weight="800" letter-spacing="2" fill="#fff">CONTROL DE CANASTAS</text>
+</svg>
