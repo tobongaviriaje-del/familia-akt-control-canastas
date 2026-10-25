@@ -623,22 +623,30 @@ function prepararEstandarNKD(input){
    const wb=XLSX.read(e.target.result,{type:'array'}),parsed=[];let matchedSheets=0;
    wb.SheetNames.forEach(sheetName=>{
     const rows=XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,defval:'',raw:false});
-    let headerAt=-1,ix={};
-    for(let ri=0;ri<Math.min(rows.length,15);ri++){
-     const h=rows[ri].map(v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''));
-     const find=terms=>h.findIndex(v=>terms.some(t=>v===t||v.includes(t)));
-     const exact=names=>{for(const name of names){const j=h.findIndex(v=>v===name);if(j>=0)return j;}return -1;};const test={ean:find(['ean','codigo de barras','referencia']),producto:find(['nombre','producto','descripcion','mercancia']),cantidad:exact(['cantidad']),cantidadUnidad:exact(['cant.','cant','cantidad por unidad']),lote:exact(['lote','cantidad lote','total lote','saldo lote']),cantidadCanasta:find(['unidades por canasta','unidad por canasta','cantidad por canasta','capacidad canasta','cant. canasta']),canasta:exact(['canasta']),numCanastas:exact(['#canastas','n°canastas','num canastas']),puesto:find(['puesto','ubicacion','posicion'])};if(test.cantidad<0)test.cantidad=find(['cantidad','qty']);if(test.cantidadUnidad<0)test.cantidadUnidad=find(['cant.','cant','cantidad por unidad']);if(test.numCanastas<0)test.numCanastas=find(['canastas']);
-     if(test.ean>=0&&test.producto>=0&&test.puesto>=0){headerAt=ri;ix=test;break;}
+    let headerAt=-1,dataStart=-1,ix={};
+    const normalHeader=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/\\s+/g,' ');
+    for(let ri=0;ri<Math.min(rows.length,35);ri++){
+     // Algunos Excel de modelos distintos traen título y encabezados repartidos en varias filas.
+     for(let span=1;span<=3&&ri+span<=rows.length;span++){
+      const h=rows[ri].map((v,ci)=>Array.from({length:span},(_,k)=>normalHeader(rows[ri+k]?.[ci])).filter(Boolean).join(' '));
+      const find=terms=>h.findIndex(v=>terms.some(t=>v===t||v.includes(t)));
+      const exact=names=>{for(const name of names){const j=h.findIndex(v=>v===name||v.endsWith(' '+name));if(j>=0)return j;}return -1;};
+      const test={ean:find(['ean','codigo de barras','referencia']),producto:find(['nombre','producto','descripcion','mercancia']),cantidad:exact(['cantidad']),cantidadUnidad:exact(['cant.','cant','cantidad por unidad']),lote:find(['lote','cantidad lote','total lote','saldo lote']),cantidadCanasta:find(['unidades por canasta','unidad por canasta','cantidad por canasta','capacidad canasta','cant. canasta']),canasta:exact(['canasta']),numCanastas:find(['#canastas','n°canastas','num canastas','canastas']),puesto:find(['puesto','ubicacion','posicion'])};
+      if(test.cantidad<0)test.cantidad=find(['cantidad','qty']);
+      if(test.cantidadUnidad<0)test.cantidadUnidad=find(['cant.','cant','cantidad por unidad']);
+      if(test.ean>=0&&test.producto>=0&&test.puesto>=0){headerAt=ri;dataStart=ri+span;ix=test;break;}
+     }
+     if(headerAt>=0)break;
     }
     if(headerAt<0)return;matchedSheets++;
-    rows.slice(headerAt+1).forEach(row=>{
+    rows.slice(dataStart).forEach(row=>{
      const get=k=>ix[k]>=0?String(row[ix[k]]??'').trim():'';
      const ean=get('ean'),producto=get('producto'),puesto=normalizarPuestoEstandar(get('puesto'));
      const cantidadUnidad=Number(String(get('cantidadUnidad')).replace(',','.'))||0;
      const loteRaw=get('lote'),cantidadRaw=get('cantidad'),cantidadCanastaRaw=get('cantidadCanasta'),canasta=get('canasta'),numCanastasRaw=get('numCanastas');
      const loteExcel=Number(String(loteRaw).replace(',','.'))||0;
      const loteModelo=loteInicialPorModelo(modelo);
-     const lote=loteModelo>0?loteModelo:loteExcel;
+     const lote=loteExcel>0?loteExcel:loteModelo;
      const cantidadCol=Number(String(cantidadRaw).replace(',','.'))||0;
      const cantidadCanasta=Number(String(cantidadCanastaRaw).replace(',','.'))||0;
      const numCanastasExcel=Number(String(numCanastasRaw).replace(',','.'))||0;
