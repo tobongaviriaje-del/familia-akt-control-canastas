@@ -78,7 +78,7 @@ async function waitForServer() {
 
     const attemptedEscalation = await request('/api/state', {
       method: 'PUT', auth: token,
-      body: { ...state.body, users: { admin: state.body.users.admin, intruder: { pass: 'pw', role: 'Admin' } } },
+      body: { ...state.body, users: { admin: state.body.users.admin, intruder: { pass: 'pw', role: 'Patinador' } } },
     });
     assert.equal(attemptedEscalation.status, 200, 'admin can manage users');
     const normalLogin = await request('/api/login', { method: 'POST', body: { username: 'intruder', password: 'pw' } });
