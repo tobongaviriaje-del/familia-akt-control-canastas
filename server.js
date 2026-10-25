@@ -16,17 +16,15 @@ function isAdmin(req){const session=getSession(req);if(!session)return false;con
 function readRequestBody(req,maxBytes=10*1024*1024){return new Promise((resolve,reject)=>{let body='';req.on('data',chunk=>{body+=chunk;if(Buffer.byteLength(body)>maxBytes){reject(new Error('El archivo supera el límite permitido'));req.destroy();}});req.on('end',()=>resolve(body));req.on('error',reject);});}
 function createBackupBundle(){const state=readState();let history=[];if(fs.existsSync(HISTORY_DIR)){history=fs.readdirSync(HISTORY_DIR).filter(name=>/^jornada-[a-zA-Z0-9T._-]+\.json$/.test(name)).map(name=>({name,content:fs.readFileSync(path.join(HISTORY_DIR,name),'utf8')}));}return {format:'familia-akt-backup-v1',createdAt:new Date().toISOString(),state,history};}
 
-const defaultUsers={
-admin:{pass:'admin',role:'Admin',name:'Administrador'},
-mesanin:{pass:'mesanin123',role:'Mesanín',name:'Mesanín'},
-hamilton:{pass:'Hamilton123!',role:'Patinador',name:'Hamilton',areas:['PRE','Izquierdo'],puestos:[]},
-juanesteban:{pass:'Juan123!',role:'Patinador',name:'Juan Esteban',areas:['PRE','Derecho'],puestos:[]},
-jorge:{pass:'Jorge123!',role:'Patinador',name:'Jorge',areas:['PRE','Derecho','Izquierdo','Final de línea'],puestos:[]}
-};
+function initialUsersFromEnvironment(){
+const adminPassword=process.env.INITIAL_ADMIN_PASSWORD;
+if(!adminPassword||adminPassword.length<12)throw new Error('Para inicializar una instalación nueva, configura INITIAL_ADMIN_PASSWORD con al menos 12 caracteres.');
+return {admin:{pass:adminPassword,role:'Admin',name:'Administrador'}};
+}
 
 function ensureState(){
 fs.mkdirSync(DATA_DIR,{recursive:true});
-if(!fs.existsSync(STATE_FILE))fs.writeFileSync(STATE_FILE,JSON.stringify({users:defaultUsers,tasks:[]},null,2));
+if(!fs.existsSync(STATE_FILE))fs.writeFileSync(STATE_FILE,JSON.stringify({users:initialUsersFromEnvironment(),tasks:[]},null,2));
 }
 function readState(){
 ensureState();
