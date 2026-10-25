@@ -118,7 +118,12 @@ async function waitForServer() {
     const missingAuthClose = await request('/api/jornada/cerrar', { method: 'POST', body: { confirmacion: 'CERRAR JORNADA' } });
     assert.equal(missingAuthClose.status, 401, 'close journey must require authentication');
 
-    console.log('PASS: auth, invalid login, state access, role protection, backup permissions, invalid restore, close-journey auth');
+    // A corrupted state must fail closed without crashing the server during an admin check.
+    fs.writeFileSync(path.join(temp, 'data', 'state.json'), '{broken json');
+    assert.equal((await request('/api/backup', { auth: token })).status, 403, 'corrupt state must deny admin backup');
+    assert.equal((await request('/health')).status, 200, 'corrupt state must not crash the server');
+
+    console.log('PASS: auth, invalid login, state access, role protection, backup permissions, restore, close-journey auth, corrupt-state fail-closed');
   } catch (error) {
     console.error(error.stack || error);
     if (child && child.stderr) console.error('Server stderr:', child.stderr.read()?.toString?.() || '');
