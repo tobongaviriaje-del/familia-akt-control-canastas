@@ -61,13 +61,21 @@ readRequestBody(req).then(body=>{
 let bundle;try{bundle=JSON.parse(body||'{}');}catch{return sendJson(res,400,{ok:false,error:'El archivo no contiene JSON válido.'});}
 if(!bundle||bundle.format!=='familia-akt-backup-v1'||!bundle.state||typeof bundle.state!=='object'||!bundle.state.users||!Array.isArray(bundle.state.tasks))return sendJson(res,400,{ok:false,error:'El archivo no es un respaldo válido de Familia AKT.'});
 if(bundle.history!==undefined&&(!Array.isArray(bundle.history)||bundle.history.some(x=>{if(!x||typeof x.name!=='string'||!/^jornada-[a-zA-Z0-9T._-]+\.json$/.test(x.name)||typeof x.content!=='string')return true;try{const parsed=JSON.parse(x.content);return !parsed||typeof parsed!=='object'||Array.isArray(parsed);}catch{return true;}})))return sendJson(res,400,{ok:false,error:'El historial del respaldo tiene un formato inválido.'});
+let current=null;let stateWritten=false;
 try{
-const current=createBackupBundle();const stamp=new Date().toISOString().replace(/[:.]/g,'-');const preRestore=path.join(DATA_DIR,'pre-restauracion-'+stamp+'.json');fs.writeFileSync(preRestore,JSON.stringify(current,null,2));
+current=createBackupBundle();
+const stamp=new Date().toISOString().replace(/[:.]/g,'-');
+const preRestore=path.join(DATA_DIR,'pre-restauracion-'+stamp+'.json');
+fs.writeFileSync(preRestore,JSON.stringify(current,null,2),{flag:'wx'});
 const restored={...bundle.state,users:bundle.state.users,tasks:bundle.state.tasks,lpnCatalog:Array.isArray(bundle.state.lpnCatalog)?bundle.state.lpnCatalog:[],freeDeliveries:Array.isArray(bundle.state.freeDeliveries)?bundle.state.freeDeliveries:[]};
-writeState(restored);
-if(Array.isArray(bundle.history)){fs.mkdirSync(HISTORY_DIR,{recursive:true});for(const item of bundle.history){const target=path.join(HISTORY_DIR,item.name);if(!fs.existsSync(target)){const parsed=JSON.parse(item.content);if(parsed&&typeof parsed==='object')fs.writeFileSync(target,JSON.stringify(parsed,null,2));}}}
+writeState(restored);stateWritten=true;
+if(Array.isArray(bundle.history)){fs.mkdirSync(HISTORY_DIR,{recursive:true});for(const item of bundle.history){const target=path.join(HISTORY_DIR,item.name);if(!fs.existsSync(target)){const parsed=JSON.parse(item.content);if(parsed&&typeof parsed==='object')fs.writeFileSync(target,JSON.stringify(parsed,null,2),{flag:'wx'});}}}
 return sendJson(res,200,{ok:true,message:'Respaldo restaurado. Se guardó una copia previa y no se eliminaron jornadas históricas existentes.'});
-}catch(e){console.error('Error restaurando respaldo:',e);return sendJson(res,500,{ok:false,error:'No se pudo completar la restauración. Conserva el archivo de respaldo e inténtalo de nuevo.'});}
+}catch(e){
+console.error('Error restaurando respaldo:',e);
+if(stateWritten&&current&&current.state){try{writeState(current.state);}catch(rollbackError){console.error('FALLÓ la reversión del estado tras una restauración incompleta:',rollbackError);}}
+return sendJson(res,500,{ok:false,error:'No se pudo completar la restauración. Se intentó recuperar el estado anterior; conserva también el respaldo original y verifica los datos antes de continuar.'});
+}
 }).catch(e=>sendJson(res,400,{ok:false,error:e.message||'No se pudo leer el archivo.'}));return;
 }
 if(p==='/api/state'&&req.method==='GET'){return sendJson(res,200,readState());}
