@@ -30,15 +30,15 @@ if(!fs.existsSync(STATE_FILE))fs.writeFileSync(STATE_FILE,JSON.stringify({users:
 }
 function readState(){
 ensureState();
-try{
-const s=JSON.parse(fs.readFileSync(STATE_FILE,'utf8'));
-if(!s.users)s.users=defaultUsers;
-for(const [key,user] of Object.entries(defaultUsers)){if(!s.users[key])s.users[key]=user;}
-if(!Array.isArray(s.tasks))s.tasks=[];
+const raw=fs.readFileSync(STATE_FILE,'utf8');
+let s;
+try{s=JSON.parse(raw);}catch(e){throw new Error('El archivo de estado está dañado; se detuvo la operación para proteger los datos.');}
+if(!s||typeof s!=='object'||Array.isArray(s))throw new Error('El archivo de estado tiene un formato inválido; se detuvo la operación para proteger los datos.');
+if(!s.users||typeof s.users!=='object'||Array.isArray(s.users))throw new Error('El estado no contiene una lista de usuarios válida.');
+if(!Array.isArray(s.tasks))throw new Error('El estado no contiene una lista de tareas válida.');
 if(!Array.isArray(s.lpnCatalog))s.lpnCatalog=[];
 if(!Array.isArray(s.freeDeliveries))s.freeDeliveries=[];
 return s;
-}catch{return {users:defaultUsers,tasks:[],lpnCatalog:[],freeDeliveries:[]};}
 }
 function writeState(s){ensureState();const tmp=STATE_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(s,null,2));fs.renameSync(tmp,STATE_FILE);}
 function archiveTasks(tasks,meta={}){fs.mkdirSync(HISTORY_DIR,{recursive:true});const stamp=new Date().toISOString().replace(/[:.]/g,'-');const file=path.join(HISTORY_DIR,'jornada-'+stamp+'.json');fs.writeFileSync(file,JSON.stringify({app:'Familia AKT Control de Canastas',fechaCierre:new Date().toISOString(),meta,tasks},null,2));return {file:path.basename(file),count:tasks.length};}
@@ -89,7 +89,7 @@ res.end(JSON.stringify({ok:true,archived:archived.file,count:archived.count,comp
 }catch(e){console.error('Error cerrando jornada:',e);res.writeHead(500,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify({ok:false,error:'No se pudo cerrar la jornada'}));}});return;
 }
 if(p==='/api/state'&&req.method==='PUT'){
-let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{const incoming=JSON.parse(body||'{}');const current=readState();const state={...current,users:incoming.users||current.users,tasks:Array.isArray(incoming.tasks)?incoming.tasks:current.tasks,lpnCatalog:Array.isArray(incoming.lpnCatalog)?incoming.lpnCatalog:current.lpnCatalog,freeDeliveries:Array.isArray(incoming.freeDeliveries)?incoming.freeDeliveries:(current.freeDeliveries||[])};writeState(state);res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(state));}catch{res.writeHead(400);res.end(JSON.stringify({error:'JSON invalido'}));}});return;
+let body='';req.on('data',c=>{body+=c;if(Buffer.byteLength(body)>10*1024*1024){res.writeHead(413);res.end(JSON.stringify({error:'Solicitud demasiado grande'}));req.destroy();}});req.on('end',()=>{try{const incoming=JSON.parse(body||'{}');const current=readState();const session=getSession(req);if(!session)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});if(Object.prototype.hasOwnProperty.call(incoming,'users')&&!isAdmin(req))return sendJson(res,403,{ok:false,error:'Solo el administrador puede modificar usuarios y roles.'});const state={...current,users:isAdmin(req)&&incoming.users&&typeof incoming.users==='object'&&!Array.isArray(incoming.users)?incoming.users:current.users,tasks:Array.isArray(incoming.tasks)?incoming.tasks:current.tasks,lpnCatalog:Array.isArray(incoming.lpnCatalog)?incoming.lpnCatalog:current.lpnCatalog,freeDeliveries:Array.isArray(incoming.freeDeliveries)?incoming.freeDeliveries:(current.freeDeliveries||[])};writeState(state);res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(state));}catch(e){console.error('Error guardando estado:',e);sendJson(res,500,{ok:false,error:'No se pudo guardar el estado. Se protegieron los datos existentes.'});}});return;
 }
 let filePath=p==='/'?'/index.html':p;const file=path.normalize(path.join(ROOT,filePath));
 if(!file.startsWith(ROOT)){res.writeHead(403);return res.end('Forbidden');}
