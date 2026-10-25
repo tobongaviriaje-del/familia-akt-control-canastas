@@ -10,7 +10,11 @@ const HISTORY_DIR=path.join(DATA_DIR,'history');
 const sessions=new Map();
 const SESSION_TTL=12*60*60*1000;
 function sendJson(res,status,data){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(data));}
-function authorized(req){const h=String(req.headers.authorization||'');const token=h.startsWith('Bearer ')?h.slice(7):'';const session=sessions.get(token);if(!session)return false;if(session.expires<Date.now()){sessions.delete(token);return false;}session.expires=Date.now()+SESSION_TTL;return true;}
+function getSession(req){const h=String(req.headers.authorization||'');const token=h.startsWith('Bearer ')?h.slice(7):'';const session=sessions.get(token);if(!session)return null;if(session.expires<Date.now()){sessions.delete(token);return null;}session.expires=Date.now()+SESSION_TTL;return session;}
+function authorized(req){return !!getSession(req);}
+function isAdmin(req){const session=getSession(req);if(!session)return false;const user=readState().users[session.username];return !!user&&user.role==='Admin';}
+function readRequestBody(req,maxBytes=10*1024*1024){return new Promise((resolve,reject)=>{let body='';req.on('data',chunk=>{body+=chunk;if(Buffer.byteLength(body)>maxBytes){reject(new Error('El archivo supera el límite permitido'));req.destroy();}});req.on('end',()=>resolve(body));req.on('error',reject);});}
+function createBackupBundle(){const state=readState();let history=[];if(fs.existsSync(HISTORY_DIR)){history=fs.readdirSync(HISTORY_DIR).filter(name=>/^jornada-[a-zA-Z0-9T._-]+\.json$/.test(name)).map(name=>({name,content:fs.readFileSync(path.join(HISTORY_DIR,name),'utf8')}));}return {format:'familia-akt-backup-v1',createdAt:new Date().toISOString(),state,history};}
 
 const defaultUsers={
 admin:{pass:'admin',role:'Admin',name:'Administrador'},
@@ -48,6 +52,26 @@ if(p==='/api/login'&&req.method==='POST'){
 let body='';req.on('data',chunk=>{body+=chunk;if(body.length>10000)req.destroy();});req.on('end',()=>{try{const incoming=JSON.parse(body||'{}');const username=String(incoming.username||'').trim().toLowerCase();const password=String(incoming.password||'');const user=readState().users[username];if(!user||typeof user.pass!=='string'||user.pass!==password){return sendJson(res,401,{ok:false,error:'Usuario o contraseña incorrectos'});}const token=require('crypto').randomBytes(32).toString('hex');sessions.set(token,{username,expires:Date.now()+SESSION_TTL});return sendJson(res,200,{ok:true,token,user:{username,name:user.name,role:user.role,areas:user.areas||[],puestos:user.puestos||[]}});}catch{return sendJson(res,400,{ok:false,error:'Solicitud inválida'});}});return;
 }
 if(p.startsWith('/api/')&&p!=='/api/login'&&!authorized(req))return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
+if(p==='/api/backup'&&req.method==='GET'){
+if(!isAdmin(req))return sendJson(res,403,{ok:false,error:'Solo el administrador puede descargar respaldos.'});
+const bundle=createBackupBundle();const filename='familia-akt-respaldo-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';
+res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Content-Disposition':'attachment; filename="'+filename+'"','Cache-Control':'no-store'});return res.end(JSON.stringify(bundle,null,2));
+}
+if(p==='/api/backup/restore'&&req.method==='POST'){
+if(!isAdmin(req))return sendJson(res,403,{ok:false,error:'Solo el administrador puede restaurar respaldos.'});
+readRequestBody(req).then(body=>{
+let bundle;try{bundle=JSON.parse(body||'{}');}catch{return sendJson(res,400,{ok:false,error:'El archivo no contiene JSON válido.'});}
+if(!bundle||bundle.format!=='familia-akt-backup-v1'||!bundle.state||typeof bundle.state!=='object'||!bundle.state.users||!Array.isArray(bundle.state.tasks))return sendJson(res,400,{ok:false,error:'El archivo no es un respaldo válido de Familia AKT.'});
+if(bundle.history!==undefined&&(!Array.isArray(bundle.history)||bundle.history.some(x=>!x||typeof x.name!=='string'||!/^jornada-[a-zA-Z0-9T._-]+\.json$/.test(x.name)||typeof x.content!=='string')))return sendJson(res,400,{ok:false,error:'El historial del respaldo tiene un formato inválido.'});
+try{
+const current=createBackupBundle();const stamp=new Date().toISOString().replace(/[:.]/g,'-');const preRestore=path.join(DATA_DIR,'pre-restauracion-'+stamp+'.json');fs.writeFileSync(preRestore,JSON.stringify(current,null,2));
+const restored={...bundle.state,users:bundle.state.users,tasks:bundle.state.tasks,lpnCatalog:Array.isArray(bundle.state.lpnCatalog)?bundle.state.lpnCatalog:[],freeDeliveries:Array.isArray(bundle.state.freeDeliveries)?bundle.state.freeDeliveries:[]};
+writeState(restored);
+if(Array.isArray(bundle.history)){fs.mkdirSync(HISTORY_DIR,{recursive:true});for(const item of bundle.history){const target=path.join(HISTORY_DIR,item.name);if(!fs.existsSync(target)){const parsed=JSON.parse(item.content);if(parsed&&typeof parsed==='object')fs.writeFileSync(target,JSON.stringify(parsed,null,2));}}}
+return sendJson(res,200,{ok:true,message:'Respaldo restaurado. Se guardó una copia previa y no se eliminaron jornadas históricas existentes.'});
+}catch(e){console.error('Error restaurando respaldo:',e);return sendJson(res,500,{ok:false,error:'No se pudo completar la restauración. Conserva el archivo de respaldo e inténtalo de nuevo.'});}
+}).catch(e=>sendJson(res,400,{ok:false,error:e.message||'No se pudo leer el archivo.'}));return;
+}
 if(p==='/api/state'&&req.method==='GET'){return sendJson(res,200,readState());}
 if(p==='/api/jornada/cerrar'&&req.method==='POST'){
 let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{
@@ -71,7 +95,7 @@ let filePath=p==='/'?'/index.html':p;const file=path.normalize(path.join(ROOT,fi
 if(!file.startsWith(ROOT)){res.writeHead(403);return res.end('Forbidden');}
 fs.readFile(file,(err,data)=>{if(err){res.writeHead(404);return res.end('Not found');}let output=data;
 if(path.extname(file)==='.html'){
-  output=Buffer.from(data.toString('utf8').replace('</body>','<style>.estiba-destacada{background:#fff7ed;border:3px solid #f97316;color:#9a3412;border-radius:14px;padding:16px;margin:12px 0;font-size:24px;text-align:center}</style><script src="/patinador-estiba.js?v=44"></script><script src="/profesional.js?v=3"></script></body>'),'utf8');
+  output=Buffer.from(data.toString('utf8').replace('</body>','<style>.estiba-destacada{background:#fff7ed;border:3px solid #f97316;color:#9a3412;border-radius:14px;padding:16px;margin:12px 0;font-size:24px;text-align:center}</style><script src="/patinador-estiba.js?v=44"></script><script src="/profesional.js?v=3"></script><script src="/backup.js?v=1"></script></body>'),'utf8');
 }
 res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream'});res.end(output);});
 });
