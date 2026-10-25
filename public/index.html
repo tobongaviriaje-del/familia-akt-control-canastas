@@ -104,11 +104,7 @@ async function cloudLoad(){
     render();
     return true;
   }catch(e){
-    // Si hay datos locales dañados, no bloquear el botón de ingreso.
-    try{const su=localStorage.getItem('cc_users');users=su?JSON.parse(su):defaultUsers;if(!users||typeof users!=='object')users=defaultUsers;}catch(_){users=defaultUsers;}
-    try{const st=localStorage.getItem('cc_tasks');cloudTasks=st?JSON.parse(st):[];if(!Array.isArray(cloudTasks))cloudTasks=[];}catch(_){cloudTasks=[];}
-    try{const sl=localStorage.getItem('cc_lpn_catalog');lpnCatalog=sl?JSON.parse(sl):[];if(!Array.isArray(lpnCatalog))lpnCatalog=[];}catch(_){lpnCatalog=[];}
-    try{const sd=localStorage.getItem('cc_free_deliveries');freeDeliveries=sd?JSON.parse(sd):[];if(!Array.isArray(freeDeliveries))freeDeliveries=[];}catch(_){freeDeliveries=[];}
+    // No usar cuentas ni datos locales como sustituto del estado autorizado por el servidor.
     cloudReady=false;
     return false;
   }
@@ -367,10 +363,11 @@ async function login(){
   if(!response.ok||!result.ok||!result.token){if(err)err.textContent=result.error||'Usuario o contraseña incorrectos.';return;}
   sessionStorage.setItem('cc_session_token',result.token);
   cloudReady=false;
-  await cloudLoad();
+  const loaded=await cloudLoad();
+  if(!loaded){sessionStorage.removeItem('cc_session_token');if(err)err.textContent='No se pudo cargar el estado seguro desde la nube. Verifica tu conexión e inténtalo de nuevo.';return;}
   users=loadUsers();
-  const account=(users&&users[u])||result.user;
-  if(!account){sessionStorage.removeItem('cc_session_token');if(err)err.textContent='No se encontró el usuario. Inténtalo de nuevo.';return;}
+  const account=result.user;
+  if(!account||!account.role){sessionStorage.removeItem('cc_session_token');if(err)err.textContent='El servidor no devolvió un perfil válido. Contacta al administrador.';return;}
   current={...account,username:u};
   $('loginView').classList.add('hidden');$('appView').classList.remove('hidden');$('logout').classList.remove('hidden');
   $('welcome').textContent='Hola, '+(current.name||u);$('rolePill').textContent=current.role||'Usuario';
