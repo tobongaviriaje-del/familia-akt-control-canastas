@@ -7,6 +7,10 @@ const ROOT=path.join(__dirname,'public');
 const DATA_DIR=path.join(__dirname,'data');
 const STATE_FILE=path.join(DATA_DIR,'state.json');
 const HISTORY_DIR=path.join(DATA_DIR,'history');
+const sessions=new Map();
+const SESSION_TTL=12*60*60*1000;
+function sendJson(res,status,data){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(data));}
+function authorized(req){const h=String(req.headers.authorization||'');const token=h.startsWith('Bearer ')?h.slice(7):'';const session=sessions.get(token);if(!session)return false;if(session.expires<Date.now()){sessions.delete(token);return false;}session.expires=Date.now()+SESSION_TTL;return true;}
 
 const defaultUsers={
 admin:{pass:'admin',role:'Admin',name:'Administrador'},
@@ -37,10 +41,14 @@ function archiveTasks(tasks,meta={}){fs.mkdirSync(HISTORY_DIR,{recursive:true});
 const mime={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.json':'application/json; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.jpg':'image/jpeg'};
 const server=http.createServer((req,res)=>{
 const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);const p=decodeURIComponent(url.pathname);
-res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Permissions-Policy','camera=(self), microphone=(self)');res.setHeader('Cache-Control','no-store');
-if(req.method==='OPTIONS'){res.setHeader('Access-Control-Allow-Methods','GET,PUT,POST,OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type');return res.end();}
+res.setHeader('Vary','Origin');res.setHeader('Permissions-Policy','camera=(self), microphone=(self)');res.setHeader('Cache-Control','no-store');
+if(req.method==='OPTIONS'){res.setHeader('Access-Control-Allow-Methods','GET,PUT,POST,OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type, Authorization');return res.end();}
 if(p==='/health'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify({ok:true,service:'familia-akt-control-canastas'}));}
-if(p==='/api/state'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify(readState()));}
+if(p==='/api/login'&&req.method==='POST'){
+let body='';req.on('data',chunk=>{body+=chunk;if(body.length>10000)req.destroy();});req.on('end',()=>{try{const incoming=JSON.parse(body||'{}');const username=String(incoming.username||'').trim().toLowerCase();const password=String(incoming.password||'');const user=readState().users[username];if(!user||typeof user.pass!=='string'||user.pass!==password){return sendJson(res,401,{ok:false,error:'Usuario o contraseña incorrectos'});}const token=require('crypto').randomBytes(32).toString('hex');sessions.set(token,{username,expires:Date.now()+SESSION_TTL});return sendJson(res,200,{ok:true,token,user:{username,name:user.name,role:user.role,areas:user.areas||[],puestos:user.puestos||[]}});}catch{return sendJson(res,400,{ok:false,error:'Solicitud inválida'});}});return;
+}
+if(p.startsWith('/api/')&&p!=='/api/login'&&!authorized(req))return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
+if(p==='/api/state'&&req.method==='GET'){return sendJson(res,200,readState());}
 if(p==='/api/jornada/cerrar'&&req.method==='POST'){
 let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{
 const incoming=JSON.parse(body||'{}');const state=readState();
