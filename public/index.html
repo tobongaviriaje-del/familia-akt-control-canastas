@@ -655,7 +655,6 @@ function prepararEstandarNKD(input){
       if(test.cantidad<0)test.cantidad=find(['cantidad','qty']);
       if(test.cantidadUnidad<0)test.cantidadUnidad=find(['cant.','cant','cantidad por unidad']);
       if(test.puesto<0&&test.linea>=0)test.puesto=test.linea;
-      if(test.puesto<0&&test.linea>=0)test.puesto=test.linea;
       if(test.ean>=0&&test.producto>=0&&test.puesto>=0){headerAt=ri;dataStart=ri+span;ix=test;break;}
      }
     }
