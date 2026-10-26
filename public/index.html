@@ -658,12 +658,33 @@ function prepararEstandarNKD(input){
     });
    });
    if(!parsed.length){msg.className='error';msg.textContent='No encontré filas con EAN, Nombre, Cant. y Puesto. No se cambió el estándar guardado.';return;}
+   // Una sola fila por EAN + puesto normalizado. Las hojas fuente están antes que sus
+   // hojas resumen en el Excel, por lo que se conserva la primera fila y se ignoran copias.
+   const keyTask=x=>String(x.ean||'').trim().replace(/\\s+/g,'')+'|'+normalizarPuestoEstandar(x.puesto);
+   const uniqueMap=new Map();
+   parsed.forEach(x=>{const k=keyTask(x);if(!uniqueMap.has(k))uniqueMap.set(k,x);});
+   const uniqueParsed=[...uniqueMap.values()];
+   const duplicateRows=parsed.length-uniqueParsed.length;
+   // Al reemplazar un estándar, conservar las entregas/historial existentes. Si había
+   // copias previas de la misma referencia/puesto, consolidar sus unidades y eventos.
+   const previous=getTasks().filter(x=>x.standardNKD&&modeloDeTareaEstandar(x)===modelo);
+   const previousByKey=new Map();
+   previous.forEach(x=>{const k=keyTask(x);if(!previousByKey.has(k))previousByKey.set(k,[]);previousByKey.get(k).push(x);});
+   const mergedParsed=uniqueParsed.map(x=>{
+    const matches=previousByKey.get(keyTask(x))||[];
+    if(!matches.length)return x;
+    const entregado=matches.reduce((sum,y)=>sum+Math.max(0,Number(y.entregado)||0),0);
+    const events=[],seenEvents=new Set();
+    matches.forEach(y=>(Array.isArray(y.entregas)?y.entregas:[]).forEach(ev=>{const sig=ev&&ev.id!=null?'id:'+ev.id:JSON.stringify(ev);if(!seenEvents.has(sig)){seenEvents.add(sig);events.push(ev);}}));
+    const lastEntrega=[...matches].reverse().find(y=>y.entrega)?.entrega||null;
+    return {...x,id:matches[0].id||x.id,entregado,entregas:events,entrega:lastEntrega,estado:entregado>=Number(x.cantidad||0)?'Entregada':'Pendiente',creadoPor:matches[0].creadoPor||x.creadoPor};
+   });
    const old=getTasks().filter(x=>!(x.standardNKD&&modeloDeTareaEstandar(x)===modelo));
-   const tasks=[...old,...parsed];
+   const tasks=[...old,...mergedParsed];
    cloudTasks=tasks;localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
    fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({users,tasks:cloudTasks,lpnCatalog})})
     .then(r=>{if(!r.ok)throw new Error('No se pudo guardar');return r.json();})
-    .then(state=>{users=state.users||users;cloudTasks=Array.isArray(state.tasks)?state.tasks:tasks;lpnCatalog=Array.isArray(state.lpnCatalog)?state.lpnCatalog:lpnCatalog;cloudReady=true;localStorage.setItem('cc_users',JSON.stringify(users));localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));msg.className='pill';msg.textContent='✅ Estándar '+modelo+' guardado permanentemente: '+parsed.length+' referencias en '+matchedSheets+' hojas. Los otros modelos no se modificaron.';render();})
+    .then(state=>{users=state.users||users;cloudTasks=Array.isArray(state.tasks)?state.tasks:tasks;lpnCatalog=Array.isArray(state.lpnCatalog)?state.lpnCatalog:lpnCatalog;cloudReady=true;localStorage.setItem('cc_users',JSON.stringify(users));localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));msg.className='pill';msg.textContent='✅ Estándar '+modelo+' guardado: '+uniqueParsed.length+' referencias únicas en '+matchedSheets+' hojas; '+duplicateRows+' filas repetidas omitidas. Entregas e historial coincidentes conservados. Los otros modelos no se modificaron.';render();})
     .catch(()=>{msg.className='error';msg.textContent='No se pudo confirmar el guardado en la nube. Revisa la conexión antes de cerrar esta pantalla.';});
   }catch(err){msg.className='error';msg.textContent='No se pudo leer el Excel. No se cambió el estándar guardado.';}
  };
