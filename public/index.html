@@ -633,7 +633,7 @@ function cambiarModeloPatinador(modelo){
  renderPatinadorChecklist();
 }
 function prepararEstandarNKD(input){
- const file=input.files&&input.files[0],msg=$('estandarNKDMsg'),modelo=modeloEstandarSeleccionado();if(!file)return;
+ const file=input.files&&input.files[0],msg=$('estandarNKDMsg'),modelo=modeloEstandarSeleccionado();if(!file)return;input.value='';
  if(!window.XLSX){msg.textContent='No se pudo abrir Excel. Revisa la conexión e inténtalo de nuevo.';return;}
  msg.className='muted';msg.textContent='Leyendo todas las hojas de '+file.name+' para '+modelo+'…';
  const reader=new FileReader();
@@ -752,14 +752,14 @@ async function limpiarDuplicadosNKD(){
  if(!token){alert('Tu sesión venció. Ingresa nuevamente.');return;}
  msg.className='muted';msg.textContent='Revisando duplicados guardados…';
  try{
-  const previewResponse=await nativeFetch('/api/admin/deduplicate-standard-tasks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({preview:true,confirmacion:'LIMPIAR DUPLICADOS NKD'})});
+  const previewResponse=await fetch('/api/admin/deduplicate-standard-tasks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({preview:true,confirmacion:'LIMPIAR DUPLICADOS NKD'})});
   const preview=await previewResponse.json();
   if(!previewResponse.ok||!preview.ok)throw new Error(preview.error||'No se pudo revisar el estado.');
   if(!preview.duplicateRows){msg.textContent=preview.skippedConflicts?'No hay duplicados exactos seguros para limpiar. '+preview.skippedConflicts+' grupo(s) tienen cantidades distintas y se dejaron intactos.':'No se encontraron duplicados exactos en NKD.';return;}
   const detail='Se encontraron '+preview.duplicateGroups+' grupo(s) duplicados y '+preview.duplicateRows+' fila(s) sobrantes en NKD. '+(preview.skippedConflicts?'Se dejarán intactos '+preview.skippedConflicts+' grupo(s) con cantidades distintas. ':'')+'Se guardará una copia íntegra antes de limpiar. ¿Continuar?';
   if(!confirm(detail)){msg.textContent='Limpieza cancelada; no se cambió ningún dato.';return;}
   msg.textContent='Guardando respaldo y limpiando…';
-  const response=await nativeFetch('/api/admin/deduplicate-standard-tasks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmacion:'LIMPIAR DUPLICADOS NKD'})});
+  const response=await fetch('/api/admin/deduplicate-standard-tasks',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmacion:'LIMPIAR DUPLICADOS NKD'})});
   const result=await response.json();
   if(!response.ok||!result.ok)throw new Error(result.error||'No se pudo limpiar.');
   await cloudLoad();
