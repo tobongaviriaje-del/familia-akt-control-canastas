@@ -48,6 +48,39 @@ if(p==='/api/login'&&req.method==='POST'){
 let body='';req.on('data',chunk=>{body+=chunk;if(body.length>10000)req.destroy();});req.on('end',()=>{try{const incoming=JSON.parse(body||'{}');const username=String(incoming.username||'').trim().toLowerCase();const password=String(incoming.password||'');const user=readState().users[username];if(!user||typeof user.pass!=='string'||user.pass!==password){return sendJson(res,401,{ok:false,error:'Usuario o contraseña incorrectos'});}const token=require('crypto').randomBytes(32).toString('hex');sessions.set(token,{username,expires:Date.now()+SESSION_TTL});return sendJson(res,200,{ok:true,token,user:{username,name:user.name,role:user.role,areas:user.areas||[],puestos:user.puestos||[]}});}catch{return sendJson(res,400,{ok:false,error:'Solicitud inválida'});}});return;
 }
 if(p.startsWith('/api/')&&p!=='/api/login'&&!authorized(req))return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
+if(p==='/api/admin/deduplicate-standard-tasks'&&req.method==='POST'){
+ const sessionToken=String(req.headers.authorization||'').slice(7),session=sessions.get(sessionToken),state=readState();
+ if(!session||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo administración puede limpiar duplicados.'});
+ let body='';req.on('data',c=>{body+=c;if(body.length>10000)req.destroy();});req.on('end',()=>{
+  try{
+   const incoming=JSON.parse(body||'{}');
+   if(incoming.confirmacion!=='LIMPIAR DUPLICADOS NKD')return sendJson(res,400,{ok:false,error:'Confirmación inválida.'});
+   const norm=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
+   const puesto=v=>{const x=norm(v);let m=x.match(/^pre\s*0*(\d+)/);if(m)return 'pre '+Number(m[1]);m=x.match(/^0*(\d+)\s*(derecho|izquierdo)$/);if(m)return m[2]+' '+Number(m[1]);m=x.match(/^(derecho|izquierdo|final(?: de linea)?)\s*0*(\d+)/);if(m)return (m[1].startsWith('final')?'final':m[1])+' '+Number(m[2]);return x;};
+   const isNkd=t=>t&&t.standardNKD&&String(t.standardMoto||t.modelo||t.modeloMoto||t.moto||'NKD').trim().toUpperCase()==='NKD';
+   const key=t=>[norm(t.ean).replace(/\s/g,''),norm(t.producto||t.lpn||t.ean),puesto(t.puesto)].join('|');
+   const groups=new Map();
+   state.tasks.forEach((t,i)=>{if(!isNkd(t)||!String(t.ean||'').trim()||!String(t.puesto||'').trim())return;const k=key(t);if(!groups.has(k))groups.set(k,[]);groups.get(k).push({t,i});});
+   const dupGroups=[...groups.values()].filter(g=>g.length>1);
+   if(incoming.preview===true)return sendJson(res,200,{ok:true,preview:true,duplicateGroups:dupGroups.length,duplicateRows:dupGroups.reduce((n,g)=>n+g.length-1,0),examples:dupGroups.slice(0,25).map(g=>({ean:g[0].t.ean,producto:g[0].t.producto,puesto:g[0].t.puesto,copias:g.length,entregados:g.map(x=>Number(x.t.entregado)||0),cantidades:g.map(x=>Number(x.t.cantidad)||0)}))});
+   const backupDir=path.join(DATA_DIR,'history');fs.mkdirSync(backupDir,{recursive:true});
+   const stamp=new Date().toISOString().replace(/[:.]/g,'-'),backupName='backup-antes-limpieza-duplicados-'+stamp+'.json';
+   fs.writeFileSync(path.join(backupDir,backupName),JSON.stringify({fecha:new Date().toISOString(),motivo:'Backup íntegro previo a deduplicación NKD',state},null,2));
+   const remove=new Set(),replace=new Map();
+   for(const g of dupGroups){
+    const score=x=>(Number(x.t.entregado)||0)*100000+(Array.isArray(x.t.entregas)?x.t.entregas.length:0)*100+(x.t.estado==='Entregada'?1:0);
+    const sorted=[...g].sort((a,b)=>score(b)-score(a)),keep=sorted[0],events=[],seen=new Set();
+    for(const item of sorted)for(const ev of (Array.isArray(item.t.entregas)?item.t.entregas:[])){const sig=ev&&ev.id!=null?'id:'+ev.id:JSON.stringify(ev);if(!seen.has(sig)){seen.add(sig);events.push(ev);}}
+    const delivered=Math.max(...sorted.map(x=>Math.max(0,Number(x.t.entregado)||0)));
+    replace.set(keep.i,{...keep.t,entregado:delivered,entregas:events,entrega:sorted.find(x=>x.t.entrega)?.t.entrega||keep.t.entrega,estado:delivered>=Number(keep.t.cantidad||0)?'Entregada':'Pendiente'});
+    sorted.slice(1).forEach(x=>remove.add(x.i));
+   }
+   state.tasks=state.tasks.map((t,i)=>replace.has(i)?replace.get(i):t).filter((t,i)=>!remove.has(i));
+   writeState(state);
+   return sendJson(res,200,{ok:true,backup:backupName,duplicateGroups:dupGroups.length,removed:remove.size,remainingTasks:state.tasks.length});
+  }catch(e){console.error('deduplicate standard tasks failed',e);return sendJson(res,500,{ok:false,error:'No se pudo completar la limpieza.'});}
+ });return;
+}
 if(p==='/api/state'&&req.method==='GET'){return sendJson(res,200,readState());}
 if(p==='/api/jornada/cerrar'&&req.method==='POST'){
 let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{
