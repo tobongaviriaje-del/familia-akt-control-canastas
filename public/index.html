@@ -403,13 +403,32 @@ function tareaPerteneceZona(t,zona){
  if(z==='pre')return area==='pre'||/^pre\\s*\\d*/.test(puesto);
  return area===z||new RegExp('^'+z+'(?:\\\\s*\\d+)?$').test(puesto);
 }
+function tareasSinDuplicadosEstandar(tasks){
+ const key=x=>{
+  if(!x||!x.standardNKD)return null;
+  const clean=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
+  const ean=String(x.ean||'').replace(/\s+/g,'').toLowerCase();
+  const ref=clean(x.producto||x.lpn||ean);
+  const puesto=normalizarPuestoEstandar(x.puesto).toLowerCase();
+  return [String(modeloDeTareaEstandar(x)||'NKD').toUpperCase(),ean,ref,puesto].join('|');
+ };
+ const chosen=new Map(),other=[];
+ for(const x of (Array.isArray(tasks)?tasks:[])){
+  const k=key(x);if(!k){other.push(x);continue;}
+  const old=chosen.get(k);
+  if(!old){chosen.set(k,x);continue;}
+  const score=t=>(Number(t.entregado)||0)*100000+(Array.isArray(t.entregas)?t.entregas.length:0)*100+(t.estado==='Entregada'?1:0);
+  if(score(x)>score(old))chosen.set(k,x);
+ }
+ return [...other,...chosen.values()];
+}
 function mostrarEntregasZona(zona){
  zonaEntregaActiva=zona;
  const panel=$('entregasZonaPanel');
  if(!panel){alert('No se encontró el panel de entregas. Recarga la aplicación e intenta de nuevo.');return;}
  const normal=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
  const puestosUsuario=(current&&current.role==='Patinador'&&Array.isArray(current.puestos)&&current.puestos.length)?current.puestos.map(normalizarPuestoEstandar):null;
- const tasks=getTasks().filter(x=>{
+ const tasks=tareasSinDuplicadosEstandar(getTasks()).filter(x=>{
   if(x.estado==='Entregada'||Number(x.entregado||0)>=Number(x.cantidad||0))return false;
   const area=normal(x.area),puesto=normal(x.puesto),z=normal(zona);
   if(current&&current.role==='Patinador'){if(!tareaAsignadaAlPatinador(x))return false;}
@@ -731,7 +750,7 @@ function renderPatinadorChecklist(){
  const selector=$('modeloEstandarPatinador');let modelo='NKD';
  try{modelo=localStorage.getItem('cc_modelo_moto')||'NKD';}catch(e){}
  if(selector&&selector.value!==modelo)selector.value=modelo;
- const assigned=getTasks().filter(x=>x.standardNKD&&modeloDeTareaEstandar(x)===modelo&&tareaAsignadaAlPatinador(x));
+ const assigned=tareasSinDuplicadosEstandar(getTasks()).filter(x=>x.standardNKD&&modeloDeTareaEstandar(x)===modelo&&tareaAsignadaAlPatinador(x));
  const total=assigned.length,done=assigned.filter(x=>(Number(x.entregado)||0)>=unidadesObjetivoEstandar(x)).length;
  const units=assigned.reduce((n,x)=>n+(Number(x.entregado)||0),0),target=assigned.reduce((n,x)=>n+unidadesObjetivoEstandar(x),0);
  const left=assigned.length?Math.min(...assigned.map(x=>{const s=resumenCantidadLote(x,assigned);return s.aplica?s.restante:Math.max(0,unidadesObjetivoEstandar(x)-(Number(x.entregado)||0));})):0;
