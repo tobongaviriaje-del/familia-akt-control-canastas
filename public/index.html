@@ -644,9 +644,9 @@ function prepararEstandarNKD(input){
     const rows=XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,defval:'',raw:false});
     let headerAt=-1,dataStart=-1,ix={};
     const normalHeader=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
-    for(let ri=0;ri<Math.min(rows.length,35);ri++){
-     // Algunos Excel de modelos distintos traen título y encabezados repartidos en varias filas.
-     for(let span=1;span<=3&&ri+span<=rows.length;span++){
+    // Buscar primero filas de encabezado simples en todo el libro; solo recurrir a encabezados combinados si hace falta.
+    for(let span=1;span<=3&&headerAt<0;span++){
+     for(let ri=0;ri<Math.min(rows.length,35)&&ri+span<=rows.length;ri++){
       const columnCount=Math.max(...rows.slice(ri,ri+span).map(r=>r.length));
       const h=Array.from({length:columnCount},(_,ci)=>Array.from({length:span},(_,k)=>normalHeader(rows[ri+span-1-k]?.[ci])).filter(Boolean).join(' '));
       const find=terms=>{for(const t of terms){const j=h.findIndex(v=>v===t);if(j>=0)return j;}for(const t of terms){const j=h.findIndex(v=>v.endsWith(' '+t)||v.startsWith(t+' '));if(j>=0)return j;}return -1;};
@@ -657,7 +657,6 @@ function prepararEstandarNKD(input){
       if(test.puesto<0&&test.linea>=0)test.puesto=test.linea;
       if(test.ean>=0&&test.producto>=0&&test.puesto>=0){headerAt=ri;dataStart=ri+span;ix=test;break;}
      }
-     if(headerAt>=0)break;
     }
     if(headerAt<0)return;matchedSheets++;
     rows.slice(dataStart).forEach(row=>{
