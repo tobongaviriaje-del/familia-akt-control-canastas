@@ -643,7 +643,7 @@ function prepararEstandarNKD(input){
    wb.SheetNames.forEach(sheetName=>{
     const rows=XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,defval:'',raw:false});
     let headerAt=-1,dataStart=-1,ix={};
-    const normalHeader=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/\\s+/g,' ');
+    const normalHeader=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
     for(let ri=0;ri<Math.min(rows.length,35);ri++){
      // Algunos Excel de modelos distintos traen título y encabezados repartidos en varias filas.
      for(let span=1;span<=3&&ri+span<=rows.length;span++){
@@ -654,6 +654,7 @@ function prepararEstandarNKD(input){
       const test={ean:find(['ean','ean 13','codigo ean','cod ean','codigo de barras','codigo barras','codigo de pieza','referencia de pieza','ref. pieza','referencia']),producto:find(['nombre de pieza','nombre pieza','descripcion de pieza','descripcion pieza','nombre','producto','descripcion','mercancia','material','componente','denominacion']),cantidad:exact(['cantidad','unidades','piezas']),cantidadUnidad:exact(['cant.','cant','cantidad por unidad','unidades por unidad']),lote:find(['lote','cantidad lote','total lote','saldo lote','cantidad total','total piezas','lote (unidades)']),cantidadCanasta:find(['unidades por canasta','unidad por canasta','cantidad por canasta','capacidad canasta','cant. canasta','piezas por canasta','cantidad canasta']),canasta:exact(['canasta']),numCanastas:find(['#canastas','n°canastas','num canastas','numero de canastas','cantidad de canastas','canastas','# canasta por lote','total canasta']),puesto:find(['puesto de trabajo','puesto','ubicacion','ubicación','posicion','posición','estacion','estación','equipo','operacion','operación','estacion de trabajo']),linea:find(['linea','línea'])};
       if(test.cantidad<0)test.cantidad=find(['cantidad','qty']);
       if(test.cantidadUnidad<0)test.cantidadUnidad=find(['cant.','cant','cantidad por unidad']);
+      if(test.puesto<0&&test.linea>=0)test.puesto=test.linea;
       if(test.ean>=0&&test.producto>=0&&test.puesto>=0){headerAt=ri;dataStart=ri+span;ix=test;break;}
      }
      if(headerAt>=0)break;
@@ -665,7 +666,7 @@ function prepararEstandarNKD(input){
      const puestoFuente=get('puesto')||get('linea')||get('lineaTrabajo')||'';
      const puesto=normalizarPuestoEstandar(puestoFuente);
      const eanOriginal=get('ean');
-     const ean=eanOriginal||('SIN-EAN-'+modelo.replace(/[^a-z0-9]/gi,'').toUpperCase()+'-'+String(producto).trim().toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/\\s+/g,'-')+'-'+String(puesto).trim().toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/\\s+/g,'-'));
+     const ean=eanOriginal||('SIN-EAN-'+modelo.replace(/[^a-z0-9]/gi,'').toUpperCase()+'-'+String(producto).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'-')+'-'+String(puesto).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'-'));
      const cantidadUnidad=Number(String(get('cantidadUnidad')).replace(',','.'))||0;
      const loteRaw=get('lote'),cantidadRaw=get('cantidad'),cantidadCanastaRaw=get('cantidadCanasta'),canasta=get('canasta'),numCanastasRaw=get('numCanastas');
      const loteExcel=Number(String(loteRaw).replace(',','.'))||0;
@@ -684,7 +685,7 @@ function prepararEstandarNKD(input){
    if(!parsed.length){msg.className='error';msg.textContent='No pude identificar referencias válidas. El Excel debe tener columnas equivalentes a código EAN/referencia, nombre o descripción de pieza y puesto/ubicación. No se cambió el estándar guardado.';return;}
    // Una sola fila por EAN + puesto normalizado. Las hojas fuente están antes que sus
    // hojas resumen en el Excel, por lo que se conserva la primera fila y se ignoran copias.
-   const keyTask=x=>String(x.ean||'').trim().replace(/\\s+/g,'')+'|'+String(x.producto||'').trim().toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/\\s+/g,' ')+'|'+normalizarPuestoEstandar(x.puesto);
+   const keyTask=x=>String(x.ean||'').trim().replace(/\s+/g,'').toUpperCase()+'|'+normalizarPuestoEstandar(x.puesto).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
    const uniqueMap=new Map();
    parsed.forEach(x=>{const k=keyTask(x);if(!uniqueMap.has(k))uniqueMap.set(k,x);});
    const uniqueParsed=[...uniqueMap.values()];
