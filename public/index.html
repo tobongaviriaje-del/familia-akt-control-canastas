@@ -635,7 +635,7 @@ function cambiarModeloPatinador(modelo){
 function prepararEstandarNKD(input){
  const file=input.files&&input.files[0],msg=$('estandarNKDMsg'),modelo=modeloEstandarSeleccionado();if(!file)return;input.value='';
  if(!window.XLSX){msg.textContent='No se pudo abrir Excel. Revisa la conexión e inténtalo de nuevo.';return;}
- msg.className='muted';msg.textContent='Leyendo todas las hojas de '+file.name+' para '+modelo+'…';
+ msg.className='muted';msg.textContent='Identificando columnas y referencias en todas las hojas de '+file.name+' para '+modelo+'…';
  const reader=new FileReader();
  reader.onload=e=>{
   try{
@@ -650,7 +650,7 @@ function prepararEstandarNKD(input){
       const h=rows[ri].map((v,ci)=>Array.from({length:span},(_,k)=>normalHeader(rows[ri+k]?.[ci])).filter(Boolean).join(' '));
       const find=terms=>h.findIndex(v=>terms.some(t=>v===t||v.includes(t)));
       const exact=names=>{for(const name of names){const j=h.findIndex(v=>v===name||v.endsWith(' '+name));if(j>=0)return j;}return -1;};
-      const test={ean:find(['ean','codigo de barras','referencia']),producto:find(['nombre','producto','descripcion','mercancia']),cantidad:exact(['cantidad']),cantidadUnidad:exact(['cant.','cant','cantidad por unidad']),lote:find(['lote','cantidad lote','total lote','saldo lote']),cantidadCanasta:find(['unidades por canasta','unidad por canasta','cantidad por canasta','capacidad canasta','cant. canasta']),canasta:exact(['canasta']),numCanastas:find(['#canastas','n°canastas','num canastas','canastas']),puesto:find(['puesto','ubicacion','posicion'])};
+      const test={ean:find(['ean','ean 13','codigo ean','cod ean','codigo de barras','codigo barras','codigo de pieza','referencia de pieza','ref. pieza','referencia']),producto:find(['nombre de pieza','nombre pieza','descripcion de pieza','descripcion pieza','nombre','producto','descripcion','mercancia','material','componente','denominacion']),cantidad:exact(['cantidad','unidades','piezas']),cantidadUnidad:exact(['cant.','cant','cantidad por unidad','unidades por unidad']),lote:find(['lote','cantidad lote','total lote','saldo lote','cantidad total','total piezas']),cantidadCanasta:find(['unidades por canasta','unidad por canasta','cantidad por canasta','capacidad canasta','cant. canasta','piezas por canasta','cantidad canasta']),canasta:exact(['canasta']),numCanastas:find(['#canastas','n°canastas','num canastas','numero de canastas','cantidad de canastas','canastas']),puesto:find(['puesto de trabajo','puesto','ubicacion','ubicación','posicion','posición','estacion','estación','equipo','operacion','operación','estacion de trabajo'])};
       if(test.cantidad<0)test.cantidad=find(['cantidad','qty']);
       if(test.cantidadUnidad<0)test.cantidadUnidad=find(['cant.','cant','cantidad por unidad']);
       if(test.ean>=0&&test.producto>=0&&test.puesto>=0){headerAt=ri;dataStart=ri+span;ix=test;break;}
@@ -676,7 +676,7 @@ function prepararEstandarNKD(input){
      parsed.push({id:'std-'+modelo.replace(/[^a-z0-9]/gi,'').toLowerCase()+'-'+Date.now()+'-'+parsed.length,lpn:'ESTANDAR-'+modelo,estiba:sheetName,ean,producto,cantidad,cantidadUnidad,lote:lote>0?lote:cantidad,cantidadCanastaRaw:cantidadCanastaRaw,cantidadCanasta,canasta,numCanastasRaw:numCanastasMostrar,numCanastas,area:/^PRE /i.test(puesto)?'PRE':/^Derecho /i.test(puesto)?'Derecho':/^Izquierdo /i.test(puesto)?'Izquierdo':'Final de línea',puesto,turno:'Todos',estado:'Pendiente',entregado:0,entregas:[],standardNKD:true,standardMoto:modelo,hojaEstandar:sheetName,creadoPor:current?.name||'Administrador'});
     });
    });
-   if(!parsed.length){msg.className='error';msg.textContent='No encontré filas con EAN, Nombre, Cant. y Puesto. No se cambió el estándar guardado.';return;}
+   if(!parsed.length){msg.className='error';msg.textContent='No pude identificar referencias válidas. El Excel debe tener columnas equivalentes a código EAN/referencia, nombre o descripción de pieza y puesto/ubicación. No se cambió el estándar guardado.';return;}
    // Una sola fila por EAN + puesto normalizado. Las hojas fuente están antes que sus
    // hojas resumen en el Excel, por lo que se conserva la primera fila y se ignoran copias.
    const keyTask=x=>String(x.ean||'').trim().replace(/\\s+/g,'')+'|'+String(x.producto||'').trim().toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/\\s+/g,' ')+'|'+normalizarPuestoEstandar(x.puesto);
@@ -703,7 +703,7 @@ function prepararEstandarNKD(input){
    cloudTasks=tasks;localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
    fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({users,tasks:cloudTasks,lpnCatalog})})
     .then(r=>{if(!r.ok)throw new Error('No se pudo guardar');return r.json();})
-    .then(state=>{users=state.users||users;cloudTasks=Array.isArray(state.tasks)?state.tasks:tasks;lpnCatalog=Array.isArray(state.lpnCatalog)?state.lpnCatalog:lpnCatalog;cloudReady=true;localStorage.setItem('cc_users',JSON.stringify(users));localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));msg.className='pill';msg.textContent='✅ Estándar '+modelo+' guardado: '+uniqueParsed.length+' referencias únicas en '+matchedSheets+' hojas; '+duplicateRows+' filas repetidas omitidas. Entregas e historial coincidentes conservados. Los otros modelos no se modificaron.';render();})
+    .then(state=>{users=state.users||users;cloudTasks=Array.isArray(state.tasks)?state.tasks:tasks;lpnCatalog=Array.isArray(state.lpnCatalog)?state.lpnCatalog:lpnCatalog;cloudReady=true;localStorage.setItem('cc_users',JSON.stringify(users));localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));msg.className='pill';msg.textContent='✅ Excel identificado y organizado como estándar '+modelo+': '+uniqueParsed.length+' referencias únicas en '+matchedSheets+' hojas; '+duplicateRows+' filas repetidas omitidas por código/referencia, pieza y puesto. Entregas e historial coincidentes conservados. Los otros modelos no se modificaron.';render();})
     .catch(()=>{msg.className='error';msg.textContent='No se pudo confirmar el guardado en la nube. Revisa la conexión antes de cerrar esta pantalla.';});
   }catch(err){msg.className='error';msg.textContent='No se pudo leer el Excel. No se cambió el estándar guardado.';}
  };
