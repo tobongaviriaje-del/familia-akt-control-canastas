@@ -598,6 +598,13 @@ function normalizarPuestoEstandar(v){
  m=x.match(/^(derecho|izquierdo|final(?: de linea)?)\s*0*(\d+)/);if(m)return (m[1].startsWith('final')?'Final':m[1].charAt(0).toUpperCase()+m[1].slice(1))+' '+Number(m[2]);
  return String(v||'').trim();
 }
+function patinadorDeHojaEstandar(hoja){
+ const n=String(hoja||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
+ if(n==='hamilton'||n==='hamilton1')return 'Hamilton';
+ if(n==='jorge'||n==='jorge 1')return 'Jorge';
+ if(n==='juan esteban'||n==='juan esteban 1')return 'Juan Esteban';
+ return '';
+}
 function modeloEstandarSeleccionado(){return $('modeloEstandarAdmin')?.value||'NKD';}
 function loteInicialPorModelo(modelo){const m=String(modelo||'').trim().toUpperCase();if(m==='CR4 150')return 110;if(m==='CR4 125')return 270;if(m==='VOGE 180')return 62;return 0;}
 function actualizarLoteManual(){
@@ -686,7 +693,7 @@ function prepararEstandarNKD(input){
      const numCanastasMostrar=lote>0&&cantidadCanasta>0?String(numCanastas):numCanastasRaw;
      const cantidad=lote>0?lote:(cantidadCanasta>0&&numCanastas>0?cantidadCanasta*numCanastas:(cantidadCol>0?cantidadCol:(cantidadUnidad>0?cantidadUnidad:0)));
      if(!ean||!producto||!puesto||!Number.isFinite(cantidad)||cantidad<0)return;
-     parsed.push({id:'std-'+modelo.replace(/[^a-z0-9]/gi,'').toLowerCase()+'-'+Date.now()+'-'+parsed.length,lpn:'ESTANDAR-'+modelo,estiba:sheetName,ean,producto,cantidad,cantidadUnidad,lote:lote>0?lote:cantidad,cantidadCanastaRaw:cantidadCanastaRaw,cantidadCanasta,canasta,numCanastasRaw:numCanastasMostrar,numCanastas,area:/^PRE /i.test(puesto)?'PRE':/^Derecho /i.test(puesto)?'Derecho':/^Izquierdo /i.test(puesto)?'Izquierdo':'Final de línea',puesto,turno:'Todos',estado:'Pendiente',entregado:0,entregas:[],canastasEntregadas:0,confirmacionesCanastas:[],standardNKD:true,standardMoto:modelo,hojaEstandar:sheetName,creadoPor:current?.name||'Administrador'});
+     parsed.push({id:'std-'+modelo.replace(/[^a-z0-9]/gi,'').toLowerCase()+'-'+Date.now()+'-'+parsed.length,lpn:'ESTANDAR-'+modelo,estiba:sheetName,ean,producto,cantidad,cantidadUnidad,lote:lote>0?lote:cantidad,cantidadCanastaRaw:cantidadCanastaRaw,cantidadCanasta,canasta,numCanastasRaw:numCanastasMostrar,numCanastas,area:/^PRE /i.test(puesto)?'PRE':/^Derecho /i.test(puesto)?'Derecho':/^Izquierdo /i.test(puesto)?'Izquierdo':'Final de línea',puesto,turno:'Todos',estado:'Pendiente',entregado:0,entregas:[],canastasEntregadas:0,confirmacionesCanastas:[],standardNKD:true,standardMoto:modelo,hojaEstandar:sheetName,patinadorEstandar:patinadorDeHojaEstandar(sheetName),creadoPor:current?.name||'Administrador'});
     });
    });
    if(!parsed.length){msg.className='error';msg.textContent='No pude identificar referencias válidas. El Excel debe tener columnas equivalentes a código EAN/referencia, nombre o descripción de pieza y puesto/ubicación. No se cambió el estándar guardado.';return;}
@@ -753,6 +760,9 @@ function reiniciarDiaNKD(){
 function tareaAsignadaAlPatinador(tarea){
  if(!current||current.role!=='Patinador'||!tarea)return false;
  const normalArea=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
+ // Los estándares importados desde NKD ya vienen distribuidos por hoja/patinador.
+ // No volver a mostrar una misma tarea a otros patinadores solo porque comparten puesto.
+ if(tarea.patinadorEstandar)return normalArea(current.name)===normalArea(tarea.patinadorEstandar);
  const puestos=Array.isArray(current.puestos)?current.puestos.map(normalizarPuestoEstandar).filter(Boolean):[];
  const areas=Array.isArray(current.areas)?current.areas.map(normalArea).filter(Boolean):[];
  const puesto=normalizarPuestoEstandar(tarea.puesto);
