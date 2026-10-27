@@ -429,7 +429,7 @@ function mostrarEntregasZona(zona){
  const normal=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
  const puestosUsuario=(current&&current.role==='Patinador'&&Array.isArray(current.puestos)&&current.puestos.length)?current.puestos.map(normalizarPuestoEstandar):null;
  const tasks=tareasSinDuplicadosEstandar(getTasks()).filter(x=>{
-  if(x.estado==='Entregada'||Number(x.entregado||0)>=Number(x.cantidad||0))return false;
+  const objetivo=unidadesObjetivoEstandar(x);if(x.estado==='Entregada'||(objetivo>0&&Number(x.entregado||0)>=objetivo))return false;
   const area=normal(x.area),puesto=normal(x.puesto),z=normal(zona);
   if(current&&current.role==='Patinador'){if(!tareaAsignadaAlPatinador(x))return false;}
   else if(!autorizadoParaTarea(x))return false;
@@ -437,7 +437,7 @@ function mostrarEntregasZona(zona){
   return area===z||new RegExp('^'+z+'(?:\\s*\\d+)?$').test(puesto);
  });
  if(!tasks.length){panel.innerHTML='<p class="notice">No hay tareas pendientes para '+zona+'. Si esperabas ver tareas, verifica que estén cargadas y asignadas a tu puesto.</p>';panel.scrollIntoView({behavior:'smooth',block:'center'});return;}
- panel.innerHTML='<h3>📦 Pendientes: '+zona+'</h3><div class="scroll"><table><thead><tr><th>LPN / Producto</th><th>Puesto</th><th>Solicitado</th><th>Entregado</th><th>Falta por referencia</th><th>Cantidad ahora</th><th>Acción</th></tr></thead><tbody>'+tasks.map(x=>{const rest=Math.max(0,Number(x.cantidad||0)-Number(x.entregado||0));return '<tr><td><b>'+x.lpn+'</b><br>'+x.producto+'<br><small>EAN: '+(x.ean||'-')+' · '+(x.estiba||'Estiba 1')+'</small></td><td>'+x.puesto+'</td><td>'+x.cantidad+'</td><td>'+(x.entregado||0)+'</td><td><b>'+rest+'</b></td><td><input id="zonaQty'+x.id+'" type="number" min="1" max="'+rest+'" value="'+rest+'" style="min-width:85px"></td><td><button type="button" class="small" onclick="entregarDesdeZona(\''+x.id+'\',\''+zona+'\')">✓ ENTREGAR</button></td></tr>';}).join('')+'</tbody></table></div>';
+ panel.innerHTML='<h3>📦 Pendientes: '+zona+'</h3><div class="scroll"><table><thead><tr><th>LPN / Producto</th><th>Puesto</th><th>Solicitado</th><th>Entregado</th><th>Falta por referencia</th><th>Cantidad ahora</th><th>Acción</th></tr></thead><tbody>'+tasks.map(x=>{const objetivo=unidadesObjetivoEstandar(x),rest=Math.max(0,objetivo-Number(x.entregado||0));return '<tr><td><b>'+x.lpn+'</b><br>'+x.producto+'<br><small>EAN: '+(x.ean||'-')+' · '+(x.estiba||'Estiba 1')+'</small></td><td>'+x.puesto+'</td><td>'+(objetivo>0?objetivo:'Por definir')+'</td><td>'+(x.entregado||0)+'</td><td><b>'+(objetivo>0?rest:'Por definir')+'</b></td><td><input id="zonaQty'+x.id+'" type="number" min="1" '+(rest>0?'max="'+rest+'"':'disabled')+' value="'+(rest>0?rest:1)+'" style="min-width:85px"></td><td><button type="button" class="small" '+(rest>0?'':'disabled title="Configura primero unidades por canasta y cantidad de canastas"')+' onclick="entregarDesdeZona(\''+x.id+'\',\''+zona+'\')">✓ ENTREGAR</button></td></tr>';}).join('')+'</tbody></table></div>';
  panel.scrollIntoView({behavior:'smooth',block:'center'});
 }
 function entregarDesdeZona(id,zona){
@@ -670,8 +670,7 @@ function prepararEstandarNKD(input){
      const cantidadUnidad=Number(String(get('cantidadUnidad')).replace(',','.'))||0;
      const loteRaw=get('lote'),cantidadRaw=get('cantidad'),cantidadCanastaRaw=get('cantidadCanasta'),canasta=get('canasta'),numCanastasRaw=get('numCanastas');
      const loteExcel=Number(String(loteRaw).replace(',','.'))||0;
-     const loteModelo=loteInicialPorModelo(modelo);
-     const lote=loteExcel>0?loteExcel:loteModelo;
+     const lote=loteExcel>0?loteExcel:0;
      const cantidadCol=Number(String(cantidadRaw).replace(',','.'))||0;
      const cantidadCanasta=Number(String(cantidadCanastaRaw).replace(',','.'))||0;
      const numCanastasExcel=Number(String(numCanastasRaw).replace(',','.'))||0;
@@ -778,7 +777,7 @@ function renderPatinadorChecklist(){
  try{modelo=localStorage.getItem('cc_modelo_moto')||'NKD';}catch(e){}
  if(selector&&selector.value!==modelo)selector.value=modelo;
  const assigned=tareasSinDuplicadosEstandar(getTasks()).filter(x=>x.standardNKD&&modeloDeTareaEstandar(x)===modelo&&tareaAsignadaAlPatinador(x));
- const total=assigned.length,done=assigned.filter(x=>(Number(x.entregado)||0)>=unidadesObjetivoEstandar(x)).length;
+ const total=assigned.length,done=assigned.filter(x=>unidadesObjetivoEstandar(x)>0&&(Number(x.entregado)||0)>=unidadesObjetivoEstandar(x)).length;
  const units=assigned.reduce((n,x)=>n+(Number(x.entregado)||0),0),target=assigned.reduce((n,x)=>n+unidadesObjetivoEstandar(x),0);
  const left=assigned.length?Math.min(...assigned.map(x=>{const s=resumenCantidadLote(x,assigned);return s.aplica?s.restante:Math.max(0,unidadesObjetivoEstandar(x)-(Number(x.entregado)||0));})):0;
  progress.innerHTML='<b>Modelo:</b> '+modelo+' · <b>Referencias:</b> '+done+' de '+total+' completadas · <b>Unidades:</b> '+units+' entregadas · '+left+' pendientes';
