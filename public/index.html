@@ -640,7 +640,8 @@ function prepararEstandarNKD(input){
  reader.onload=e=>{
   try{
    const wb=XLSX.read(e.target.result,{type:'array'}),parsed=[];let matchedSheets=0;
-   wb.SheetNames.forEach(sheetName=>{
+   const sheetsToRead=wb.SheetNames.some(n=>String(n).trim().toLowerCase()==='bom')?[wb.SheetNames.find(n=>String(n).trim().toLowerCase()==='bom')]:wb.SheetNames;
+   sheetsToRead.forEach(sheetName=>{
     const rows=XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,defval:'',raw:false});
     let headerAt=-1,dataStart=-1,ix={};
     const normalHeader=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
