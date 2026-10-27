@@ -430,7 +430,9 @@ function mostrarEntregasZona(zona){
  if(!panel){alert('No se encontró el panel de entregas. Recarga la aplicación e intenta de nuevo.');return;}
  const normal=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
  const puestosUsuario=(current&&current.role==='Patinador'&&Array.isArray(current.puestos)&&current.puestos.length)?current.puestos.map(normalizarPuestoEstandar):null;
+ const modeloVista=current&&current.role==='Patinador'?(localStorage.getItem('cc_modelo_moto')||'NKD'):modeloEstandarSeleccionado();
  const tasks=tareasSinDuplicadosEstandar(getTasks()).filter(x=>{
+  if(x.standardNKD&&modeloDeTareaEstandar(x)!==modeloVista)return false;
   if(x.estado==='Entregada'||Number(x.entregado||0)>=Number(x.cantidad||0))return false;
   const area=normal(x.area),puesto=normal(x.puesto),z=normal(zona);
   if(current&&current.role==='Patinador'){if(!tareaAsignadaAlPatinador(x))return false;}
@@ -645,7 +647,8 @@ function actualizarEtiquetaEstandar(){
 function cambiarModeloPatinador(modelo){
  try{localStorage.setItem('cc_modelo_moto',modelo);}catch(e){}
  const h=$('standardChecklist')?.querySelector('h2');if(h)h.textContent='✅ Mi estándar '+modelo;
- renderPatinadorChecklist();
+ // Actualizar toda la vista, no solo la lista del estándar, para ocultar las otras motos.
+ render();
 }
 function prepararEstandarNKD(input){
  const file=input.files&&input.files[0],msg=$('estandarNKDMsg'),modelo=modeloEstandarSeleccionado();if(!file)return;input.value='';
