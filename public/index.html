@@ -672,7 +672,9 @@ function prepararEstandarNKD(input){
      const loteModelo=loteInicialPorModelo(modelo);
      const lote=loteExcel>0?loteExcel:loteModelo;
      const cantidadCol=Number(String(cantidadRaw).replace(',','.'))||0;
-     const cantidadCanasta=Number(String(cantidadCanastaRaw).replace(',','.'))||0;
+     let cantidadCanasta=Number(String(cantidadCanastaRaw).replace(',','.'))||0;
+     // En el NKD, CANTIDAD significa unidades por canasta y LOTE es el total del lote.
+     if(!(cantidadCanasta>0)&&loteExcel>0&&cantidadCol>0)cantidadCanasta=cantidadCol;
      const numCanastasExcel=Number(String(numCanastasRaw).replace(',','.'))||0;
      const numCanastas=lote>0&&cantidadCanasta>0?Math.ceil(lote/cantidadCanasta):numCanastasExcel;
      const numCanastasMostrar=lote>0&&cantidadCanasta>0?String(numCanastas):numCanastasRaw;
