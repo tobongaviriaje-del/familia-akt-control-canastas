@@ -680,7 +680,7 @@ function prepararEstandarNKD(input){
      const numCanastasMostrar=lote>0&&cantidadCanasta>0?String(numCanastas):numCanastasRaw;
      const cantidad=lote>0?lote:(cantidadCanasta>0&&numCanastas>0?cantidadCanasta*numCanastas:(cantidadCol>0?cantidadCol:(cantidadUnidad>0?cantidadUnidad:0)));
      if(!ean||!producto||!puesto||!Number.isFinite(cantidad)||cantidad<0)return;
-     parsed.push({id:'std-'+modelo.replace(/[^a-z0-9]/gi,'').toLowerCase()+'-'+Date.now()+'-'+parsed.length,lpn:'ESTANDAR-'+modelo,estiba:sheetName,ean,producto,cantidad,cantidadUnidad,lote:lote>0?lote:cantidad,cantidadCanastaRaw:cantidadCanastaRaw,cantidadCanasta,canasta,numCanastasRaw:numCanastasMostrar,numCanastas,area:/^PRE /i.test(puesto)?'PRE':/^Derecho /i.test(puesto)?'Derecho':/^Izquierdo /i.test(puesto)?'Izquierdo':'Final de línea',puesto,turno:'Todos',estado:'Pendiente',entregado:0,entregas:[],standardNKD:true,standardMoto:modelo,hojaEstandar:sheetName,creadoPor:current?.name||'Administrador'});
+     parsed.push({id:'std-'+modelo.replace(/[^a-z0-9]/gi,'').toLowerCase()+'-'+Date.now()+'-'+parsed.length,lpn:'ESTANDAR-'+modelo,estiba:sheetName,ean,producto,cantidad,cantidadUnidad,lote:lote>0?lote:cantidad,cantidadCanastaRaw:cantidadCanastaRaw,cantidadCanasta,canasta,numCanastasRaw:numCanastasMostrar,numCanastas,area:/^PRE /i.test(puesto)?'PRE':/^Derecho /i.test(puesto)?'Derecho':/^Izquierdo /i.test(puesto)?'Izquierdo':'Final de línea',puesto,turno:'Todos',estado:'Pendiente',entregado:0,entregas:[],canastasEntregadas:0,confirmacionesCanastas:[],standardNKD:true,standardMoto:modelo,hojaEstandar:sheetName,creadoPor:current?.name||'Administrador'});
     });
    });
    if(!parsed.length){msg.className='error';msg.textContent='No pude identificar referencias válidas. El Excel debe tener columnas equivalentes a código EAN/referencia, nombre o descripción de pieza y puesto/ubicación. No se cambió el estándar guardado.';return;}
@@ -699,11 +699,15 @@ function prepararEstandarNKD(input){
    const mergedParsed=uniqueParsed.map(x=>{
     const matches=previousByKey.get(keyTask(x))||[];
     if(!matches.length)return x;
-    const entregado=matches.reduce((sum,y)=>sum+Math.max(0,Number(y.entregado)||0),0);
     const events=[],seenEvents=new Set();
     matches.forEach(y=>(Array.isArray(y.entregas)?y.entregas:[]).forEach(ev=>{const sig=ev&&ev.id!=null?'id:'+ev.id:JSON.stringify(ev);if(!seenEvents.has(sig)){seenEvents.add(sig);events.push(ev);}}));
+    const eventUnits=events.reduce((sum,ev)=>sum+Math.max(0,Number(ev?.cantidad)||0),0);
+    const entregado=events.length?Math.max(eventUnits,Math.max(...matches.map(y=>Math.max(0,Number(y.entregado)||0)))):Math.max(...matches.map(y=>Math.max(0,Number(y.entregado)||0)));
+    const confirmations=[],seenConfirmations=new Set();
+    matches.forEach(y=>(Array.isArray(y.confirmacionesCanastas)?y.confirmacionesCanastas:[]).forEach(ev=>{const sig=ev&&ev.id!=null?'id:'+ev.id:JSON.stringify(ev);if(!seenConfirmations.has(sig)){seenConfirmations.add(sig);confirmations.push(ev);}}));
+    const canastasEntregadas=confirmations.length?confirmations.reduce((sum,ev)=>sum+Math.max(0,Number(ev?.cantidad)||0),0):Math.max(...matches.map(y=>Math.max(0,Number(y.canastasEntregadas)||0)));
     const lastEntrega=[...matches].reverse().find(y=>y.entrega)?.entrega||null;
-    return {...x,id:matches[0].id||x.id,entregado,entregas:events,entrega:lastEntrega,estado:entregado>=Number(x.cantidad||0)?'Entregada':'Pendiente',creadoPor:matches[0].creadoPor||x.creadoPor};
+    return {...x,id:matches[0].id||x.id,entregado,entregas:events,entrega:lastEntrega,canastasEntregadas,confirmacionesCanastas:confirmations,estado:entregado>=Number(x.cantidad||0)?'Entregada':(entregado>0?'Parcial':'Pendiente'),creadoPor:matches[0].creadoPor||x.creadoPor};
    });
    const old=getTasks().filter(x=>!(x.standardNKD&&modeloDeTareaEstandar(x)===modelo));
    const tasks=[...old,...mergedParsed];
