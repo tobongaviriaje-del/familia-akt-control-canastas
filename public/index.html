@@ -849,7 +849,7 @@ function registrarEntregaEstandar(id){
  if(qty>rest){alert('La cantidad supera lo pendiente de esta referencia: '+rest+' unidades.');if(input){input.focus();input.select();}return;}
  const porCanasta=unidadesPorCanastaEstandar(x);const equivalencia=porCanasta>0?(qty/porCanasta):null;const detalle=equivalencia===null?'Capacidad por canasta no definida.':'Equivale a '+(Number.isInteger(equivalencia)?equivalencia:equivalencia.toFixed(2))+' canastas ('+porCanasta+' unidades por canasta).';confirmarEntrega(x.id,qty,'Entrega parcial registrada en unidades. '+detalle);
 }
-async async function confirmarCanastasEstandar(id){
+async function confirmarCanastasEstandar(id){
  const tasks=getTasks(),x=tasks.find(a=>String(a.id)===String(id));
  if(!x||!x.standardNKD){alert('No encontré esta referencia del estándar.');return;}
  if(!current){alert('Inicia sesión para registrar canastas.');return;}
