@@ -760,20 +760,18 @@ function reiniciarDiaNKD(){
 function tareaAsignadaAlPatinador(tarea){
  if(!current||current.role!=='Patinador'||!tarea)return false;
  const normalArea=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
- // Los estándares importados desde NKD ya vienen distribuidos por hoja/patinador.
- // No volver a mostrar una misma tarea a otros patinadores solo porque comparten puesto.
- if(tarea.patinadorEstandar)return normalArea(current.name)===normalArea(tarea.patinadorEstandar);
+ // Recuperar el responsable tanto del campo guardado como del nombre de hoja del Excel.
+ // Así también aparecen las tareas importadas antes de que se guardara patinadorEstandar.
+ const responsable=normalArea(tarea.patinadorEstandar||patinadorDeHojaEstandar(tarea.hojaEstandar||tarea.estiba)||'');
+ if(responsable){
+  const identidades=[current.name,current.username,current.nombre].map(normalArea).filter(Boolean);
+  return identidades.some(n=>n===responsable||n.startsWith(responsable+' ')||responsable.startsWith(n+' '));
+ }
  const puestos=Array.isArray(current.puestos)?current.puestos.map(normalizarPuestoEstandar).filter(Boolean):[];
- const areas=Array.isArray(current.areas)?current.areas.map(normalArea).filter(Boolean):[];
  const puesto=normalizarPuestoEstandar(tarea.puesto);
- // Cuando hay puestos concretos asignados, son la fuente principal de permisos.
- // No exigir además que el campo "area" coincida: algunos Excel guardan variantes.
  if(puestos.length)return puestos.includes(puesto);
- // No ampliar permisos por área: las áreas son compartidas y mostraban tareas de otros patinadores.
- // Sin puestos explícitos no se muestran tareas hasta que la cuenta tenga asignaciones concretas.
  return false;
-}
-async function limpiarDuplicadosNKD(){
+}async function limpiarDuplicadosNKD(){
  const msg=$('limpiezaDuplicadosMsg');
  if(!isAdmin()){alert('Solo administración puede ejecutar esta limpieza.');return;}
  const token=sessionStorage.getItem('cc_session_token');
