@@ -766,18 +766,19 @@ function reiniciarDiaNKD(){
 function tareaAsignadaAlPatinador(tarea){
  if(!current||current.role!=='Patinador'||!tarea)return false;
  const normalArea=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
- // Recuperar el responsable tanto del campo guardado como del nombre de hoja del Excel.
- // Así también aparecen las tareas importadas antes de que se guardara patinadorEstandar.
+ // Si la hoja identifica al patinador, esa es la asignación preferida.
+ // Si el nombre de la cuenta no coincide exactamente con el rótulo de la hoja,
+ // usar los puestos del usuario como respaldo en lugar de ocultar la tarea.
  const responsable=normalArea(tarea.patinadorEstandar||patinadorDeHojaEstandar(tarea.hojaEstandar||tarea.estiba)||'');
  if(responsable){
   const identidades=[current.name,current.username,current.nombre].map(normalArea).filter(Boolean);
-  return identidades.some(n=>n===responsable||n.startsWith(responsable+' ')||responsable.startsWith(n+' '));
+  if(identidades.some(n=>n===responsable||n.startsWith(responsable+' ')||responsable.startsWith(n+' ')))return true;
  }
- const puestos=Array.isArray(current.puestos)?current.puestos.map(normalizarPuestoEstandar).filter(Boolean):[];
- const puesto=normalizarPuestoEstandar(tarea.puesto);
- if(puestos.length)return puestos.includes(puesto);
- return false;
-}async function limpiarDuplicadosNKD(){
+ const puestos=Array.isArray(current.puestos)?current.puestos.map(normalizarPuestoEstandar).map(normalArea).filter(Boolean):[];
+ const puesto=normalArea(normalizarPuestoEstandar(tarea.puesto));
+ return !!puesto&&puestos.includes(puesto);
+}
+async function limpiarDuplicadosNKD(){
  const msg=$('limpiezaDuplicadosMsg');
  if(!isAdmin()){alert('Solo administración puede ejecutar esta limpieza.');return;}
  const token=sessionStorage.getItem('cc_session_token');
