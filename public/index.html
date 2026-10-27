@@ -605,9 +605,9 @@ function normalizarPuestoEstandar(v){
 }
 function patinadorDeHojaEstandar(hoja){
  const n=String(hoja||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
- if(n==='hamilton'||n==='hamilton1')return 'Hamilton';
- if(n==='jorge'||n==='jorge 1')return 'Jorge';
- if(n==='juan esteban'||n==='juan esteban 1')return 'Juan Esteban';
+ if(/^hamilton(?:$|\s|\d)/.test(n))return 'Hamilton';
+ if(/^jorge(?:$|\s|\d)/.test(n))return 'Jorge';
+ if(/^juan esteban(?:$|\s|\d)/.test(n))return 'Juan Esteban';
  return '';
 }
 function modeloEstandarSeleccionado(){return $('modeloEstandarAdmin')?.value||'NKD';}
@@ -658,7 +658,10 @@ function prepararEstandarNKD(input){
  reader.onload=e=>{
   try{
    const wb=XLSX.read(e.target.result,{type:'array'}),parsed=[];let matchedSheets=0;
-   const sheetsToRead=wb.SheetNames.some(n=>String(n).trim().toLowerCase()==='bom')?[wb.SheetNames.find(n=>String(n).trim().toLowerCase()==='bom')]:wb.SheetNames;
+   // Leer hojas de patinadores primero para conservar su responsable al deduplicar;
+   // hojas de puestos después; la BOM/resumen queda al final como respaldo.
+   const sheetPriority=n=>{const p=patinadorDeHojaEstandar(n);if(p)return 0;if(String(n).trim().toLowerCase()==='bom')return 2;return 1;};
+   const sheetsToRead=[...wb.SheetNames].sort((a,b)=>sheetPriority(a)-sheetPriority(b));
    sheetsToRead.forEach(sheetName=>{
     const rows=XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,defval:'',raw:false});
     let headerAt=-1,dataStart=-1,ix={};
