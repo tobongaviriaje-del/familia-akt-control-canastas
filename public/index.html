@@ -703,7 +703,7 @@ function prepararEstandarNKD(input){
    // Una sola fila por EAN + puesto normalizado. Las hojas fuente están antes que sus
    // hojas resumen en el Excel, por lo que se conserva la primera fila y se ignoran copias.
    const cleanKey=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
-   const keyTask=x=>cleanKey(x.patinadorEstandar||'')+'|'+String(x.ean||'').trim().replace(/\s+/g,'').toUpperCase()+'|'+cleanKey(x.producto)+'|'+cleanKey(normalizarPuestoEstandar(x.puesto));
+   const keyTask=x=>String(x.ean||'').trim().replace(/\s+/g,'').toUpperCase()+'|'+cleanKey(normalizarPuestoEstandar(x.puesto));
    const uniqueMap=new Map();
    parsed.forEach(x=>{const k=keyTask(x);if(!uniqueMap.has(k))uniqueMap.set(k,x);});
    const uniqueParsed=[...uniqueMap.values()];
