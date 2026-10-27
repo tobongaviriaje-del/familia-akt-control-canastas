@@ -407,9 +407,12 @@ function tareasSinDuplicadosEstandar(tasks){
  const key=x=>{
   if(!x||!x.standardNKD)return null;
   const clean=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
-  const ean=String(x.ean||'').replace(/\s+/g,'').toLowerCase();
-  const puesto=normalizarPuestoEstandar(x.puesto).toLowerCase();
-  const producto=clean(x.producto);return [String(modeloDeTareaEstandar(x)||'NKD').trim().toUpperCase(),ean,producto,puesto].join('|');
+  const modelo=String(modeloDeTareaEstandar(x)||'NKD').trim().toUpperCase();
+  const ean=String(x.ean||'').replace(/\s+/g,'').toUpperCase();
+  const puesto=clean(normalizarPuestoEstandar(x.puesto));
+  // La referencia EAN en un mismo puesto debe aparecer una sola vez,
+  // aunque el nombre tenga diferencias de escritura entre hojas/patinadores.
+  return [modelo,ean,puesto].join('|');
  };
  const chosen=new Map(),other=[];
  for(const x of (Array.isArray(tasks)?tasks:[])){
