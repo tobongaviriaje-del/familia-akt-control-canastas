@@ -695,6 +695,9 @@ function prepararEstandarNKD(input){
      // No inferir unidades por canasta ni cantidad de canastas: se capturan manualmente en la aplicación.
      const cantidadCanastaRaw='',canasta='',cantidadCanasta=0,numCanastasRaw='',numCanastas=0;
      const cantidad=lote>0?lote:(cantidadCol>0?cantidadCol:cantidadUnidad);
+     const productoHeader=normalHeader(producto),puestoHeader=normalHeader(puesto),eanHeader=normalHeader(eanOriginal);
+     // Algunas hojas repiten sus encabezados entre los datos; no convertirlos en tareas.
+     if(['nombre','producto','descripcion'].includes(productoHeader)||['puesto','ubicacion','posicion','linea'].includes(puestoHeader)||['ean','ean / codigo','codigo'].includes(eanHeader))return;
      if(!ean||!producto||!puesto||!Number.isFinite(cantidad)||cantidad<0)return;
      parsed.push({id:'std-'+modelo.replace(/[^a-z0-9]/gi,'').toLowerCase()+'-'+Date.now()+'-'+parsed.length,lpn:'ESTANDAR-'+modelo,estiba:sheetName,ean,producto,cantidad,cantidadUnidad,lote:lote>0?lote:cantidad,cantidadCanastaRaw:cantidadCanastaRaw,cantidadCanasta,canasta,numCanastasRaw,numCanastas,area:/^PRE /i.test(puesto)?'PRE':/^Derecho /i.test(puesto)?'Derecho':/^Izquierdo /i.test(puesto)?'Izquierdo':'Final de línea',puesto,turno:'Todos',estado:'Pendiente',entregado:0,entregas:[],canastasEntregadas:0,confirmacionesCanastas:[],standardNKD:true,standardMoto:modelo,hojaEstandar:sheetName,patinadorEstandar:patinadorDeHojaEstandar(sheetName),creadoPor:current?.name||'Administrador'});
     });
