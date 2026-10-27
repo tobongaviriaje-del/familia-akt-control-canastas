@@ -682,19 +682,16 @@ function prepararEstandarNKD(input){
      const puesto=normalizarPuestoEstandar(puestoFuente);
      const eanOriginal=get('ean');
      const ean=eanOriginal||('SIN-EAN-'+modelo.replace(/[^a-z0-9]/gi,'').toUpperCase()+'-'+String(producto).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'-')+'-'+String(puesto).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,'-'));
-     const cantidadUnidad=Number(String(get('cantidadUnidad')).replace(',','.'))||0;
-     const loteRaw=get('lote'),cantidadRaw=get('cantidad'),cantidadCanastaRaw=get('cantidadCanasta'),canasta=get('canasta'),numCanastasRaw=get('numCanastas');
+     const cantidadUnidadExcel=Number(String(get('cantidadUnidad')).replace(',','.'))||0;
+     const cantidadUnidad=cantidadUnidadExcel>0?cantidadUnidadExcel:1;
+     const loteRaw=get('lote'),cantidadRaw=get('cantidad');
      const loteExcel=Number(String(loteRaw).replace(',','.'))||0;
      const loteModelo=loteInicialPorModelo(modelo);
      const lote=loteExcel>0?loteExcel:loteModelo;
      const cantidadCol=Number(String(cantidadRaw).replace(',','.'))||0;
-     let cantidadCanasta=Number(String(cantidadCanastaRaw).replace(',','.'))||0;
-     // En el NKD, CANTIDAD significa unidades por canasta y LOTE es el total del lote.
-     if(!(cantidadCanasta>0)&&loteExcel>0&&cantidadCol>0)cantidadCanasta=cantidadCol;
-     const numCanastasExcel=Number(String(numCanastasRaw).replace(',','.'))||0;
-     const numCanastas=lote>0&&cantidadCanasta>0?Math.ceil(lote/cantidadCanasta):numCanastasExcel;
-     const numCanastasMostrar=lote>0&&cantidadCanasta>0?String(numCanastas):numCanastasRaw;
-     const cantidad=lote>0?lote:(cantidadCanasta>0&&numCanastas>0?cantidadCanasta*numCanastas:(cantidadCol>0?cantidadCol:(cantidadUnidad>0?cantidadUnidad:0)));
+     // No inferir unidades por canasta ni cantidad de canastas: se capturan manualmente en la aplicación.
+     const cantidadCanastaRaw='',canasta='',cantidadCanasta=0,numCanastasRaw='',numCanastas=0;
+     const cantidad=lote>0?lote:(cantidadCol>0?cantidadCol:cantidadUnidad);
      if(!ean||!producto||!puesto||!Number.isFinite(cantidad)||cantidad<0)return;
      parsed.push({id:'std-'+modelo.replace(/[^a-z0-9]/gi,'').toLowerCase()+'-'+Date.now()+'-'+parsed.length,lpn:'ESTANDAR-'+modelo,estiba:sheetName,ean,producto,cantidad,cantidadUnidad,lote:lote>0?lote:cantidad,cantidadCanastaRaw:cantidadCanastaRaw,cantidadCanasta,canasta,numCanastasRaw:numCanastasMostrar,numCanastas,area:/^PRE /i.test(puesto)?'PRE':/^Derecho /i.test(puesto)?'Derecho':/^Izquierdo /i.test(puesto)?'Izquierdo':'Final de línea',puesto,turno:'Todos',estado:'Pendiente',entregado:0,entregas:[],canastasEntregadas:0,confirmacionesCanastas:[],standardNKD:true,standardMoto:modelo,hojaEstandar:sheetName,patinadorEstandar:patinadorDeHojaEstandar(sheetName),creadoPor:current?.name||'Administrador'});
     });
@@ -806,8 +803,7 @@ function renderPatinadorChecklist(){
  const left=assigned.length?Math.min(...assigned.map(x=>{const s=resumenCantidadLote(x,assigned);return s.aplica?s.restante:Math.max(0,unidadesObjetivoEstandar(x)-(Number(x.entregado)||0));})):0;
  progress.innerHTML='<b>Modelo:</b> '+modelo+' · <b>Referencias:</b> '+done+' de '+total+' completadas · <b>Unidades:</b> '+units+' entregadas · '+left+' pendientes';
  if(!total){wrap.innerHTML='<p class="muted">Todavía no hay referencias cargadas para '+modelo+' en tus puestos. El mesanín o administrador debe seleccionar '+modelo+' y subir su Excel.</p>';return;}
- wrap.innerHTML='<div class="grid" style="margin:8px 0"><button type="button" class="secondary" onclick="mostrarEntregasZona(\'PRE\')">📍 PRE</button><button type="button" class="secondary" onclick="mostrarEntregasZona(\'Izquierdo\')">📍 IZQUIERDO</button><button type="button" class="secondary" onclick="mostrarEntregasZona(\'Derecho\')">📍 DERECHO</button></div><p class="muted">Usa estos botones para abrir las tareas pendientes de cada zona. Luego registra la cantidad en “Cantidad ahora” y pulsa Entregar.</p><div class="scroll"><table><thead><tr><th>Referencia / producto</th><th>Puesto</th><th>Cant. unidad (Cant.)</th><th>Saldo lote (restante / total)</th><th>Unidades por canasta (editable)</th><th>Tipo canasta</th><th># Canastas estándar</th><th>Canastas equivalentes entregadas</th><th>Canastas equivalentes pendientes</th><th>Unidades entregadas</th><th>Unidades pendientes</th><th>Registrar entrega parcial (unidades)</th><th>Confirmar canastas físicas</th><th>Corregir saldo</th></tr></thead><tbody>'+assigned.map(x=>{const qty=unidadesObjetivoEstandar(x),del=Number(x.entregado)||0,rest=Math.max(0,qty-del),saldoLote=resumenCantidadLote(x),complete=qty>0&&rest===0;return '<tr id="stdRow'+x.id+'"><td><b>'+x.producto+'</b><br><small>EAN: '+(x.ean||'-')+'</small></td><td>'+x.puesto+'</td><td>'+(x.cantidadUnidad||'-')+'</td><td>'+celdaSaldoLote(x,assigned)+'<br><input aria-label="Cantidad total del lote en unidades" id="stdLote'+x.id+'" type="number" min="1" step="1" value="'+(unidadesObjetivoEstandar(x)||'')+'" placeholder="Total piezas" style="width:95px;margin:2px 0"><button type="button" class="small secondary" onclick="guardarLoteEstandar(\''+x.id+'\')">Guardar lote</button></td><td><input aria-label="Unidades por canasta" id="stdCapCanasta'+x.id+'" type="number" min="1" step="1" value="'+(Number(x.cantidadCanasta)||'')+'" placeholder="Ej. 30" style="width:90px;margin:2px 0"><button type="button" class="small secondary" onclick="guardarCapacidadCanastaEstandar(\''+x.id+'\')">Guardar capacidad</button></td><td>'+(x.canasta||'-')+'</td><td><input aria-label="Cantidad de canastas del lote" id="stdNumCanastas'+x.id+'" type="number" min="1" step="1" value="'+(Number(x.numCanastas)||'')+'" placeholder="Ej. 4" style="width:75px;margin:2px 0"><br><small>canastas del lote</small></td><td><b>'+canastasEquivalentesEntregadas(x)+'</b><br><small>entregadas</small></td><td><b>'+(unidadesPorCanastaEstandar(x)>0?(rest/unidadesPorCanastaEstandar(x)).toLocaleString("es-CO",{maximumFractionDigits:2}):"Definir capacidad")+'</b><br><small>equivalentes pendientes</small></td><td>'+del+'</td><td><b>'+(qty>0?rest:"Por definir")+'</b></td><td>'+(complete?'<span class="pill">✓ Lote agotado</span>':'<input aria-label="Unidades entregadas ahora" id="stdQty'+x.id+'" type="number" min="1" '+(rest>0?'max="'+rest+'"':'')+' value="1" style="width:90px;margin:2px 0"><button type="button" class="small" onclick="registrarEntregaEstandar(\''+x.id+'\')">✓ Registrar unidades</button>')+'</td><td><input aria-label="Canastas físicas confirmadas" id="stdCanastasQty'+x.id+'" type="number" min="1" value="1" style="width:90px;margin:2px 0"><button type="button" class="small secondary" onclick="confirmarCanastasEstandar(\''+x.id+'\')">Confirmar canastas</button><br><small>Sin descontar unidades</small></td><td>'+(del>0?'<button type="button" class="small secondary" onclick="corregirEntrega(\''+x.id+'\')">↩ Corregir saldo</button>':'<span class="muted">Sin entregas</span>')+'</td></tr>'}).join('')+'</tbody></table></div>';
-}
+ wrap.innerHTML='<div class="grid" style="margin:8px 0"><button type="button" class="secondary" onclick="mostrarEntregasZona(\'PRE\')">📍 PRE</button><button type="button" class="secondary" onclick="mostrarEntregasZona(\'Izquierdo\')">📍 IZQUIERDO</button><button type="button" class="secondary" onclick="mostrarEntregasZona(\'Derecho\')">📍 DERECHO</button></div><p class="muted">Registra las unidades entregadas por separado. Las canastas se cuentan manualmente y no descuentan unidades del lote.</p><div class="scroll"><table><thead><tr><th>Referencia / producto</th><th>Puesto</th><th>Cant. unitaria</th><th>Lote total (unidades)</th><th>Unidades entregadas</th><th>Unidades pendientes</th><th>Registrar unidades</th><th>Canastas entregadas</th><th>Corregir saldo</th></tr></thead><tbody>'+assigned.map(x=>{const qty=unidadesObjetivoEstandar(x),del=Number(x.entregado)||0,rest=Math.max(0,qty-del),complete=qty>0&&rest===0;return '<tr id="stdRow'+x.id+'"><td><b>'+x.producto+'</b><br><small>EAN: '+(x.ean||'-')+'</small></td><td>'+x.puesto+'</td><td>'+(x.cantidadUnidad||1)+'</td><td>'+celdaSaldoLote(x,assigned)+'<br><input aria-label="Cantidad total del lote en unidades" id="stdLote'+x.id+'" type="number" min="1" step="1" value="'+(unidadesObjetivoEstandar(x)||'')+'" placeholder="Total piezas" style="width:95px;margin:2px 0"><button type="button" class="small secondary" onclick="guardarLoteEstandar(\''+x.id+'\')">Guardar lote</button></td><td>'+del+'</td><td><b>'+(qty>0?rest:"Por definir")+'</b></td><td>'+(complete?'<span class="pill">✓ Lote agotado</span>':'<input aria-label="Unidades entregadas ahora" id="stdQty'+x.id+'" type="number" min="1" '+(rest>0?'max="'+rest+'"':'')+' value="1" style="width:90px;margin:2px 0"><button type="button" class="small" onclick="registrarEntregaEstandar(\''+x.id+'\')">✓ Registrar unidades</button>')+'</td><td><b>'+(Number(x.canastasEntregadas)||0)+'</b><br><input aria-label="Canastas entregadas ahora" id="stdCanastasQty'+x.id+'" type="number" min="1" step="1" value="1" style="width:90px;margin:2px 0"><button type="button" class="small secondary" onclick="confirmarCanastasEstandar(\''+x.id+'\')">Sumar canastas</button></td><td>'+(del>0?'<button type="button" class="small secondary" onclick="corregirEntrega(\''+x.id+'\')">↩ Corregir saldo</button>':'<span class="muted">Sin entregas</span>')+'</td></tr>'}).join('')+'</tbody></table></div>';
 function guardarLoteEstandar(id){
  const x=getTasks().find(a=>String(a.id)===String(id));
  if(!x||!x.standardNKD){alert('No encontré esta referencia.');return;}
@@ -847,21 +843,31 @@ function registrarEntregaEstandar(id){
  if(qty>rest){alert('La cantidad supera lo pendiente de esta referencia: '+rest+' unidades.');if(input){input.focus();input.select();}return;}
  const porCanasta=unidadesPorCanastaEstandar(x);const equivalencia=porCanasta>0?(qty/porCanasta):null;const detalle=equivalencia===null?'Capacidad por canasta no definida.':'Equivale a '+(Number.isInteger(equivalencia)?equivalencia:equivalencia.toFixed(2))+' canastas ('+porCanasta+' unidades por canasta).';confirmarEntrega(x.id,qty,'Entrega parcial registrada en unidades. '+detalle);
 }
-async function confirmarCanastasEstandar(id){
- const x=getTasks().find(a=>String(a.id)===String(id));
+async async function confirmarCanastasEstandar(id){
+ const tasks=getTasks(),x=tasks.find(a=>String(a.id)===String(id));
  if(!x||!x.standardNKD){alert('No encontré esta referencia del estándar.');return;}
- if(!current){alert('Inicia sesión para confirmar canastas.');return;}
- if(current.role==='Patinador'&&(!Array.isArray(current.puestos)||!current.puestos.includes(x.puesto))){alert('Esta referencia no está asignada a tu puesto.');return;}
- if(current.role!=='Patinador'&&current.role!=='Admin'&&current.role!=='Mesanín'&&current.role!=='Supervisor'){alert('Tu usuario no tiene permiso para confirmar canastas.');return;}
- const input=$('stdCanastasQty'+id),canastas=Number(input?.value),cap=unidadesPorCanastaEstandar(x),rest=Math.max(0,unidadesObjetivoEstandar(x)-Number(x.entregado||0));
- if(!Number.isInteger(canastas)||canastas<1){alert('Ingresa una cantidad de canastas mayor que cero.');if(input){input.focus();input.select();}return;}
- if(!(cap>0)){alert('Primero define y guarda cuántas unidades caben en cada canasta.');return;}
- const unidades=canastas*cap;
- if(unidades>rest){alert('Estas canastas equivalen a '+unidades+' piezas, pero solo quedan '+rest+' piezas pendientes.');if(input){input.focus();input.select();}return;}
- if(!confirm('¿Registrar '+canastas+' canasta(s) físicas de '+cap+' piezas cada una? Se descontarán '+unidades+' piezas del lote y quedarán registradas las canastas. No registres esas mismas piezas por separado.'))return;
- await confirmarEntrega(x.id,unidades,'Entrega física de '+canastas+' canasta(s) × '+cap+' piezas. Descontadas del saldo del lote.',canastas);
-}
-function registrarEntregaEstandarAdmin(id){
+ if(!current){alert('Inicia sesión para registrar canastas.');return;}
+ if(current.role==='Patinador'&&!tareaAsignadaAlPatinador(x)){alert('Esta referencia no está asignada a tu usuario.');return;}
+ if(!['Patinador','Admin','Mesanín','Supervisor'].includes(current.role)){alert('Tu usuario no tiene permiso para registrar canastas.');return;}
+ const input=$('stdCanastasQty'+id),canastas=Number(input?.value);
+ if(!Number.isInteger(canastas)||canastas<1){alert('Ingresa la cantidad de canastas entregadas.');if(input){input.focus();input.select();}return;}
+ const anterior=Number(x.canastasEntregadas)||0,confirmaciones=Array.isArray(x.confirmacionesCanastas)?[...x.confirmacionesCanastas]:[];
+ x.canastasEntregadas=anterior+canastas;
+ x.confirmacionesCanastas=[...confirmaciones,{id:'canastas-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),cantidad:canastas,unidades:0,patinador:current.name||current.username||'Usuario',fechaHora:new Date().toLocaleString('es-CO'),turno:current.turno||'Todos',soloConteo:true}];
+ cloudTasks=tasks;localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
+ try{
+  const response=await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({users,tasks:cloudTasks,lpnCatalog})});
+  if(!response.ok)throw new Error('No se pudo guardar');
+  const state=await response.json();users=state.users||users;cloudTasks=Array.isArray(state.tasks)?state.tasks:tasks;lpnCatalog=Array.isArray(state.lpnCatalog)?state.lpnCatalog:lpnCatalog;
+  localStorage.setItem('cc_users',JSON.stringify(users));localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));
+  render();
+ }catch(err){
+  const target=getTasks().find(a=>String(a.id)===String(id));
+  if(target){target.canastasEntregadas=anterior;target.confirmacionesCanastas=confirmaciones;}
+  cloudTasks=getTasks();localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
+  alert('No se pudo guardar el conteo de canastas en la nube. No se confirmó el cambio.');
+ }
+}function registrarEntregaEstandarAdmin(id){
  const x=getTasks().find(a=>String(a.id)===String(id));
  if(!x||!x.standardNKD){alert('No encontré esta referencia del estándar NKD.');return;}
  const input=$('stdQtyAdmin'+id),qty=Number(input?.value),rest=Math.max(0,unidadesObjetivoEstandar(x)-Number(x.entregado||0));
