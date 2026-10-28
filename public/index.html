@@ -459,20 +459,22 @@ async function login(){
 function configurarCentroControl(){
  const app=$('appView'),card=$('controlCenterCard');
  if(!app||!card)return;
+ const admin=current&&current.role==='Admin';
+ const supervisor=current&&current.role==='Supervisor';
  const dashboardIds=['operationNumberCard','patinadorProgressPanel','totalStat','mesaninEntregas'];
  Array.from(app.children).forEach(el=>{
   if(el===card||el.classList.contains('topbar')){el.classList.remove('cc-dashboard-extra');return;}
   const isDashboard=dashboardIds.some(id=>el.id===id||el.querySelector('#'+id));
-  el.classList.toggle('cc-dashboard-extra',!isDashboard);
+  el.classList.toggle('cc-dashboard-extra',!!supervisor&&!isDashboard);
+  if(admin)el.classList.remove('cc-dashboard-extra');
  });
- const adminView=!!(current&&['Admin','Supervisor'].includes(current.role));
- app.classList.toggle('cc-dashboard-mode',adminView);
- if(adminView)app.classList.remove('cc-show-tools');
+ app.classList.toggle('cc-dashboard-mode',!!supervisor);
+ app.classList.remove('cc-show-tools');
  const btn=$('toggleOperationalTools');
- if(btn){btn.classList.toggle('hidden',!adminView);btn.textContent='Mostrar herramientas de operación';}
+ if(btn){btn.classList.toggle('hidden',!supervisor);btn.textContent='Mostrar herramientas de operación';}
 }
 function toggleHerramientasOperacion(){
- const app=$('appView');if(!app||!current||!['Admin','Supervisor'].includes(current.role))return;
+ const app=$('appView');if(!app||!current||current.role!=='Supervisor')return;
  const showing=app.classList.toggle('cc-show-tools');
  const btn=$('toggleOperationalTools');
  if(btn)btn.textContent=showing?'Ocultar herramientas de operación':'Mostrar herramientas de operación';
