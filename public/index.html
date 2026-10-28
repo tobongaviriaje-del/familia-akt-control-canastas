@@ -944,7 +944,7 @@ function guardarCapacidadCanastaEstandar(id){
  const x=getTasks().find(a=>String(a.id)===String(id));
  if(!x||!x.standardNKD){alert('No encontré esta referencia.');return;}
  if(!current){alert('Inicia sesión para guardar la capacidad.');return;}
- if(current.role==='Patinador'&&(!Array.isArray(current.puestos)||!current.puestos.includes(x.puesto))){alert('Esta referencia no está asignada a tu puesto.');return;}
+ if(current.role==='Patinador'&&!tareaAsignadaAlPatinador(x)){alert('Esta referencia no está asignada a tu puesto.');return;}
  if(current.role!=='Patinador'&&current.role!=='Admin'&&current.role!=='Mesanín'&&current.role!=='Supervisor'){alert('Tu usuario no tiene permiso para editar esta referencia.');return;}
  const input=$('stdCapCanasta'+id),n=Number(input?.value),basketInput=$('stdNumCanastas'+id),basketQty=basketInput?Number(basketInput.value):Number(x.numCanastas||0);
  if(!Number.isInteger(n)||n<1){alert('Ingresa cuántas unidades caben en una canasta (por ejemplo, 30).');if(input){input.focus();input.select();}return;}
