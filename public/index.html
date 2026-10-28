@@ -225,15 +225,11 @@ function guardarNumeroOperacion(){
 }
 function tareasAsignadasAUsuarioEstandar(task,user,username){
  if(!task||!task.standardNKD||!user||user.role!=='Patinador')return false;
- const responsable=normalizarIdentidadEntrega(task.patinadorEstandar||patinadorDeHojaEstandar(task.hojaEstandar||task.estiba));
- if(responsable){
-  const identities=[user.name,username,user.nombre].map(normalizarIdentidadEntrega).filter(Boolean);
-  if(identities.some(n=>n===responsable||n.startsWith(responsable+' ')||responsable.startsWith(n+' ')))return true;
-  // La hoja asigna la tarea a otra persona; no duplicarla usando solo coincidencia de puesto.
-  return false;
- }
- const puestos=Array.isArray(user.puestos)?user.puestos.map(p=>normalizarIdentidadEntrega(normalizarPuestoEstandar(p))):[];
- return puestos.includes(normalizarIdentidadEntrega(normalizarPuestoEstandar(task.puesto)));
+ // Para continuidad día/noche, compartir el mismo saldo entre patinadores habilitados
+ // en el puesto, sin crear una segunda copia de la tarea.
+ const clean=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
+ const puestos=Array.isArray(user.puestos)?user.puestos.map(p=>clean(normalizarPuestoEstandar(p))):[];
+ return puestos.includes(clean(normalizarPuestoEstandar(task.puesto)));
 }
 function resumenEntregaPatinador(tasks,user,username){
  const assigned=tasks.filter(x=>x.standardNKD&&tareasAsignadasAUsuarioEstandar(x,user,username));
@@ -801,7 +797,7 @@ function prepararEstandarNKD(input){
    // Una sola fila por EAN + puesto normalizado. Las hojas fuente están antes que sus
    // hojas resumen en el Excel, por lo que se conserva la primera fila y se ignoran copias.
    const cleanKey=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
-   const keyTask=x=>String(x.ean||'').trim().replace(/\s+/g,'').toUpperCase()+'|'+cleanKey(x.producto)+'|'+cleanKey(normalizarPuestoEstandar(x.puesto));
+   const keyTask=x=>String(x.ean||'').trim().replace(/\s+/g,'').toUpperCase()+'|'+cleanKey(normalizarPuestoEstandar(x.puesto));
    const uniqueMap=new Map();
    parsed.forEach(x=>{const k=keyTask(x);if(!uniqueMap.has(k))uniqueMap.set(k,x);});
    const uniqueParsed=[...uniqueMap.values()];
@@ -878,14 +874,8 @@ function reiniciarDiaNKD(){
 function tareaAsignadaAlPatinador(tarea){
  if(!current||current.role!=='Patinador'||!tarea)return false;
  const normalArea=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
- // Si la hoja identifica al patinador, esa es la asignación preferida.
- // Si el nombre de la cuenta no coincide exactamente con el rótulo de la hoja,
- // usar los puestos del usuario como respaldo en lugar de ocultar la tarea.
- const responsable=normalArea(tarea.patinadorEstandar||patinadorDeHojaEstandar(tarea.hojaEstandar||tarea.estiba)||'');
- if(responsable){
-  const identidades=[current.name,current.username,current.nombre].map(normalArea).filter(Boolean);
-  if(identidades.some(n=>n===responsable||n.startsWith(responsable+' ')||responsable.startsWith(n+' ')))return true;
- }
+ // El estándar es compartido entre turnos: la hoja de origen no bloquea una tarea
+ // pendiente para el patinador del turno siguiente que cubre el mismo puesto.
  const puestos=Array.isArray(current.puestos)?current.puestos.map(normalizarPuestoEstandar).map(normalArea).filter(Boolean):[];
  const puesto=normalArea(normalizarPuestoEstandar(tarea.puesto));
  return !!puesto&&puestos.includes(puesto);
@@ -954,7 +944,7 @@ function guardarCapacidadCanastaEstandar(id){
  const x=getTasks().find(a=>String(a.id)===String(id));
  if(!x||!x.standardNKD){alert('No encontré esta referencia.');return;}
  if(!current){alert('Inicia sesión para guardar la capacidad.');return;}
- if(current.role==='Patinador'&&(!Array.isArray(current.puestos)||!current.puestos.includes(x.puesto))){alert('Esta referencia no está asignada a tu puesto.');return;}
+ if(current.role==='Patinador'&&!tareaAsignadaAlPatinador(x)){alert('Esta referencia no está asignada a tu puesto.');return;}
  if(current.role!=='Patinador'&&current.role!=='Admin'&&current.role!=='Mesanín'&&current.role!=='Supervisor'){alert('Tu usuario no tiene permiso para editar esta referencia.');return;}
  const input=$('stdCapCanasta'+id),n=Number(input?.value),basketInput=$('stdNumCanastas'+id),basketQty=basketInput?Number(basketInput.value):Number(x.numCanastas||0);
  if(!Number.isInteger(n)||n<1){alert('Ingresa cuántas unidades caben en una canasta (por ejemplo, 30).');if(input){input.focus();input.select();}return;}
