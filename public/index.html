@@ -245,25 +245,26 @@ function renderProgresoPatinadores(){
  const panel=$('patinadorProgressPanel'),box=$('patinadorProgressAdmin');
  if(!panel||!box||!current)return;
  const tasks=tareasSinDuplicadosEstandar(getTasks());
+ const progress=$('standardProgress');
  if(current.role==='Patinador'){
-  panel.classList.add('hidden');
+  panel.classList.remove('hidden');
   const own=resumenEntregaPatinador(tasks,current,current.username);
-  const progress=$('standardProgress');
-  if(progress){
-   const modelo=String($('modeloEstandarPatinador')?.value||localStorage.getItem('cc_modelo_moto')||'NKD');
-   const ownModel=tasks.filter(x=>x.standardNKD&&modeloDeTareaEstandar(x)===modelo&&tareasAsignadasAUsuarioEstandar(x,current,current.username));
-   const total=ownModel.reduce((n,x)=>n+Math.max(0,Number(unidadesObjetivoEstandar(x))||0),0);
-   const delivered=ownModel.reduce((n,x)=>n+Math.min(Math.max(0,Number(x.entregado)||0),Math.max(0,Number(unidadesObjetivoEstandar(x))||0)),0);
-   const pct=total?Math.min(100,delivered/total*100):0;
-   progress.innerHTML+=' · <b>Entregas:</b> '+pct.toLocaleString('es-CO',{maximumFractionDigits:1})+'%';
-  }
+  const modelo=String($('modeloEstandarPatinador')?.value||localStorage.getItem('cc_modelo_moto')||'NKD');
+  const ownModel=tasks.filter(x=>x.standardNKD&&modeloDeTareaEstandar(x)===modelo&&tareasAsignadasAUsuarioEstandar(x,current,current.username));
+  const total=ownModel.reduce((n,x)=>n+Math.max(0,Number(unidadesObjetivoEstandar(x))||0),0);
+  const delivered=ownModel.reduce((n,x)=>n+Math.min(Math.max(0,Number(x.entregado)||0),Math.max(0,Number(unidadesObjetivoEstandar(x))||0)),0);
+  const pct=total?Math.min(100,delivered/total*100):0;
+  if(progress)progress.innerHTML='Referencias asignadas: <b>'+ownModel.length+'</b> · Entregas: <b>'+pct.toLocaleString('es-CO',{maximumFractionDigits:1})+'%</b>';
+  box.innerHTML='<p>Tu avance en <b>'+String(modelo).replace(/[&<>"]/g,'')+'</b>: <b>'+pct.toLocaleString('es-CO',{maximumFractionDigits:1})+'%</b> ('+delivered.toLocaleString('es-CO')+' de '+total.toLocaleString('es-CO')+' unidades).</p><div style="height:10px;background:#e5e7eb;border-radius:8px;overflow:hidden"><div style="height:10px;width:'+pct+'%;background:#16a34a"></div></div><p class="muted">Solo puedes ver tu propio porcentaje de entrega.</p>';
   return;
  }
  if(!['Admin','Supervisor'].includes(current.role)){panel.classList.add('hidden');return;}
  panel.classList.remove('hidden');
+ if(progress)progress.innerHTML='Resumen de avance de todos los patinadores.';
  const rows=Object.entries(users||{}).filter(([key,u])=>u&&u.role==='Patinador').map(([key,u])=>{
   const r=resumenEntregaPatinador(tasks,u,key);
-  return '<tr><td>'+String(u.name||u.nombre||key).replace(/[&<>"]/g,'')+'</td><td>'+r.assigned+'</td><td>'+r.delivered.toLocaleString('es-CO')+' / '+r.total.toLocaleString('es-CO')+' unidades</td><td><b>'+r.pct.toLocaleString('es-CO',{maximumFractionDigits:1})+'%</b><div style="height:8px;background:#e5e7eb;border-radius:8px;overflow:hidden;margin-top:5px"><div style="height:8px;width:'+r.pct+'%;background:#16a34a"></div></div></td></tr>';
+  const pct=Math.max(0,Math.min(100,r.pct));
+  return '<tr><td>'+String(u.name||u.nombre||key).replace(/[&<>"]/g,'')+'</td><td>'+r.assigned+'</td><td>'+r.delivered.toLocaleString('es-CO')+' / '+r.total.toLocaleString('es-CO')+' unidades</td><td><b>'+pct.toLocaleString('es-CO',{maximumFractionDigits:1})+'%</b><div style="height:8px;background:#e5e7eb;border-radius:8px;overflow:hidden;margin-top:5px"><div style="height:8px;width:'+pct+'%;background:#16a34a"></div></div></td></tr>';
  }).join('');
  box.innerHTML='<p class="muted">Avance individual calculado por unidades entregadas frente al total de unidades del estándar asignado a cada patinador.</p><div class="scroll"><table><thead><tr><th>Patinador</th><th>Referencias asignadas</th><th>Unidades entregadas / lote</th><th>Porcentaje</th></tr></thead><tbody>'+(rows||'<tr><td colspan="4">No hay patinadores registrados.</td></tr>')+'</tbody></table></div>';
 }
