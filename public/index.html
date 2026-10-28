@@ -452,6 +452,7 @@ async function login(){
   $('operationNumberCard')?.classList.toggle('hidden',!['Patinador','Admin','Supervisor'].includes(current.role));
   if($('numeroOperacionInput'))$('numeroOperacionInput').value=current.numeroOperacion||'';
   $('mesaninPanel').classList.toggle('hidden',!canManage);$('adminPanel').classList.toggle('hidden',!isAdmin());
+  const userManagement=$('userManagementControls');if(userManagement)userManagement.style.display=isAdmin()?'block':'none';
   if(isAdmin())renderUsers();
   $('patinadorPanel').classList.toggle('hidden',current.role!=='Patinador');
   $('taskListCard')?.classList.toggle('hidden',current.role==='Patinador');
