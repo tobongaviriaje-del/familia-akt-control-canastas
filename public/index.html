@@ -478,9 +478,10 @@ function tareasSinDuplicadosEstandar(tasks){
   const modelo=String(modeloDeTareaEstandar(x)||'NKD').trim().toUpperCase();
   const ean=String(x.ean||'').replace(/\s+/g,'').toUpperCase();
   const puesto=clean(normalizarPuestoEstandar(x.puesto));
-  // La referencia EAN en un mismo puesto debe aparecer una sola vez,
-  // aunque el nombre tenga diferencias de escritura entre hojas/patinadores.
-  return [modelo,ean,puesto].join('|');
+  // Evitar duplicados entre patinadores dentro del mismo lote físico,
+  // pero nunca fusionar lotes distintos (p. ej. KK766 y KK767B).
+  const lote=clean(x.lpn||x.loteCodigo||x.codigoLote||x.loteId||'');
+  return [modelo,lote,ean,puesto].join('|');
  };
  const chosen=new Map(),other=[];
  for(const x of (Array.isArray(tasks)?tasks:[])){
