@@ -513,10 +513,8 @@ function tareasSinDuplicadosEstandar(tasks){
   const modelo=String(modeloDeTareaEstandar(x)||'NKD').trim().toUpperCase();
   const ean=String(x.ean||'').replace(/\s+/g,'').toUpperCase();
   const puesto=clean(normalizarPuestoEstandar(x.puesto));
-  // Evitar duplicados entre patinadores dentro del mismo lote físico,
-  // pero nunca fusionar lotes distintos (p. ej. KK766 y KK767B).
-  const lote=clean(x.lpn||x.loteCodigo||x.codigoLote||x.loteId||'');
-  return [modelo,lote,ean,puesto].join('|');
+  // Un estándar es compartido por puesto: nunca crear una copia por patinador o por hoja del Excel.
+  return [modelo,ean,puesto].join('|');
  };
  const chosen=new Map(),other=[];
  for(const x of (Array.isArray(tasks)?tasks:[])){
@@ -1004,7 +1002,7 @@ function registrarEntregaEstandar(id){
  const x=getTasks().find(a=>String(a.id)===String(id));
  if(!x){alert('No encontré esta referencia. Actualiza la página y vuelve a intentarlo.');return;}
  if(!current){alert('Inicia sesión para registrar la entrega.');return;}
- if(current.role==='Patinador'&&(!Array.isArray(current.puestos)||!current.puestos.includes(x.puesto))){alert('Esta referencia no está asignada a tu puesto.');return;}
+ if(current.role==='Patinador'&&!tareaAsignadaAlPatinador(x)){alert('Esta referencia no está asignada a tu puesto.');return;}
  if(current.role!=='Patinador'&&current.role!=='Admin'&&current.role!=='Mesanín'&&current.role!=='Supervisor'){alert('Tu usuario no tiene permiso para registrar entregas.');return;}
  const input=$('stdQty'+id),qty=Number(input?.value),rest=Math.max(0,unidadesObjetivoEstandar(x)-Number(x.entregado||0));
  if(!Number.isInteger(qty)||qty<1){alert('Ingresa una cantidad de unidades mayor que cero.');if(input){input.focus();input.select();}return;}
