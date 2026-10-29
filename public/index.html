@@ -289,28 +289,43 @@ function renderProgresoPatinadores(){
  if(!panel||!box||!current)return;
  const tasks=tareasSinDuplicadosEstandar(getTasks());
  const progress=$('standardProgress');
+ const pctText=n=>Math.max(0,Math.min(100,Number(n)||0)).toLocaleString('es-CO',{maximumFractionDigits:1})+'%';
+ const safe=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const bar=n=>'<div style="height:9px;background:#e5e7eb;border-radius:8px;overflow:hidden;margin-top:6px"><div style="height:9px;width:'+Math.max(0,Math.min(100,Number(n)||0))+'%;background:#16a34a"></div></div>';
  if(current.role==='Patinador'){
   panel.classList.remove('hidden');
-  const own=resumenEntregaPatinador(tasks,current,current.username);
   const modelo=String($('modeloEstandarPatinador')?.value||localStorage.getItem('cc_modelo_moto')||'NKD');
   const ownModel=tasks.filter(x=>x.standardNKD&&modeloDeTareaEstandar(x)===modelo&&tareasAsignadasAUsuarioEstandar(x,current,current.username));
   const total=ownModel.reduce((n,x)=>n+Math.max(0,Number(unidadesObjetivoEstandar(x))||0),0);
   const delivered=ownModel.reduce((n,x)=>n+Math.min(Math.max(0,Number(x.entregado)||0),Math.max(0,Number(unidadesObjetivoEstandar(x))||0)),0);
   const pct=total?Math.min(100,delivered/total*100):0;
-  if(progress)progress.innerHTML='Referencias asignadas: <b>'+ownModel.length+'</b> · Entregas: <b>'+pct.toLocaleString('es-CO',{maximumFractionDigits:1})+'%</b>';
+  if(progress)progress.innerHTML='Mis referencias asignadas: <b>'+ownModel.length+'</b> · Mi porcentaje de entrega: <b>'+pctText(pct)+'</b>';
   const estibas=Number(current.estibasEntregadas)||0;
-  box.innerHTML='<p>Tu avance en <b>'+String(modelo).replace(/[&<>"]/g,'')+'</b>: <b>'+pct.toLocaleString('es-CO',{maximumFractionDigits:1})+'%</b> ('+delivered.toLocaleString('es-CO')+' de '+total.toLocaleString('es-CO')+' unidades).</p><div style="height:10px;background:#e5e7eb;border-radius:8px;overflow:hidden"><div style="height:10px;width:'+pct+'%;background:#16a34a"></div></div><div class="grid" style="margin-top:12px;align-items:end"><label>Número de estibas entregadas<input id="patinadorEstibasInput" type="number" min="0" max="9999" step="1" value="'+estibas+'" style="width:100%"></label><button type="button" onclick="guardarEstibasPatinador()">💾 Guardar número de estibas</button></div><p id="patinadorEstibasMsg" class="muted">Ingresa el total de estibas que has entregado. El supervisor podrá verlo en este tablero.</p>';
+  box.innerHTML='<p>Tu porcentaje de entrega en <b>'+safe(modelo)+'</b>: <b>'+pctText(pct)+'</b> ('+delivered.toLocaleString('es-CO')+' de '+total.toLocaleString('es-CO')+' unidades).</p>'+bar(pct)+'<div class="grid" style="margin-top:12px;align-items:end"><label>Número de estibas entregadas<input id="patinadorEstibasInput" type="number" min="0" max="9999" step="1" value="'+estibas+'" style="width:100%"></label><button type="button" onclick="guardarEstibasPatinador()">💾 Guardar número de estibas</button></div><p id="patinadorEstibasMsg" class="muted">Este tablero muestra únicamente tu propio porcentaje. El supervisor puede consultar los tres.</p>';
   return;
  }
  if(!['Admin','Supervisor'].includes(current.role)){panel.classList.add('hidden');return;}
  panel.classList.remove('hidden');
- if(progress)progress.innerHTML='Resumen de avance de todos los patinadores.';
- const rows=Object.entries(users||{}).filter(([key,u])=>u&&u.role==='Patinador').map(([key,u])=>{
-  const r=resumenEntregaPatinador(tasks,u,key);
+ if(progress)progress.innerHTML='Porcentajes de entrega de los tres patinadores y total general.';
+ const skaters=Object.entries(users||{}).filter(([key,u])=>u&&u.role==='Patinador').map(([key,u])=>({key,user:u,result:resumenEntregaPatinador(tasks,u,key)}));
+ const rows=skaters.map(({key,user:u,result:r})=>{
   const pct=Math.max(0,Math.min(100,r.pct));
-  return '<tr><td>'+String(u.name||u.nombre||key).replace(/[&<>"]/g,'')+'</td><td>'+r.assigned+'</td><td>'+r.delivered.toLocaleString('es-CO')+' / '+r.total.toLocaleString('es-CO')+' unidades</td><td>'+(Number(u.estibasEntregadas)||0)+'</td><td><b>'+pct.toLocaleString('es-CO',{maximumFractionDigits:1})+'%</b><div style="height:8px;background:#e5e7eb;border-radius:8px;overflow:hidden;margin-top:5px"><div style="height:8px;width:'+pct+'%;background:#16a34a"></div></div></td></tr>';
+  return '<tr><td>'+safe(u.name||u.nombre||key)+'</td><td>'+r.assigned+'</td><td>'+r.delivered.toLocaleString('es-CO')+' / '+r.total.toLocaleString('es-CO')+' unidades</td><td>'+(Number(u.estibasEntregadas)||0)+'</td><td><b>'+pctText(pct)+'</b>'+bar(pct)+'</td></tr>';
  }).join('');
- box.innerHTML='<p class="muted">Avance individual calculado por unidades entregadas frente al total de unidades del estándar asignado a cada patinador. El número de estibas lo registra cada patinador y aquí solo se visualiza.</p><div class="scroll"><table><thead><tr><th>Patinador</th><th>Referencias asignadas</th><th>Unidades entregadas / lote</th><th>Número de estibas</th><th>Porcentaje</th></tr></thead><tbody>'+(rows||'<tr><td colspan="5">No hay patinadores registrados.</td></tr>')+'</tbody></table></div>';
+ // El total general usa la unión de tareas asignadas, no la suma de filas por usuario:
+ // algunos puestos pueden compartirse para continuidad entre turnos.
+ const assignedKeys=new Set(),union=[];
+ skaters.forEach(({key,user})=>tasks.forEach(t=>{
+  if(!t.standardNKD||!tareasAsignadasAUsuarioEstandar(t,user,key))return;
+  const clean=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
+  const k=String(modeloDeTareaEstandar(t)||'NKD').trim().toUpperCase()+'|'+String(t.ean||'').trim().replace(/\s+/g,'').toUpperCase()+'|'+clean(normalizarPuestoEstandar(t.puesto));
+  if(!assignedKeys.has(k)){assignedKeys.add(k);union.push(t);}
+ }));
+ const total=union.reduce((n,x)=>n+Math.max(0,Number(unidadesObjetivoEstandar(x))||0),0);
+ const delivered=union.reduce((n,x)=>n+Math.min(Math.max(0,Number(x.entregado)||0),Math.max(0,Number(unidadesObjetivoEstandar(x))||0)),0);
+ const totalPct=total?Math.min(100,delivered/total*100):0;
+ const cards=skaters.map(({key,user:u,result:r})=>'<div class="card" style="margin:8px 0;padding:12px"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><b>'+safe(u.name||u.nombre||key)+'</b><b>'+pctText(r.pct)+'</b></div>'+bar(r.pct)+'<small>'+r.delivered.toLocaleString('es-CO')+' de '+r.total.toLocaleString('es-CO')+' unidades · '+r.assigned+' referencias</small></div>').join('');
+ box.innerHTML='<p class="muted">Cada patinador conserva su porcentaje individual. El total general cuenta una sola vez cada referencia y puesto compartido, para no inflar el avance.</p><div style="border:1px solid #d1d5db;border-radius:12px;padding:14px;margin:10px 0"><h3 style="margin-top:0">📊 Porcentajes por patinador</h3>'+(cards||'<p>No hay patinadores registrados.</p>')+'</div><div style="border:2px solid #16a34a;border-radius:12px;padding:14px;margin:10px 0"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><h3 style="margin:0">Total general</h3><b style="font-size:22px">'+pctText(totalPct)+'</b></div>'+bar(totalPct)+'<p>'+delivered.toLocaleString('es-CO')+' de '+total.toLocaleString('es-CO')+' unidades · '+union.length+' referencias únicas</p></div><div class="scroll"><table><thead><tr><th>Patinador</th><th>Referencias asignadas</th><th>Unidades entregadas / lote</th><th>Número de estibas</th><th>Porcentaje</th></tr></thead><tbody>'+(rows||'<tr><td colspan="5">No hay patinadores registrados.</td></tr>')+'</tbody></table></div>';
 }
 async function guardarEstibasPatinador(){
  if(!current||current.role!=='Patinador'){alert('Solo el patinador puede registrar su número de estibas.');return;}
