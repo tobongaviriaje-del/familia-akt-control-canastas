@@ -310,17 +310,20 @@ function renderProgresoPatinadores(){
   const pct=Math.max(0,Math.min(100,r.pct));
   return '<tr><td>'+String(u.name||u.nombre||key).replace(/[&<>"]/g,'')+'</td><td>'+r.assigned+'</td><td>'+r.delivered.toLocaleString('es-CO')+' / '+r.total.toLocaleString('es-CO')+' unidades</td><td>'+(Number(u.estibasEntregadas)||0)+'</td><td><b>'+pct.toLocaleString('es-CO',{maximumFractionDigits:1})+'%</b><div style="height:8px;background:#e5e7eb;border-radius:8px;overflow:hidden;margin-top:5px"><div style="height:8px;width:'+pct+'%;background:#16a34a"></div></div></td></tr>';
  }).join('');
- box.innerHTML='<p class="muted">Avance individual calculado por unidades entregadas frente al total de unidades del estándar asignado a cada patinador. El número de estibas lo registra cada patinador y aquí solo se visualiza.</p><div class="scroll"><table><thead><tr><th>Patinador</th><th>Referencias asignadas</th><th>Unidades entregadas / lote</th><th>Número de estibas</th><th>Porcentaje</th></tr></thead><tbody>'+(rows||'<tr><td colspan="4">No hay patinadores registrados.</td></tr>')+'</tbody></table></div>';
+ box.innerHTML='<p class="muted">Avance individual calculado por unidades entregadas frente al total de unidades del estándar asignado a cada patinador. El número de estibas lo registra cada patinador y aquí solo se visualiza.</p><div class="scroll"><table><thead><tr><th>Patinador</th><th>Referencias asignadas</th><th>Unidades entregadas / lote</th><th>Número de estibas</th><th>Porcentaje</th></tr></thead><tbody>'+(rows||'<tr><td colspan="5">No hay patinadores registrados.</td></tr>')+'</tbody></table></div>';
 }
-function guardarEstibasPatinador(){
+async function guardarEstibasPatinador(){
  if(!current||current.role!=='Patinador'){alert('Solo el patinador puede registrar su número de estibas.');return;}
  const input=$('patinadorEstibasInput'),msg=$('patinadorEstibasMsg');
  const value=Number(input?.value);
  if(!Number.isInteger(value)||value<0||value>9999){if(msg){msg.className='error';msg.textContent='Ingresa un número entero de estibas entre 0 y 9999.';}return;}
  const key=String(current.username||'').toLowerCase();
  if(!users[key]){if(msg){msg.className='error';msg.textContent='No se encontró tu usuario para guardar el número de estibas.';}return;}
+ const previous=Number(users[key].estibasEntregadas)||0;
  users[key].estibasEntregadas=value;current.estibasEntregadas=value;
- saveUsers();
+ localStorage.setItem('cc_users',JSON.stringify(users));
+ const saved=await cloudSave();
+ if(!saved){users[key].estibasEntregadas=previous;current.estibasEntregadas=previous;localStorage.setItem('cc_users',JSON.stringify(users));if(msg){msg.className='error';msg.textContent='No se pudo guardar en la nube. Revisa la conexión e inténtalo de nuevo.';}return;}
  if(msg){msg.className='pill';msg.textContent='Número de estibas guardado: '+value+'. Tu supervisor ya puede visualizarlo.';}
  renderProgresoPatinadores();
 }
