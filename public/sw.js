@@ -9,7 +9,7 @@ self.addEventListener('fetch',e=>{
     e.respondWith(fetch(e.request).then(async r=>{
       const text=await r.text();
       if(text.includes('patinador-estiba.js')) return new Response(text,{status:r.status,statusText:r.statusText,headers:r.headers});
-      const injected=text.replace('</body>','<script src="/patinador-estiba.js?v=44"></script></body>');
+      const injected=text.replace('</body>','<script src="/patinador-estiba.js?v=45"></script></body>');
       const headers=new Headers(r.headers);headers.set('Content-Type','text/html; charset=utf-8');headers.set('Cache-Control','no-store');
       const out=new Response(injected,{status:r.status,statusText:r.statusText,headers});
       caches.open(CACHE).then(c=>c.put('/index.html',out.clone()));
