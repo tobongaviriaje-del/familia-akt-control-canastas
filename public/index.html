@@ -298,7 +298,8 @@ function renderProgresoPatinadores(){
   const delivered=ownModel.reduce((n,x)=>n+Math.min(Math.max(0,Number(x.entregado)||0),Math.max(0,Number(unidadesObjetivoEstandar(x))||0)),0);
   const pct=total?Math.min(100,delivered/total*100):0;
   if(progress)progress.innerHTML='Referencias asignadas: <b>'+ownModel.length+'</b> · Entregas: <b>'+pct.toLocaleString('es-CO',{maximumFractionDigits:1})+'%</b>';
-  box.innerHTML='<p>Tu avance en <b>'+String(modelo).replace(/[&<>"]/g,'')+'</b>: <b>'+pct.toLocaleString('es-CO',{maximumFractionDigits:1})+'%</b> ('+delivered.toLocaleString('es-CO')+' de '+total.toLocaleString('es-CO')+' unidades).</p><div style="height:10px;background:#e5e7eb;border-radius:8px;overflow:hidden"><div style="height:10px;width:'+pct+'%;background:#16a34a"></div></div><p class="muted">Solo puedes ver tu propio porcentaje de entrega.</p>';
+  const estibas=Number(current.estibasEntregadas)||0;
+  box.innerHTML='<p>Tu avance en <b>'+String(modelo).replace(/[&<>"]/g,'')+'</b>: <b>'+pct.toLocaleString('es-CO',{maximumFractionDigits:1})+'%</b> ('+delivered.toLocaleString('es-CO')+' de '+total.toLocaleString('es-CO')+' unidades).</p><div style="height:10px;background:#e5e7eb;border-radius:8px;overflow:hidden"><div style="height:10px;width:'+pct+'%;background:#16a34a"></div></div><div class="grid" style="margin-top:12px;align-items:end"><label>Número de estibas entregadas<input id="patinadorEstibasInput" type="number" min="0" max="9999" step="1" value="'+estibas+'" style="width:100%"></label><button type="button" onclick="guardarEstibasPatinador()">💾 Guardar número de estibas</button></div><p id="patinadorEstibasMsg" class="muted">Ingresa el total de estibas que has entregado. El supervisor podrá verlo en este tablero.</p>';
   return;
  }
  if(!['Admin','Supervisor'].includes(current.role)){panel.classList.add('hidden');return;}
@@ -307,9 +308,21 @@ function renderProgresoPatinadores(){
  const rows=Object.entries(users||{}).filter(([key,u])=>u&&u.role==='Patinador').map(([key,u])=>{
   const r=resumenEntregaPatinador(tasks,u,key);
   const pct=Math.max(0,Math.min(100,r.pct));
-  return '<tr><td>'+String(u.name||u.nombre||key).replace(/[&<>"]/g,'')+'</td><td>'+r.assigned+'</td><td>'+r.delivered.toLocaleString('es-CO')+' / '+r.total.toLocaleString('es-CO')+' unidades</td><td><b>'+pct.toLocaleString('es-CO',{maximumFractionDigits:1})+'%</b><div style="height:8px;background:#e5e7eb;border-radius:8px;overflow:hidden;margin-top:5px"><div style="height:8px;width:'+pct+'%;background:#16a34a"></div></div></td></tr>';
+  return '<tr><td>'+String(u.name||u.nombre||key).replace(/[&<>"]/g,'')+'</td><td>'+r.assigned+'</td><td>'+r.delivered.toLocaleString('es-CO')+' / '+r.total.toLocaleString('es-CO')+' unidades</td><td>'+(Number(u.estibasEntregadas)||0)+'</td><td><b>'+pct.toLocaleString('es-CO',{maximumFractionDigits:1})+'%</b><div style="height:8px;background:#e5e7eb;border-radius:8px;overflow:hidden;margin-top:5px"><div style="height:8px;width:'+pct+'%;background:#16a34a"></div></div></td></tr>';
  }).join('');
- box.innerHTML='<p class="muted">Avance individual calculado por unidades entregadas frente al total de unidades del estándar asignado a cada patinador.</p><div class="scroll"><table><thead><tr><th>Patinador</th><th>Referencias asignadas</th><th>Unidades entregadas / lote</th><th>Porcentaje</th></tr></thead><tbody>'+(rows||'<tr><td colspan="4">No hay patinadores registrados.</td></tr>')+'</tbody></table></div>';
+ box.innerHTML='<p class="muted">Avance individual calculado por unidades entregadas frente al total de unidades del estándar asignado a cada patinador. El número de estibas lo registra cada patinador y aquí solo se visualiza.</p><div class="scroll"><table><thead><tr><th>Patinador</th><th>Referencias asignadas</th><th>Unidades entregadas / lote</th><th>Número de estibas</th><th>Porcentaje</th></tr></thead><tbody>'+(rows||'<tr><td colspan="4">No hay patinadores registrados.</td></tr>')+'</tbody></table></div>';
+}
+function guardarEstibasPatinador(){
+ if(!current||current.role!=='Patinador'){alert('Solo el patinador puede registrar su número de estibas.');return;}
+ const input=$('patinadorEstibasInput'),msg=$('patinadorEstibasMsg');
+ const value=Number(input?.value);
+ if(!Number.isInteger(value)||value<0||value>9999){if(msg){msg.className='error';msg.textContent='Ingresa un número entero de estibas entre 0 y 9999.';}return;}
+ const key=String(current.username||'').toLowerCase();
+ if(!users[key]){if(msg){msg.className='error';msg.textContent='No se encontró tu usuario para guardar el número de estibas.';}return;}
+ users[key].estibasEntregadas=value;current.estibasEntregadas=value;
+ saveUsers();
+ if(msg){msg.className='pill';msg.textContent='Número de estibas guardado: '+value+'. Tu supervisor ya puede visualizarlo.';}
+ renderProgresoPatinadores();
 }
 function isAdmin(){return current&&current.role==='Admin';}
 function renderUsers(){if(!isAdmin())return;const body=$('usersBody');body.innerHTML=Object.entries(users).map(([key,u])=>`<tr><td>${key}</td><td>${u.name}</td><td>${u.role}</td><td>${u.turno||'Todos'}</td><td><button type="button" class="small" onclick="editUser('${key}')">Cambiar contraseña</button> ${u.role==='Patinador'?`<button type="button" class="small" onclick="editAssignment('${key}')">🛠️ Cambiar asignación</button>`:''} <button type="button" class="small danger" onclick="deleteUser('${key}')" ${key==='admin'?'disabled':''}>Eliminar</button></td></tr>`).join('');}
