@@ -13,14 +13,44 @@ function mount(){
  if(mounted||!$('appView'))return;
  const app=$('appView'),top=app.querySelector('.topbar'),panel=document.createElement('section');
  panel.className='card';panel.id='professionalControl';
- panel.innerHTML='<div class="topbar"><div><h2>📊 Centro de control</h2><p class="pro-note">Seguimiento operativo, búsqueda rápida y respaldos.</p></div><span id="proHealth" class="pro-status">Verificando nube…</span></div><div class="pro-kpis" id="proKpis"></div><div class="pro-toolbar"><label>🔎 Buscar LPN, EAN, mercancía o puesto<input id="proSearch" placeholder="Ej. LPN00123, EAN, PRE 12" autocomplete="off"></label><label>Estado<select id="proStatusFilter"><option value="all">Todos</option><option value="pending">Pendientes</option><option value="partial">Parciales</option><option value="done">Completadas</option></select></label></div><div class="pro-actions"><button id="proExportCsv" type="button" class="secondary">📄 Exportar tareas CSV</button><button id="proBackup" type="button" class="secondary">🛡️ Descargar respaldo</button><button id="proRefresh" type="button" class="secondary">🔄 Actualizar desde nube</button><button id="proCloseShift" type="button" class="secondary">🌙 Cerrar jornada e iniciar de nuevo</button></div><p class="pro-note">El respaldo contiene usuarios y datos operativos internos. Guárdalo de forma segura.</p><p id="proNotice" class="pro-note"></p>';
+ panel.innerHTML='<div class="topbar"><div><h2>📊 Centro de control</h2><p class="pro-note">Seguimiento operativo, búsqueda rápida y respaldos.</p></div><span id="proHealth" class="pro-status">Verificando nube…</span></div><div class="pro-kpis" id="proKpis"></div><div class="pro-toolbar"><label>🔎 Buscar LPN, EAN, mercancía o puesto<input id="proSearch" placeholder="Ej. LPN00123, EAN, PRE 12" autocomplete="off"></label><label>Estado<select id="proStatusFilter"><option value="all">Todos</option><option value="pending">Pendientes</option><option value="partial">Parciales</option><option value="done">Completadas</option></select></label></div><div class="pro-actions"><button id="proExportCsv" type="button" class="secondary">📄 Exportar tareas CSV</button><button id="proBackup" type="button" class="secondary">🛡️ Descargar respaldo</button><button id="proImport" type="button" class="secondary" hidden>📥 Importar respaldo JSON</button><button id="proRefresh" type="button" class="secondary">🔄 Actualizar desde nube</button><button id="proCloseShift" type="button" class="secondary">🌙 Cerrar jornada e iniciar de nuevo</button></div><p class="pro-note">El respaldo contiene usuarios y datos operativos internos. Guárdalo de forma segura.</p><p id="proNotice" class="pro-note"></p>';
  if(top&&top.parentNode)top.parentNode.insertBefore(panel,top.nextSibling);else app.prepend(panel);
  const activity=document.createElement('section');activity.className='card';activity.id='proActivity';activity.innerHTML='<h2>🧾 Actividad reciente</h2><p class="pro-note">Últimas entregas registradas.</p><div id="proActivityBody" class="pro-table"></div>';
  const delivery=$('mesaninEntregas');if(delivery&&delivery.parentNode)delivery.parentNode.insertBefore(activity,delivery.nextSibling);else panel.after(activity);
  $('proSearch').addEventListener('input',e=>{query=e.target.value;refreshView();});
  $('proStatusFilter').addEventListener('change',e=>{status=e.target.value;refreshView();});
- $('proExportCsv').addEventListener('click',exportCSV);$('proBackup').addEventListener('click',backup);$('proRefresh').addEventListener('click',refreshCloud);$('proCloseShift').addEventListener('click',closeShift);
+ $('proExportCsv').addEventListener('click',exportCSV);$('proBackup').addEventListener('click',backup);$('proImport').addEventListener('click',importBackup);$('proRefresh').addEventListener('click',refreshCloud);$('proCloseShift').addEventListener('click',closeShift);
  mounted=true;checkHealth();setInterval(checkHealth,45000);
+}
+async function importBackup(){
+ if(typeof current==='undefined'||!current||current.role!=='Admin'){notify('Solo el administrador puede importar un respaldo.',false);return;}
+ const picker=document.createElement('input');picker.type='file';picker.accept='.json,application/json';picker.style.display='none';document.body.appendChild(picker);
+ picker.addEventListener('change',async()=>{
+  try{
+   const file=picker.files&&picker.files[0];if(!file)return;
+   const backupData=JSON.parse(await file.text());
+   if(!backupData||!backupData.users||typeof backupData.users!=='object'||Array.isArray(backupData.users)||!Array.isArray(backupData.tasks)){
+    throw new Error('El archivo no contiene usuarios y tareas con el formato esperado.');
+   }
+   const importedUsers=backupData.users;
+   const username=String(current.username||'').toLowerCase();
+   const adminEntry=Object.entries(importedUsers).find(([key,value])=>String(key).toLowerCase()===username&&value&&value.role==='Admin');
+   if(!adminEntry)throw new Error('El respaldo no contiene el usuario administrador con el que ingresaste. No se importó nada.');
+   if(!confirm('Vas a reemplazar los datos de esta base por '+backupData.tasks.length+' tareas y '+Object.keys(importedUsers).length+' usuarios del respaldo. Asegúrate de haber guardado una copia de seguridad. ¿Continuar?'))return;
+   const payload={users:importedUsers,tasks:backupData.tasks,lpnCatalog:Array.isArray(backupData.lpnCatalog)?backupData.lpnCatalog:[]};
+   const response=await apiFetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),cache:'no-store'});
+   const saved=await response.json().catch(()=>({}));
+   if(!response.ok||!Array.isArray(saved.tasks))throw new Error(saved.error||'El servidor rechazó la importación.');
+   users=saved.users||importedUsers;cloudTasks=saved.tasks;lpnCatalog=Array.isArray(saved.lpnCatalog)?saved.lpnCatalog:payload.lpnCatalog;
+   localStorage.setItem('cc_users',JSON.stringify(users));localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));cloudReady=true;
+   const live=Object.entries(users).find(([key])=>String(key).toLowerCase()===username);
+   if(live)current={...live[1],username};
+   if(typeof render==='function')render();
+   notify('Respaldo importado y guardado en la nube. Verifica usuarios, lotes y entregas antes de trabajar.',true);
+  }catch(error){notify('No se importó el respaldo: '+(error.message||'archivo no válido'),false);}
+  finally{picker.remove();}
+ });
+ picker.click();
 }
 function allTasks(){return typeof getTasks==='function'?getTasks():[];}
 function roleTasks(){let t=allTasks();if(typeof current!=='undefined'&&current&&current.role==='Patinador')t=t.filter(x=>Array.isArray(current.puestos)&&current.puestos.includes(x.puesto));return t;}
@@ -29,6 +59,7 @@ function filteredTasks(){const q=query.trim().toLocaleLowerCase('es');return rol
 function refreshView(){
  const t=allTasks(),visible=roleTasks(),done=t.filter(x=>stateOf(x)==='done').length,partial=t.filter(x=>stateOf(x)==='partial').length,pending=t.filter(x=>stateOf(x)==='pending').length;
  const units=t.reduce((n,x)=>n+(Number(x.cantidad)||0),0),delivered=t.reduce((n,x)=>n+Math.min(Number(x.entregado)||0,Number(x.cantidad)||0),0),pct=units?Math.round(delivered/units*100):0;
+ const importButton=$('proImport');if(importButton)importButton.hidden=!(typeof current!=='undefined'&&current&&current.role==='Admin');
  const k=$('proKpis');if(k)k.innerHTML='<div class="pro-kpi"><span>Tareas</span><strong>'+t.length+'</strong><span>'+done+' completas · '+partial+' parciales</span></div><div class="pro-kpi"><span>Pendientes</span><strong>'+pending+'</strong><span>Por completar</span></div><div class="pro-kpi"><span>Unidades entregadas</span><strong>'+delivered.toLocaleString('es-CO')+'</strong><span>De '+units.toLocaleString('es-CO')+'</span></div><div class="pro-kpi"><span>Avance</span><strong>'+pct+'%</strong><div class="pro-progress"><i style="width:'+pct+'%"></i></div></div>';
  const rows=$('tasksBody'),wanted=new Set(filteredTasks().map(x=>String(x.id)));
  if(rows){Array.from(rows.querySelectorAll('tr')).forEach((tr,i)=>{const task=visible[i];tr.style.display=task&&wanted.has(String(task.id))?'':'none';});let count=$('proFilterCount');if(!count){count=document.createElement('p');count.id='proFilterCount';count.className='pro-note';const card=rows.closest('.card');if(card)card.insertBefore(count,card.querySelector('.scroll'));}count.textContent='Mostrando '+filteredTasks().length+' de '+visible.length+' tareas de tu vista.';}

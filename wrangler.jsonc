@@ -1,0 +1,13 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "familia-akt-control-canastas",
+  "pages_build_output_dir": "./public",
+  "compatibility_date": "2026-10-22",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "familia-akt-control-canastas-db",
+      "database_id": "a4cd56af-4a9d-417b-b96c-0c93cf376a11"
+    }
+  ]
+}

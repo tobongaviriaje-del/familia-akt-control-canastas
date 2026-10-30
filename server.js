@@ -10,7 +10,6 @@ const HISTORY_DIR=path.join(DATA_DIR,'history');
 
 const defaultUsers={
 admin:{pass:'admin',role:'Admin',name:'Administrador'},
-mesanin:{pass:'mesanin123',role:'Mesanín',name:'Mesanín'},
 hamilton:{pass:'Hamilton123!',role:'Patinador',name:'Hamilton',areas:['PRE','Izquierdo'],puestos:[]},
 juanesteban:{pass:'Juan123!',role:'Patinador',name:'Juan Esteban',areas:['PRE','Derecho'],puestos:[]},
 jorge:{pass:'Jorge123!',role:'Patinador',name:'Jorge',areas:['PRE','Derecho','Izquierdo','Final de línea'],puestos:[]}
@@ -26,6 +25,7 @@ try{
 const s=JSON.parse(fs.readFileSync(STATE_FILE,'utf8'));
 if(!s.users)s.users=defaultUsers;
 for(const [key,user] of Object.entries(defaultUsers)){if(!s.users[key])s.users[key]=user;}
+delete s.users.mesanin;
 if(!Array.isArray(s.tasks))s.tasks=[];
 if(!Array.isArray(s.lpnCatalog))s.lpnCatalog=[];
 return s;
@@ -56,7 +56,7 @@ res.end(JSON.stringify({ok:true,archived:archived.file,count:archived.count,comp
 }catch(e){console.error('Error cerrando jornada:',e);res.writeHead(500,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify({ok:false,error:'No se pudo cerrar la jornada'}));}});return;
 }
 if(p==='/api/state'&&req.method==='PUT'){
-let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{const incoming=JSON.parse(body||'{}');const current=readState();const state={users:incoming.users||current.users,tasks:Array.isArray(incoming.tasks)?incoming.tasks:current.tasks,lpnCatalog:Array.isArray(incoming.lpnCatalog)?incoming.lpnCatalog:current.lpnCatalog};writeState(state);res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(state));}catch{res.writeHead(400);res.end(JSON.stringify({error:'JSON invalido'}));}});return;
+let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{const incoming=JSON.parse(body||'{}');const current=readState();const nextUsers=incoming.users||current.users;delete nextUsers.mesanin;const state={users:nextUsers,tasks:Array.isArray(incoming.tasks)?incoming.tasks:current.tasks,lpnCatalog:Array.isArray(incoming.lpnCatalog)?incoming.lpnCatalog:current.lpnCatalog};writeState(state);res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(state));}catch{res.writeHead(400);res.end(JSON.stringify({error:'JSON invalido'}));}});return;
 }
 let filePath=p==='/'?'/index.html':p;const file=path.normalize(path.join(ROOT,filePath));
 if(!file.startsWith(ROOT)){res.writeHead(403);return res.end('Forbidden');}
