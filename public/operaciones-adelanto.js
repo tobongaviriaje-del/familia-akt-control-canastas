@@ -60,7 +60,7 @@ function renderPanels(){
  if(adminList){adminList.innerHTML='<h3>Operaciones preparadas ('+all.length+')</h3>'+(all.length?all.map(t=>card(t,false)).join(''):'<p class="muted">Todavía no hay tareas de adelanto creadas.</p>');}
  const patList=$('advPatinadorList');
  if(patList){const mine=all.filter(assigned);patList.innerHTML=mine.length?mine.map(t=>card(t,true)).join(''):'<p class="muted">No tienes operaciones de adelanto asignadas a tus puestos por ahora.</p>';}
- const sup=$('advanceSupervisorPanel'),supList=$('advSupervisorList');if(sup&&supList){const visible=typeof current!=='undefined'&&current&&['Supervisor','Mesanín'].includes(current.role);sup.classList.toggle('hidden',!visible);supList.innerHTML=all.length?all.map(t=>card(t,false)).join(''):'<p class="muted">Todavía no hay operaciones preparadas.</p>';}
+ const sup=$('advanceSupervisorPanel'),supList=$('advSupervisorList');if(sup&&supList){const visible=typeof current!=='undefined'&&current&&['Supervisor'].includes(current.role);sup.classList.toggle('hidden',!visible);supList.innerHTML=all.length?all.map(t=>card(t,false)).join(''):'<p class="muted">Todavía no hay operaciones preparadas.</p>';}
 }
 document.addEventListener('click',async e=>{
  const start=e.target.closest('[data-start]');if(start){await startOperation(start.getAttribute('data-start'));return;}
