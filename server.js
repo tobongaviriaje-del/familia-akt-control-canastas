@@ -123,10 +123,9 @@ const incoming=JSON.parse(body||'{}');const state=readState();
 if(!Array.isArray(state.tasks))state.tasks=[];
 if(incoming.confirmacion!=='CERRAR JORNADA'){res.writeHead(400,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify({ok:false,error:'Confirmación inválida'}));}
 if(!state.tasks.length){res.writeHead(409,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify({ok:false,error:'No hay tareas activas para archivar'}));}
-const snapshot=state.tasks.map(t=>({...t}));
-const archived=archiveTasks(snapshot,{usuario:String(incoming.usuario||'Admin'),motivo:'Cierre de jornada',regla:'Se archivan todas las tareas; las completadas salen de la lista activa y las pendientes/parciales conservan su avance para el siguiente turno.'});
-const isComplete=t=>{const total=Number(t.cantidad)||0;const delivered=Number(t.entregado)||0;return total>0&&delivered>=total;};
-state.tasks=state.tasks.filter(t=>!isComplete(t));
+const snapshot=state.tasks.map(t=>({...t,entregas:Array.isArray(t.entregas)?t.entregas.map(e=>({...e})):[],confirmacionesCanastas:Array.isArray(t.confirmacionesCanastas)?t.confirmacionesCanastas.map(e=>({...e})):[],correcciones:Array.isArray(t.correcciones)?t.correcciones.map(e=>({...e})):[]}));
+const archived=archiveTasks(snapshot,{usuario:String(incoming.usuario||'Admin'),motivo:'Cierre de jornada e inicio de nueva operación',regla:'Se guarda una copia íntegra de la jornada cerrada en el historial. Todas las tareas continúan activas para la nueva operación, con entregas de unidades y canastas reiniciadas a cero para todos los patinadores.'});
+state.tasks=state.tasks.map(t=>({...t,entregado:0,entregas:[],entrega:null,canastasEntregadas:0,confirmacionesCanastas:[],correcciones:[],estado:'Pendiente'}));
 writeState(state);
 res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});
 res.end(JSON.stringify({ok:true,archived:archived.file,count:archived.count,completedRemoved:snapshot.filter(isComplete).length,remainingCount:state.tasks.length,tasks:state.tasks}));
