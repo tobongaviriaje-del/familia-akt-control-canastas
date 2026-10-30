@@ -215,7 +215,7 @@ function seleccionarProductoLpnAdmin(id){
 
 cloudLoad();
 setInterval(async()=>{const active=document.activeElement;const editingField=active&&$('appView')?.contains(active)&&/^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName);if(!cloudSyncBusy&&!deliverySaving&&!editingField) await cloudLoad();},15000);
-function normalizarIdentidadEntrega(v){return String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/\\s+/g,' ');}
+function normalizarIdentidadEntrega(v){return String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');}
 function guardarNumeroOperacion(){
  if(!current){alert('Inicia sesión para guardar el número de operación.');return;}
  const input=$('numeroOperacionInput'),numero=String(input?.value||'').trim(),msg=$('numeroOperacionMsg');
