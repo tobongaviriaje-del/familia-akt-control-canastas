@@ -46,7 +46,37 @@ res.setHeader('Vary','Origin');res.setHeader('Permissions-Policy','camera=(self)
 if(req.method==='OPTIONS'){res.setHeader('Access-Control-Allow-Methods','GET,PUT,POST,OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type, Authorization');return res.end();}
 if(p==='/health'&&req.method==='GET'){res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});return res.end(JSON.stringify({ok:true,service:'familia-akt-control-canastas'}));}
 if(p==='/api/login'&&req.method==='POST'){
-let body='';req.on('data',chunk=>{body+=chunk;if(body.length>10000)req.destroy();});req.on('end',()=>{try{const incoming=JSON.parse(body||'{}');const username=String(incoming.username||'').trim().toLowerCase();const password=String(incoming.password||'');const state=readState();let user=state.users[username];let turnoLogin=null;let passwordValid=false;if(user&&user.role==='Patinador'&&(typeof user.passDia==='string'||typeof user.passNoche==='string')){if(typeof user.passDia==='string'&&user.passDia===password){passwordValid=true;turnoLogin='Día';}else if(typeof user.passNoche==='string'&&user.passNoche===password){passwordValid=true;turnoLogin='Noche';}}else if(user&&typeof user.pass==='string'&&user.pass===password){passwordValid=true;turnoLogin=user.turno||'Todos';}if(!passwordValid&&username==='admin'&&process.env.ADMIN_RECOVERY_PASSWORD&&password===process.env.ADMIN_RECOVERY_PASSWORD&&!state.adminRecoveryUsed&&user&&user.role==='Admin'){user.pass=password;state.adminRecoveryUsed=true;writeState(state);passwordValid=true;}if(!user||!passwordValid){return sendJson(res,401,{ok:false,error:'Usuario o contraseña incorrectos'});}const token=require('crypto').randomBytes(32).toString('hex');sessions.set(token,{username,expires:Date.now()+SESSION_TTL});return sendJson(res,200,{ok:true,token,user:{username,name:user.name,role:user.role,turno:turnoLogin,areas:user.areas||[],puestos:user.puestos||[]}});}catch{return sendJson(res,400,{ok:false,error:'Solicitud inválida'});}});return;
+let body='';req.on('data',chunk=>{body+=chunk;if(body.length>10000)req.destroy();});req.on('end',()=>{try{
+ const incoming=JSON.parse(body||'{}'),username=String(incoming.username||'').trim().toLowerCase(),password=String(incoming.password||''),state=readState();
+ if(username==='patinadores'){
+  const creds=state.patinadoresAuth||{},turnoLogin=creds.passDia===password?'Día':(creds.passNoche===password?'Noche':null);
+  if(!turnoLogin)return sendJson(res,401,{ok:false,error:'Usuario o contraseña incorrectos'});
+  const profiles=Object.entries(state.users||{}).filter(([,u])=>u&&u.role==='Patinador').map(([key,u])=>({username:key,name:u.name||key,role:'Patinador',areas:u.areas||[],puestos:u.puestos||[],turno:u.turno||'Todos'}));
+  if(!profiles.length)return sendJson(res,409,{ok:false,error:'No hay patinadores registrados.'});
+  const token=require('crypto').randomBytes(32).toString('hex');sessions.set(token,{username:'patinadores',expires:Date.now()+SESSION_TTL});
+  return sendJson(res,200,{ok:true,token,sharedPatinadores:true,patinadores:profiles,user:{username:'patinadores',name:'Patinadores',role:'Patinador',turno:turnoLogin}});
+ }
+ let user=state.users[username],turnoLogin=null,passwordValid=false;
+ if(user&&user.role==='Patinador'&&(typeof user.passDia==='string'||typeof user.passNoche==='string')){
+  if(typeof user.passDia==='string'&&user.passDia===password){passwordValid=true;turnoLogin='Día';}
+  else if(typeof user.passNoche==='string'&&user.passNoche===password){passwordValid=true;turnoLogin='Noche';}
+ }else if(user&&typeof user.pass==='string'&&user.pass===password){passwordValid=true;turnoLogin=user.turno||'Todos';}
+ if(!passwordValid&&username==='admin'&&process.env.ADMIN_RECOVERY_PASSWORD&&password===process.env.ADMIN_RECOVERY_PASSWORD&&!state.adminRecoveryUsed&&user&&user.role==='Admin'){user.pass=password;state.adminRecoveryUsed=true;writeState(state);passwordValid=true;}
+ if(!user||!passwordValid)return sendJson(res,401,{ok:false,error:'Usuario o contraseña incorrectos'});
+ const token=require('crypto').randomBytes(32).toString('hex');sessions.set(token,{username,expires:Date.now()+SESSION_TTL});
+ return sendJson(res,200,{ok:true,token,user:{username,name:user.name,role:user.role,turno:turnoLogin,areas:user.areas||[],puestos:user.puestos||[]}});
+ }catch{return sendJson(res,400,{ok:false,error:'Solicitud inválida'});}});return;
+}
+if(p==='/api/admin/patinadores-credentials'&&req.method==='POST'){
+ const token=String(req.headers.authorization||'').slice(7),session=sessions.get(token),state=readState();
+ if(!session||session.username!=='admin'||!state.users.admin||state.users.admin.role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede configurar estas claves.'});
+ let body='';req.on('data',c=>{body+=c;if(body.length>10000)req.destroy();});req.on('end',()=>{try{
+  const incoming=JSON.parse(body||'{}'),passDia=String(incoming.passDia||''),passNoche=String(incoming.passNoche||'');
+  if(passDia.length<4||passNoche.length<4)return sendJson(res,400,{ok:false,error:'Cada contraseña debe tener mínimo 4 caracteres.'});
+  state.patinadoresAuth={passDia,passNoche,updatedAt:new Date().toISOString()};writeState(state);
+  return sendJson(res,200,{ok:true});
+ }catch{return sendJson(res,400,{ok:false,error:'Solicitud inválida.'});}});
+ return;
 }
 if(p.startsWith('/api/')&&p!=='/api/login'&&!authorized(req))return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
 if(p==='/api/admin/deduplicate-standard-tasks'&&req.method==='POST'){
@@ -84,7 +114,7 @@ if(p==='/api/admin/deduplicate-standard-tasks'&&req.method==='POST'){
   }catch(e){console.error('deduplicate standard tasks failed',e);return sendJson(res,500,{ok:false,error:'No se pudo completar la limpieza.'});}
  });return;
 }
-if(p==='/api/state'&&req.method==='GET'){return sendJson(res,200,readState());}
+if(p==='/api/state'&&req.method==='GET'){const safe=readState();delete safe.patinadoresAuth;return sendJson(res,200,safe);}
 if(p==='/api/jornada/cerrar'&&req.method==='POST'){
 let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{
 const incoming=JSON.parse(body||'{}');const state=readState();
