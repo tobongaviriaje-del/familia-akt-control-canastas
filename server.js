@@ -1,6 +1,11 @@
  const http=require('http');
 const fs=require('fs');
 const path=require('path');
+const {Pool}=require('pg');
+const pool=process.env.DATABASE_URL?new Pool({connectionString:process.env.DATABASE_URL,ssl:process.env.DATABASE_SSL==='disable'?false:{rejectUnauthorized:false},max:10,idleTimeoutMillis:30000,connectionTimeoutMillis:10000}):null;
+let stateCache=null;
+let dbWriteQueue=Promise.resolve();
+
 
 const PORT=process.env.PORT||8080;
 const ROOT=path.join(__dirname,'public');
@@ -24,21 +29,59 @@ function ensureState(){
 fs.mkdirSync(DATA_DIR,{recursive:true});
 if(!fs.existsSync(STATE_FILE))fs.writeFileSync(STATE_FILE,JSON.stringify({users:defaultUsers,tasks:[]},null,2));
 }
-function readState(){
-ensureState();
-try{
-const s=JSON.parse(fs.readFileSync(STATE_FILE,'utf8'));
+function normalizeState(s){
+if(!s||typeof s!=='object')s={};
 if(!s.users)s.users=defaultUsers;
 for(const [key,user] of Object.entries(defaultUsers)){if(!s.users[key])s.users[key]=user;}
-if(s.users.fredy && s.users.fredy.role==='Admin'){s.users.fredy.role='Supervisor';writeState(s);}
+if(s.users.fredy && s.users.fredy.role==='Admin')s.users.fredy.role='Supervisor';
 if(!Array.isArray(s.tasks))s.tasks=[];
 if(!Array.isArray(s.lpnCatalog))s.lpnCatalog=[];
 if(!Array.isArray(s.freeDeliveries))s.freeDeliveries=[];
 return s;
-}catch{return {users:defaultUsers,tasks:[],lpnCatalog:[],freeDeliveries:[]};}
 }
-function writeState(s){ensureState();const tmp=STATE_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(s,null,2));fs.renameSync(tmp,STATE_FILE);}
-function archiveTasks(tasks,meta={}){fs.mkdirSync(HISTORY_DIR,{recursive:true});const stamp=new Date().toISOString().replace(/[:.]/g,'-');const file=path.join(HISTORY_DIR,'jornada-'+stamp+'.json');fs.writeFileSync(file,JSON.stringify({app:'Familia AKT Control de Canastas',fechaCierre:new Date().toISOString(),meta,tasks},null,2));return {file:path.basename(file),count:tasks.length};}
+function readState(){
+if(stateCache)return JSON.parse(JSON.stringify(stateCache));
+ensureState();
+try{return normalizeState(JSON.parse(fs.readFileSync(STATE_FILE,'utf8')));}
+catch{return normalizeState({});}
+}
+function writeState(s){
+ensureState();
+stateCache=normalizeState(JSON.parse(JSON.stringify(s)));
+const serialized=JSON.stringify(stateCache);
+const tmp=STATE_FILE+'.tmp';
+fs.writeFileSync(tmp,JSON.stringify(stateCache,null,2));
+fs.renameSync(tmp,STATE_FILE);
+if(pool){
+  const payload=serialized;
+  dbWriteQueue=dbWriteQueue.then(()=>pool.query('INSERT INTO public.app_state (id,data) VALUES (1,$1::jsonb) ON CONFLICT (id) DO UPDATE SET data=EXCLUDED.data,updated_at=now()',[payload])).catch(err=>console.error('Neon state save failed:',err.message));
+}
+}
+async function initializeState(){
+ensureState();
+const local=normalizeState(JSON.parse(fs.readFileSync(STATE_FILE,'utf8')));
+if(pool){
+  try{
+    const result=await pool.query('SELECT data FROM public.app_state WHERE id=1');
+    if(result.rows.length)stateCache=normalizeState(result.rows[0].data);
+    else{
+      stateCache=local;
+      await pool.query('INSERT INTO public.app_state (id,data) VALUES (1,$1::jsonb) ON CONFLICT (id) DO NOTHING',[JSON.stringify(stateCache)]);
+    }
+    const tmp=STATE_FILE+'.tmp';
+    fs.writeFileSync(tmp,JSON.stringify(stateCache,null,2));
+    fs.renameSync(tmp,STATE_FILE);
+    console.log('Estado operativo conectado a Neon PostgreSQL');
+  }catch(err){
+    console.error('No se pudo inicializar Neon; se conserva el almacenamiento local:',err.message);
+    stateCache=local;
+  }
+}else{
+  stateCache=local;
+  console.log('DATABASE_URL no configurada; usando almacenamiento local');
+}
+}
+function archiveTasks(tasks,meta={}){fs.mkdirSync(HISTORY_DIR,{recursive:true});const archivedAt=new Date().toISOString();const stamp=archivedAt.replace(/[:.]/g,'-');const fileName='jornada-'+stamp+'.json';const file=path.join(HISTORY_DIR,fileName);const payload={app:'Familia AKT Control de Canastas',fechaCierre:archivedAt,meta,tasks};fs.writeFileSync(file,JSON.stringify(payload,null,2));if(pool){dbWriteQueue=dbWriteQueue.then(()=>pool.query('INSERT INTO public.jornada_history (file_name,archived_at,payload) VALUES ($1,$2,$3::jsonb) ON CONFLICT (file_name) DO NOTHING',[fileName,archivedAt,JSON.stringify(payload)])).catch(err=>console.error('Neon history save failed:',err.message));}return {file:fileName,count:tasks.length};}
 const mime={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.json':'application/json; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.jpg':'image/jpeg'};
 const server=http.createServer((req,res)=>{
 const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);const p=decodeURIComponent(url.pathname);
@@ -141,4 +184,4 @@ if(path.extname(file)==='.html'){
 }
 res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream'});res.end(output);});
 });
-ensureState();server.listen(PORT,()=>console.log('FAMILIA AKT funcionando en puerto '+PORT));
+initializeState().catch(err=>{console.error('State initialization failed:',err);stateCache=normalizeState({});}).finally(()=>server.listen(PORT,()=>console.log('FAMILIA AKT funcionando en puerto '+PORT)));
