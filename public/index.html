@@ -732,7 +732,7 @@ async function guardarCapacidadCanastaEstandar(id){
  if(!current){alert('Inicia sesión para guardar la capacidad.');return;}
  const patinador=current.role==='Patinador';
  if(patinador&&(!Array.isArray(current.puestos)||!current.puestos.includes(x.puesto))){alert('Solo puedes definir la capacidad de una referencia asignada a tu puesto.');return;}
- if(!patinador&&!['Admin','Mesanín','Supervisor'].includes(current.role)){alert('Tu usuario no tiene permiso para editar esta referencia.');return;}
+ if(!patinador&&!['Admin','Supervisor'].includes(current.role)){alert('Tu usuario no tiene permiso para editar esta referencia.');return;}
  const input=patinador?$('stdCapCanastaPatinador'+id):$('stdCapCanasta'+id);
  const n=Number(input&&input.value);
  const basketInput=patinador?null:$('stdNumCanastas'+id);
@@ -786,7 +786,7 @@ async function confirmarCanastasEstandar(id){
  if(!x||!x.standardNKD){alert('No encontré esta referencia del estándar.');return;}
  if(!current){alert('Inicia sesión para confirmar canastas.');return;}
  if(current.role==='Patinador'&&(!Array.isArray(current.puestos)||!current.puestos.includes(x.puesto))){alert('Esta referencia no está asignada a tu puesto.');return;}
- if(current.role!=='Patinador'&&current.role!=='Admin'&&current.role!=='Mesanín'&&current.role!=='Supervisor'){alert('Tu usuario no tiene permiso para confirmar canastas.');return;}
+ if(current.role!=='Patinador'&&current.role!=='Admin'&&current.role!=='Supervisor'){alert('Tu usuario no tiene permiso para confirmar canastas.');return;}
  const input=$('stdCanastasQty'+id),canastas=Number(input?.value),cap=unidadesPorCanastaEstandar(x),rest=Math.max(0,unidadesObjetivoEstandar(x)-Number(x.entregado||0));
  if(!Number.isInteger(canastas)||canastas<1){alert('Ingresa una cantidad de canastas mayor que cero.');if(input){input.focus();input.select();}return;}
  if(!(cap>0)){alert('Primero define y guarda cuántas unidades caben en cada canasta.');return;}
