@@ -12,12 +12,12 @@ const SESSION_TTL=12*60*60*1000;
 function sendJson(res,status,data){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(data));}
 function authorized(req){const h=String(req.headers.authorization||'');const token=h.startsWith('Bearer ')?h.slice(7):'';const session=sessions.get(token);if(!session)return false;if(session.expires<Date.now()){sessions.delete(token);return false;}session.expires=Date.now()+SESSION_TTL;return true;}
 
+// Cuentas base: solo administración. Las cuentas de patinadores retiradas
+// no deben recrearse automáticamente al iniciar ni al leer el estado.
 const defaultUsers={
-admin:{pass:'admin',role:'Admin',name:'Administrador'},
-hamilton:{pass:'Hamilton123!',role:'Patinador',name:'Hamilton',areas:['PRE','Izquierdo'],puestos:[]},
-juanesteban:{pass:'Juan123!',role:'Patinador',name:'Juan Esteban',areas:['PRE','Derecho'],puestos:[]},
-jorge:{pass:'Jorge123!',role:'Patinador',name:'Jorge',areas:['PRE','Derecho','Izquierdo','Final de línea'],puestos:[]}
+admin:{pass:'admin',role:'Admin',name:'Administrador'}
 };
+const retiredPatinadores=['juanesteban','jorge','hamilton'];
 
 function ensureState(){
 fs.mkdirSync(DATA_DIR,{recursive:true});
@@ -27,9 +27,11 @@ function readState(){
 ensureState();
 try{
 const s=JSON.parse(fs.readFileSync(STATE_FILE,'utf8'));
-if(!s.users)s.users=defaultUsers;
+if(!s.users)s.users={...defaultUsers};
 for(const [key,user] of Object.entries(defaultUsers)){if(!s.users[key])s.users[key]=user;}
-if(s.users.mesanin){delete s.users.mesanin;writeState(s);}
+let usersChanged=false;
+for(const key of [...retiredPatinadores,'mesanin']){if(Object.prototype.hasOwnProperty.call(s.users,key)){delete s.users[key];usersChanged=true;}}
+if(usersChanged)writeState(s);
 if(s.users.fredy && s.users.fredy.role==='Admin'){s.users.fredy.role='Supervisor';writeState(s);}
 if(!Array.isArray(s.tasks))s.tasks=[];
 if(!Array.isArray(s.lpnCatalog))s.lpnCatalog=[];
