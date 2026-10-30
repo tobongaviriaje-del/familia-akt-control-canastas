@@ -236,8 +236,16 @@ function tareasAsignadasAUsuarioEstandar(task,user,username){
 }
 function resumenEntregaPatinador(tasks,user,username){
  const assigned=tasks.filter(x=>x.standardNKD&&tareasAsignadasAUsuarioEstandar(x,user,username));
- const total=assigned.reduce((n,x)=>n+Math.max(0,Number(unidadesObjetivoEstandar(x))||0),0);
- const delivered=assigned.reduce((n,x)=>n+Math.min(Math.max(0,Number(x.entregado)||0),Math.max(0,Number(unidadesObjetivoEstandar(x))||0)),0);
+ const identidad=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/\\s+/g,' ');
+ const nombres=new Set([identidad(username),identidad(user&&user.name),identidad(user&&user.nombre)].filter(Boolean));
+ let total=0,delivered=0;
+ assigned.forEach(x=>{
+  const objetivo=Math.max(0,Number(unidadesObjetivoEstandar(x))||0);
+  total+=objetivo;
+  const propias=(Array.isArray(x.entregas)?x.entregas:[]).filter(e=>nombres.has(identidad(e&&e.patinador))).reduce((n,e)=>n+Math.max(0,Number(e&&e.cantidad)||0),0);
+  const correcciones=(Array.isArray(x.correcciones)?x.correcciones:[]).filter(c=>nombres.has(identidad(c&&c.usuario))).reduce((n,c)=>n+Math.max(0,Number(c&&c.unidades)||0),0);
+  delivered+=Math.min(objetivo,Math.max(0,propias-correcciones));
+ });
  return {assigned:assigned.length,total,delivered,pct:total?Math.min(100,delivered/total*100):0};
 }
 function renderProgresoPatinadores(){
@@ -247,12 +255,10 @@ function renderProgresoPatinadores(){
  const progress=$('standardProgress');
  if(current.role==='Patinador'){
   panel.classList.remove('hidden');
-  const own=resumenEntregaPatinador(tasks,current,current.username);
   const modelo=String($('modeloEstandarPatinador')?.value||localStorage.getItem('cc_modelo_moto')||'NKD');
-  const ownModel=tasks.filter(x=>x.standardNKD&&modeloDeTareaEstandar(x)===modelo&&tareasAsignadasAUsuarioEstandar(x,current,current.username));
-  const total=ownModel.reduce((n,x)=>n+Math.max(0,Number(unidadesObjetivoEstandar(x))||0),0);
-  const delivered=ownModel.reduce((n,x)=>n+Math.min(Math.max(0,Number(x.entregado)||0),Math.max(0,Number(unidadesObjetivoEstandar(x))||0)),0);
-  const pct=total?Math.min(100,delivered/total*100):0;
+  const ownModel=tasks.filter(x=>x.standardNKD&&modeloDeTareaEstandar(x)===modelo);
+  const own=resumenEntregaPatinador(ownModel,current,current.username);
+  const total=own.total,delivered=own.delivered,pct=own.pct;
   if(progress)progress.innerHTML='Referencias asignadas: <b>'+ownModel.length+'</b> · Entregas: <b>'+pct.toLocaleString('es-CO',{maximumFractionDigits:1})+'%</b>';
   box.innerHTML='<p>Tu avance en <b>'+String(modelo).replace(/[&<>"]/g,'')+'</b>: <b>'+pct.toLocaleString('es-CO',{maximumFractionDigits:1})+'%</b> ('+delivered.toLocaleString('es-CO')+' de '+total.toLocaleString('es-CO')+' unidades).</p><div style="height:10px;background:#e5e7eb;border-radius:8px;overflow:hidden"><div style="height:10px;width:'+pct+'%;background:#16a34a"></div></div><p class="muted">Solo puedes ver tu propio porcentaje de entrega.</p>';
   return;
