@@ -131,6 +131,55 @@ res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});
 res.end(JSON.stringify({ok:true,archived:archived.file,count:archived.count,completedRemoved:snapshot.filter(isComplete).length,remainingCount:state.tasks.length,tasks:state.tasks}));
 }catch(e){console.error('Error cerrando jornada:',e);res.writeHead(500,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify({ok:false,error:'No se pudo cerrar la jornada'}));}});return;
 }
+if(p==='/api/jornada/continuar-pendientes'&&req.method==='POST'){
+const token=String(req.headers.authorization||'').slice(7),session=sessions.get(token),state=readState();
+if(!session||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede preparar la continuidad de tareas.'});
+let body='';req.on('data',c=>{body+=c;if(body.length>10000)req.destroy();});req.on('end',()=>{
+try{
+const incoming=JSON.parse(body||'{}');
+if(!Array.isArray(state.tasks)||!state.tasks.length)return sendJson(res,409,{ok:false,error:'No hay tareas activas para continuar.'});
+const fingerprint=JSON.stringify(state.tasks);
+if(state.continuidadPendienteActiva&&state.continuidadPendienteActiva.fingerprint===fingerprint)return sendJson(res,409,{ok:false,error:'La continuidad ya fue preparada y no hay nuevas entregas que continuar.'});
+const objetivo=t=>{
+ if(!t)return 0;
+ if(t.standardNKD){
+  const lote=Number(String(t.lote??'').replace(',','.'))||0;
+  if(lote>0)return lote;
+  const cap=Number(String(t.cantidadCanasta??'').replace(',','.'))||0;
+  const canastas=Number(String(t.numCanastas??'').replace(',','.'))||0;
+  if(cap>0&&canastas>0)return cap*canastas;
+  const unidad=Number(String(t.cantidadUnidad??'').replace(',','.'))||0;
+  const cantidad=Number(String(t.cantidad??'').replace(',','.'))||0;
+  return unidad>0?unidad:(cap>0?cap:cantidad);
+ }
+ return Math.max(0,Number(t.cantidad)||0);
+};
+const stamp=Date.now(),fecha=new Date().toLocaleString('es-CO');
+const snapshot=state.tasks.map(t=>JSON.parse(JSON.stringify(t)));
+const pendientes=[];
+snapshot.forEach((t,i)=>{
+ const total=Math.max(0,objetivo(t)),entregado=Math.max(0,Number(t.entregado)||0),restante=Math.max(0,total-entregado);
+ if(restante<=0)return;
+ const next={...t,id:String(t.id)+'-continuidad-'+stamp+'-'+i,cantidad:restante,entregado:0,entregas:[],entrega:null,canastasEntregadas:0,confirmacionesCanastas:[],correcciones:[],estado:'Pendiente',continuidadDeTareaId:t.id,continuidadFecha:fecha,unidadesObjetivoAnterior:total,unidadesEntregadasJornadaAnterior:Math.min(total,entregado),unidadesPendientesContinuadas:restante};
+ if(t.standardNKD){
+  next.lote=restante;
+  if(Object.prototype.hasOwnProperty.call(t,'lotePiezas'))next.lotePiezas=restante;
+  const cap=Number(String(t.cantidadCanasta??'').replace(',','.'))||0;
+  if(cap>0){next.numCanastas=Math.ceil(restante/cap);if(Object.prototype.hasOwnProperty.call(t,'numCanastasRaw'))next.numCanastasRaw=String(next.numCanastas);}
+ }
+ pendientes.push(next);
+});
+if(!pendientes.length)return sendJson(res,409,{ok:false,error:'No hay cantidades pendientes. No se modificó ni archivó ningún dato.'});
+const archivados=snapshot.map(t=>({...t,archivadaEn:fecha,archivadaPor:String(incoming.usuario||'Admin'),motivoArchivo:'Cierre de jornada y preparación de continuidad de cantidades pendientes'}));
+const archivedFile=archiveTasks(snapshot,{usuario:String(incoming.usuario||'Admin'),motivo:'Cierre de jornada y preparación de continuidad',regla:'Se conserva la jornada completa. Solo las cantidades pendientes pasan a la nueva jornada; las unidades entregadas quedan en el historial.'});
+state.tareasArchivadas=[...(Array.isArray(state.tareasArchivadas)?state.tareasArchivadas:[]),...archivados];
+state.tasks=pendientes;
+state.continuidadPendienteActiva={fecha,archivo:archivedFile.file,fingerprint:JSON.stringify(state.tasks)};
+writeState(state);
+return sendJson(res,200,{ok:true,archived:archivedFile.file,archivedCount:snapshot.length,pendingCount:pendientes.length,pendingUnits:pendientes.reduce((n,t)=>n+Math.max(0,Number(t.cantidad)||0),0),tasks:state.tasks});
+}catch(e){console.error('Error preparando continuidad de pendientes:',e);return sendJson(res,500,{ok:false,error:'No se pudo preparar la continuidad de tareas.'});}
+});return;
+}
 if(p==='/api/state'&&req.method==='PUT'){
 let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{const incoming=JSON.parse(body||'{}');const current=readState();const nextUsers=incoming.users||current.users;delete nextUsers.mesanin;const state={...current,users:nextUsers,tasks:Array.isArray(incoming.tasks)?incoming.tasks:current.tasks,lpnCatalog:Array.isArray(incoming.lpnCatalog)?incoming.lpnCatalog:current.lpnCatalog,freeDeliveries:Array.isArray(incoming.freeDeliveries)?incoming.freeDeliveries:(current.freeDeliveries||[]),queuedStandardBatches:Array.isArray(incoming.queuedStandardBatches)?incoming.queuedStandardBatches:(current.queuedStandardBatches||[]),tareasArchivadas:Array.isArray(incoming.tareasArchivadas)?incoming.tareasArchivadas:(current.tareasArchivadas||[])};writeState(state);res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(state));}catch{res.writeHead(400);res.end(JSON.stringify({error:'JSON invalido'}));}});return;
 }
