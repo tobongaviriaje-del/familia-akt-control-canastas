@@ -520,7 +520,8 @@ function configurarCentroControl(){
  if(!app||!card)return;
  const admin=current&&current.role==='Admin';
  const supervisor=!!(current&&(current.role==='Supervisor'||current.role==='Coordinador'||String(current.role||'').toLowerCase()==='coordinador'||['fredy','juandavid','juandavid'].includes(String(current.username||'').trim().toLowerCase().replace(/\s+/g,''))));
- const dashboardIds=['operationNumberCard','patinadorProgressPanel','totalStat'];
+ const dashboardIds=['patinadorProgressPanel','estibasRecibidasPanel','totalStat'];
+ const operationCard=$('operationNumberCard');if(operationCard)operationCard.classList.toggle('hidden',!!supervisor);
  // El supervisor solo consulta el tablero. Ocultar explícitamente herramientas y actividad operativa,
  // incluso cuando estén dentro de un contenedor que también incluye el resumen del tablero.
  ['mesaninPanel','mesaninEntregas','manualStandardPanel','standardAdminPanel','freeDeliveryPanel','createDistributionPanel'].forEach(id=>{
