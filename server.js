@@ -180,6 +180,46 @@ return sendJson(res,200,{ok:true,archived:archivedFile.file,archivedCount:snapsh
 }catch(e){console.error('Error preparando continuidad de pendientes:',e);return sendJson(res,500,{ok:false,error:'No se pudo preparar la continuidad de tareas.'});}
 });return;
 }
+if(p==='/api/jornada/continuar-xrs180'&&req.method==='POST'){
+const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),state=readState();
+if(!session||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede preparar esta continuidad.'});
+let body='';req.on('data',c=>{body+=c;if(body.length>10000)req.destroy();});req.on('end',()=>{
+try{
+const incoming=JSON.parse(body||'{}'),accion=String(incoming.accion||'previsualizar');
+const esObjetivo=t=>String(t&& (t.standardMoto||(t.standardNKD?'NKD':''))||'').trim().toUpperCase()==='XRS-180'&&String(t&&t.codigoLoteOperacion||'').trim().toUpperCase()==='KK767A';
+const seleccionadas=(Array.isArray(state.tasks)?state.tasks:[]).filter(esObjetivo);
+const calcular=t=>{
+ const total=Math.max(0,Number(String(t.cantidad??'').replace(',','.'))||0);
+ const entregado=Math.min(total,Math.max(0,Number(String(t.entregado??0).replace(',','.'))||0));
+ return {total,entregado,restante:Math.max(0,total-entregado)};
+};
+const resumen={modelo:'XRS-180',codigoLoteOperacion:'KK767A',tareasEncontradas:seleccionadas.length,tareasPendientes:0,tareasCompletadas:0,unidadesObjetivo:0,unidadesEntregadas:0,unidadesPendientes:0};
+seleccionadas.forEach(t=>{const x=calcular(t);resumen.unidadesObjetivo+=x.total;resumen.unidadesEntregadas+=x.entregado;resumen.unidadesPendientes+=x.restante;if(x.restante>0)resumen.tareasPendientes++;else resumen.tareasCompletadas++;});
+if(accion==='previsualizar'){
+ if(!seleccionadas.length)return sendJson(res,200,{ok:true,resumen,mensaje:'No hay tareas activas que coincidan exactamente con XRS-180 y KK767A.'});
+ return sendJson(res,200,{ok:true,resumen,mensaje:'Vista previa solamente. No se modificó ningún dato.'});
+}
+if(accion!=='aplicar')return sendJson(res,400,{ok:false,error:'Acción no válida.'});
+if(!seleccionadas.length)return sendJson(res,409,{ok:false,error:'No hay tareas activas XRS-180 con código KK767A.'});
+const fingerprint=JSON.stringify(seleccionadas);
+if(state.continuidadXRS180KK767A&&state.continuidadXRS180KK767A.fingerprint===fingerprint)return sendJson(res,409,{ok:false,error:'Esta misma continuidad ya fue preparada. No se duplicaron tareas.'});
+const stamp=Date.now(),fecha=new Date().toLocaleString('es-CO'),pendientes=[];
+seleccionadas.forEach((t,i)=>{
+ const x=calcular(t);if(x.restante<=0)return;
+ const next={...JSON.parse(JSON.stringify(t)),id:String(t.id)+'-continuidad-xrs180-kk767a-'+stamp+'-'+i,cantidad:x.restante,entregado:0,entregas:[],entrega:null,canastasEntregadas:0,confirmacionesCanastas:[],correcciones:[],estado:'Pendiente',continuidadDeTareaId:t.id,continuidadFecha:fecha,unidadesObjetivoAnterior:x.total,unidadesEntregadasJornadaAnterior:x.entregado,unidadesPendientesContinuadas:x.restante};
+ pendientes.push(next);
+});
+if(!pendientes.length)return sendJson(res,409,{ok:false,error:'No hay cantidades pendientes para pasar al turno siguiente. No se modificó nada.'});
+const archivados=seleccionadas.map(t=>({...JSON.parse(JSON.stringify(t)),archivadaEn:fecha,archivadaPor:String(state.users[session.username].name||session.username),motivoArchivo:'Continuidad exclusiva XRS-180 OPR KK767A; se conserva el registro anterior íntegro.'}));
+const archivo=archiveTasks(seleccionadas,{usuario:String(state.users[session.username].name||session.username),motivo:'Continuidad exclusiva XRS-180 OPR KK767A',regla:'Se conserva el historial original. Solo las cantidades pendientes pasan a tareas activas nuevas; las entregas previas quedan registradas en el archivo.'});
+state.tareasArchivadas=[...(Array.isArray(state.tareasArchivadas)?state.tareasArchivadas:[]),...archivados];
+state.tasks=(Array.isArray(state.tasks)?state.tasks:[]).filter(t=>!esObjetivo(t)).concat(pendientes);
+state.continuidadXRS180KK767A={fecha,archivo:archivo.file,fingerprint:JSON.stringify(pendientes)};
+writeState(state);
+return sendJson(res,200,{ok:true,resumen,archivo:archivo.file,tareasNuevas:pendientes.length,unidadesContinuadas:pendientes.reduce((n,t)=>n+Math.max(0,Number(t.cantidad)||0),0),mensaje:'Continuidad XRS-180 / KK767A preparada. Las demás motos y códigos de operación no fueron modificados.'});
+}catch(e){console.error('Error preparando continuidad XRS-180 KK767A:',e);return sendJson(res,500,{ok:false,error:'No se pudo preparar la continuidad XRS-180 / KK767A.'});}
+});return;
+}
 if(p==='/api/state'&&req.method==='PUT'){
 let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{
 const incoming=JSON.parse(body||'{}'),current=readState(),nextUsers=incoming.users||current.users;delete nextUsers.mesanin;
