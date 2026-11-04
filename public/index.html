@@ -153,6 +153,14 @@ function cloudSave(){
         body:snapshot
       });
       if(!r.ok)throw new Error('El servidor rechazó el guardado');
+      const saved=await r.json().catch(()=>null);
+      if(saved&&Array.isArray(saved.tasks)){
+        cloudTasks=saved.tasks;
+        if(Array.isArray(saved.queuedStandardBatches))queuedStandardBatches=saved.queuedStandardBatches;
+        if(Array.isArray(saved.tareasArchivadas))tareasArchivadas=saved.tareasArchivadas;
+        localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
+        try{localStorage.setItem('cc_tareas_archivadas',JSON.stringify(tareasArchivadas));}catch(_){}
+      }
       cloudReady=true;
       return true;
     }catch(e){
@@ -917,7 +925,7 @@ async function enviarEstandarPreparado(){
   if(!code){alert('Escribe el número de OPR o lote del siguiente estándar.');$('codigoSiguienteLote')?.focus();return;}
   if(queuedStandardBatches.length){alert('Ya hay un siguiente lote preparado ('+queuedStandardBatches[0].modelo+' · '+queuedStandardBatches[0].codigo+'). Actívalo o retíralo antes de preparar otro.');return;}
   if(!confirm('¿Dejar preparado el siguiente lote '+code+' de '+pending.modelo+' con '+pending.referenceCount+' referencias? No reemplazará ni modificará el lote activo.'))return;
-  const batch={id:'queue-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),modelo:pending.modelo,codigo:code,createdAt:new Date().toISOString(),createdBy:current.name||current.username||'Admin',tasks:(pending.parsedTasks||[]).map(x=>({...x,codigoLoteOperacion:code,entregado:0,entregas:[],entrega:null,canastasEntregadas:0,confirmacionesCanastas:[],correcciones:[],estado:'Pendiente'}))};
+  const batch={id:'queue-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),modelo:pending.modelo,modeloActual:activeModel,codigo:code,createdAt:new Date().toISOString(),createdBy:current.name||current.username||'Admin',tasks:(pending.parsedTasks||[]).map(x=>({...x,codigoLoteOperacion:code,entregado:0,entregas:[],entrega:null,canastasEntregadas:0,confirmacionesCanastas:[],correcciones:[],estado:'Pendiente'}))};
   queuedStandardBatches=[batch];
   const ok=await cloudSave();
   if(!ok){queuedStandardBatches=[];alert('No se confirmó el guardado del siguiente lote. El lote actual no se modificó.');return;}
