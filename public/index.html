@@ -1106,12 +1106,14 @@ function buscarEntregasOperacionDia(){
 }
 function inicializarBusquedaOperacion(){const input=$('buscarOperacionFecha');if(input&&!input.value){const ayer=new Date();ayer.setDate(ayer.getDate()-1);input.value=fechaLocalInput(ayer);}}
 function zonasEstibasUsuario(){
- const areas=Array.isArray(current?.areas)?current.areas.map(x=>String(x||'').toLowerCase()):[];
- const puestos=Array.isArray(current?.puestos)?current.puestos.map(x=>String(x||'').toLowerCase()):[];
+ const normalizar=x=>String(x||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+ const areas=Array.isArray(current?.areas)?current.areas.map(normalizar):[];
+ const puestos=Array.isArray(current?.puestos)?current.puestos.map(normalizar):[];
+ const coincide=(lista,patrones)=>lista.some(x=>patrones.some(p=>p.test(x)));
  return {
-  ladoIzquierdo:areas.some(x=>x.includes('izquierdo'))||puestos.some(x=>x.includes('izquierdo')),
-  ladoDerecho:areas.some(x=>x.includes('derecho'))||puestos.some(x=>x.includes('derecho')),
-  finalLinea:areas.some(x=>x.includes('final'))||puestos.some(x=>x.includes('final'))
+  ladoIzquierdo:coincide(areas.concat(puestos),[/izquierdo/,/lado izq/]),
+  ladoDerecho:coincide(areas.concat(puestos),[/derecho/,/lado der/]),
+  finalLinea:coincide(areas.concat(puestos),[/final/,/fin de linea/,/^fin(?: |$)/,/linea final/])
  };
 }
 function guardarEstibasRecibidas(){
