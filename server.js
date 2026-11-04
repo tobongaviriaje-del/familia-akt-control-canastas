@@ -181,7 +181,28 @@ return sendJson(res,200,{ok:true,archived:archivedFile.file,archivedCount:snapsh
 });return;
 }
 if(p==='/api/state'&&req.method==='PUT'){
-let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{const incoming=JSON.parse(body||'{}');const current=readState();const nextUsers=incoming.users||current.users;delete nextUsers.mesanin;const state={...current,users:nextUsers,tasks:Array.isArray(incoming.tasks)?incoming.tasks:current.tasks,lpnCatalog:Array.isArray(incoming.lpnCatalog)?incoming.lpnCatalog:current.lpnCatalog,freeDeliveries:Array.isArray(incoming.freeDeliveries)?incoming.freeDeliveries:(current.freeDeliveries||[]),estibasRecibidas:Array.isArray(incoming.estibasRecibidas)?incoming.estibasRecibidas:(current.estibasRecibidas||[]),queuedStandardBatches:Array.isArray(incoming.queuedStandardBatches)?incoming.queuedStandardBatches:(current.queuedStandardBatches||[]),tareasArchivadas:Array.isArray(incoming.tareasArchivadas)?incoming.tareasArchivadas:(current.tareasArchivadas||[])};writeState(state);res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(state));}catch{res.writeHead(400);res.end(JSON.stringify({error:'JSON invalido'}));}});return;
+let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{
+const incoming=JSON.parse(body||'{}'),current=readState(),nextUsers=incoming.users||current.users;delete nextUsers.mesanin;
+const state={...current,users:nextUsers,tasks:Array.isArray(incoming.tasks)?incoming.tasks:current.tasks,lpnCatalog:Array.isArray(incoming.lpnCatalog)?incoming.lpnCatalog:current.lpnCatalog,freeDeliveries:Array.isArray(incoming.freeDeliveries)?incoming.freeDeliveries:(current.freeDeliveries||[]),estibasRecibidas:Array.isArray(incoming.estibasRecibidas)?incoming.estibasRecibidas:(current.estibasRecibidas||[]),queuedStandardBatches:Array.isArray(incoming.queuedStandardBatches)?incoming.queuedStandardBatches:(current.queuedStandardBatches||[]),tareasArchivadas:Array.isArray(incoming.tareasArchivadas)?incoming.tareasArchivadas:(current.tareasArchivadas||[])};
+const queued=state.queuedStandardBatches[0];
+if(queued&&queued.modeloActual&&Array.isArray(queued.tasks)&&queued.tasks.length){
+ const activeModel=String(queued.modeloActual),modelOf=t=>String(t&& (t.standardMoto||(t.standardNKD?'NKD':''))||'');
+ const active=state.tasks.filter(t=>t&&t.standardNKD&&modelOf(t)===activeModel);
+ const objective=t=>{const basket=Number(String(t.cantidadCanasta??'').replace(',','.'))||0,baskets=Number(String(t.numCanastas??'').replace(',','.'))||0,lot=Number(String(t.lote??'').replace(',','.'))||0,unit=Number(String(t.cantidadUnidad??'').replace(',','.'))||0,qty=Number(String(t.cantidad??'').replace(',','.'))||0;return lot>0?lot:(basket>0&&baskets>0?basket*baskets:(unit>0?unit:(basket>0?basket:qty)));};
+ const total=active.reduce((n,t)=>n+Math.max(0,objective(t)),0),delivered=active.reduce((n,t)=>n+Math.min(Math.max(0,Number(t.entregado)||0),Math.max(0,objective(t))),0);
+ const target=state.tasks.filter(t=>t&&t.standardNKD&&modelOf(t)===String(queued.modelo)&&modelOf(t)!==activeModel);
+ const targetHasPartial=target.some(t=>(Number(t.entregado)||0)>0&&(Number(t.entregado)||0)<objective(t));
+ if(total>0&&delivered>=total&& !targetHasPartial){
+  const affected=new Set([activeModel,String(queued.modelo)]),stamp=new Date().toLocaleString('es-CO');
+  const archived=state.tasks.filter(t=>t&&t.standardNKD&&affected.has(modelOf(t))).map(t=>({...t,archivadaEn:stamp,archivadaPor:'Sistema',motivoArchivo:'Cierre automático de lote completado'}));
+  state.tareasArchivadas=[...(state.tareasArchivadas||[]),...archived];
+  state.tasks=state.tasks.filter(t=>!(t&&t.standardNKD&&affected.has(modelOf(t)))).concat(queued.tasks.map(t=>({...t})));
+  state.queuedStandardBatches=[];
+  state.ultimoLoteActivadoAutomaticamente={modelo:queued.modelo,codigo:queued.codigo,fechaHora:new Date().toISOString(),loteAnterior:activeModel};
+ }
+}
+writeState(state);res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(state));
+}catch(e){console.error('Error guardando estado:',e);res.writeHead(400);res.end(JSON.stringify({error:'JSON invalido'}));}});return;
 }
 let filePath=p==='/'?'/index.html':p;const file=path.normalize(path.join(ROOT,filePath));
 if(!file.startsWith(ROOT)){res.writeHead(403);return res.end('Forbidden');}
