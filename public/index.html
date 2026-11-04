@@ -244,7 +244,7 @@ function guardarNumeroOperacion(){
  msg.className='pill';msg.textContent='Número de operación guardado: '+numero+'. Se añadirá a tus próximas entregas.';
 }
 function tareasAsignadasAUsuarioEstandar(task,user,username){
- if(!task||!task.standardNKD||!user||user.role!=='Patinador')return false;
+ if(!task||(!task.standardNKD&&!esContinuidadXRS180(task))||!user||user.role!=='Patinador')return false;
  // Para continuidad día/noche, compartir el mismo saldo entre patinadores habilitados
  // en el puesto, sin crear una segunda copia de la tarea.
  const clean=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
@@ -252,7 +252,7 @@ function tareasAsignadasAUsuarioEstandar(task,user,username){
  return puestos.includes(clean(normalizarPuestoEstandar(task.puesto)));
 }
 function resumenEntregaPatinador(tasks,user,username){
- const assigned=tasks.filter(x=>x.standardNKD&&tareasAsignadasAUsuarioEstandar(x,user,username));
+ const assigned=tasks.filter(x=>(x.standardNKD||esContinuidadXRS180(x))&&tareasAsignadasAUsuarioEstandar(x,user,username));
  const identidad=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/\\s+/g,' ');
  const nombres=new Set([identidad(username),identidad(user&&user.name),identidad(user&&user.nombre)].filter(Boolean));
  let total=0,delivered=0;
@@ -1089,7 +1089,7 @@ function registrarEntregaEstandar(id){
  const x=getTasks().find(a=>String(a.id)===String(id));
  if(!x){alert('No encontré esta referencia. Actualiza la página y vuelve a intentarlo.');return;}
  if(!current){alert('Inicia sesión para registrar la entrega.');return;}
- if(current.role==='Patinador'&&(!Array.isArray(current.puestos)||!current.puestos.includes(x.puesto))){alert('Esta referencia no está asignada a tu puesto.');return;}
+ if(current.role==='Patinador'&&!tareaAsignadaAlPatinador(x)){alert('Esta referencia no está asignada a tu puesto.');return;}
  if(current.role!=='Patinador'&&current.role!=='Admin'&&current.role!=='Admin'&&current.role!=='Supervisor'){alert('Tu usuario no tiene permiso para registrar entregas.');return;}
  const input=$('stdQty'+id),qty=Number(input?.value),rest=Math.max(0,unidadesObjetivoEstandar(x)-Number(x.entregado||0));
  if(!Number.isInteger(qty)||qty<1){alert('Ingresa una cantidad de unidades mayor que cero.');if(input){input.focus();input.select();}return;}
