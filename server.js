@@ -1,5 +1,6 @@
  const http=require('http');
 const fs=require('fs');
+const zlib=require('zlib');
 const path=require('path');
 
 const PORT=process.env.PORT||8080;
@@ -42,6 +43,27 @@ return s;
 function writeState(s){ensureState();const tmp=STATE_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(s,null,2));fs.renameSync(tmp,STATE_FILE);}
 function archiveTasks(tasks,meta={}){fs.mkdirSync(HISTORY_DIR,{recursive:true});const stamp=new Date().toISOString().replace(/[:.]/g,'-');const file=path.join(HISTORY_DIR,'jornada-'+stamp+'.json');fs.writeFileSync(file,JSON.stringify({app:'Familia AKT Control de Canastas',fechaCierre:new Date().toISOString(),meta,tasks},null,2));return {file:path.basename(file),count:tasks.length};}
 const mime={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.json':'application/json; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.jpg':'image/jpeg'};
+
+function readZipEntries(buffer){
+ let eocd=-1;for(let i=buffer.length-22;i>=Math.max(0,buffer.length-65558);i--){if(buffer.readUInt32LE(i)===0x06054b50){eocd=i;break;}}
+ if(eocd<0)throw new Error('ZIP inválido: no se encontró el directorio central.');
+ const count=buffer.readUInt16LE(eocd+10),cdOffset=buffer.readUInt32LE(eocd+16),out=new Map();let pos=cdOffset,total=0;
+ if(count>600)throw new Error('El paquete tiene demasiados archivos.');
+ for(let i=0;i<count;i++){
+  if(buffer.readUInt32LE(pos)!==0x02014b50)throw new Error('Directorio ZIP dañado.');
+  const method=buffer.readUInt16LE(pos+10),compressed=buffer.readUInt32LE(pos+20),uncompressed=buffer.readUInt32LE(pos+24),nl=buffer.readUInt16LE(pos+28),el=buffer.readUInt16LE(pos+30),cl=buffer.readUInt16LE(pos+32),lo=buffer.readUInt32LE(pos+42),name=buffer.toString('utf8',pos+46,pos+46+nl);pos+=46+nl+el+cl;
+  if(!name||name.endsWith('/'))continue;if(name.startsWith('/')||name.includes('..')||name.includes('\\'))throw new Error('El ZIP contiene una ruta no permitida.');
+  if(name!=='manifest.json'&&!/^fotos\/[a-f0-9]{40}\.webp$/i.test(name))continue;
+  total+=uncompressed;if(total>60*1024*1024)throw new Error('El contenido descomprimido supera el límite permitido.');
+  if(buffer.readUInt32LE(lo)!==0x04034b50)throw new Error('Entrada ZIP dañada.');
+  const start=lo+30+buffer.readUInt16LE(lo+26)+buffer.readUInt16LE(lo+28),raw=buffer.subarray(start,start+compressed);
+  let data;if(method===0)data=Buffer.from(raw);else if(method===8)data=zlib.inflateRawSync(raw);else throw new Error('Compresión ZIP no compatible.');
+  if(data.length!==uncompressed)throw new Error('Tamaño de archivo ZIP no coincide.');out.set(name,data);
+ }
+ return out;
+}
+function safePhotoModel(value){return value==='xrs180'?'XRS-180':value==='cr4150'?'CR4-150':null;}
+
 const server=http.createServer((req,res)=>{
 const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);const p=decodeURIComponent(url.pathname);
 res.setHeader('Vary','Origin');res.setHeader('Permissions-Policy','camera=(self), microphone=(self)');res.setHeader('Cache-Control','no-store');
@@ -116,6 +138,39 @@ if(p==='/api/admin/deduplicate-standard-tasks'&&req.method==='POST'){
   }catch(e){console.error('deduplicate standard tasks failed',e);return sendJson(res,500,{ok:false,error:'No se pudo completar la limpieza.'});}
  });return;
 }
+
+if(p.startsWith('/api/admin/reference-photos/')&&req.method==='POST'){
+ const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),modelKey=p.split('/').pop(),model=safePhotoModel(modelKey);
+ if(!session||session.username!=='admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede cargar fotos de referencias.'});
+ if(!model)return sendJson(res,400,{ok:false,error:'Modelo de fotos no válido.'});
+ const chunks=[];let size=0,tooLarge=false;
+ req.on('data',chunk=>{size+=chunk.length;if(size>15*1024*1024){tooLarge=true;chunks.length=0;}else if(!tooLarge)chunks.push(chunk);});
+ req.on('end',()=>{
+  if(tooLarge)return sendJson(res,413,{ok:false,error:'El ZIP supera el límite de 15 MB.'});
+  try{
+   const entries=readZipEntries(Buffer.concat(chunks)),mb=entries.get('manifest.json');if(!mb)throw new Error('El paquete no contiene manifest.json.');
+   const manifest=JSON.parse(mb.toString('utf8'));
+   if(String(manifest.modelo||'').trim().toUpperCase()!==model.toUpperCase())throw new Error('El paquete seleccionado no corresponde al modelo '+model+'.');
+   if(!manifest.items||typeof manifest.items!=='object'||Array.isArray(manifest.items))throw new Error('El manifiesto de referencias no es válido.');
+   const used=new Set();for(const item of Object.values(manifest.items)){if(!item||!String(item.ean||'').trim()||!String(item.puesto||'').trim()||!Array.isArray(item.photos))throw new Error('El manifiesto contiene una referencia incompleta.');for(const photo of item.photos){const file=String(photo.file||'');if(!/^[a-f0-9]{40}\.webp$/i.test(file))throw new Error('Nombre de foto no permitido.');used.add(file);}}
+   if(!used.size)throw new Error('El paquete no contiene fotos asociadas.');
+   const files=new Map();for(const name of used){const data=entries.get('fotos/'+name);if(!data||data.length<16||data.toString('ascii',0,4)!=='RIFF'||data.toString('ascii',8,12)!=='WEBP')throw new Error('Falta una foto o no es WebP válida: '+name);files.set(name,data);}
+   const base=path.join(DATA_DIR,'reference-photos'),target=path.join(base,modelKey),temp=path.join(base,modelKey+'.tmp-'+Date.now()),old=path.join(base,modelKey+'.old');fs.mkdirSync(temp,{recursive:true});
+   for(const [name,data] of files)fs.writeFileSync(path.join(temp,name),data);fs.writeFileSync(path.join(temp,'manifest.json'),JSON.stringify(manifest));
+   fs.rmSync(old,{recursive:true,force:true});if(fs.existsSync(target))fs.renameSync(target,old);
+   try{fs.renameSync(temp,target);fs.rmSync(old,{recursive:true,force:true});}catch(e){if(fs.existsSync(old)&&!fs.existsSync(target))fs.renameSync(old,target);throw e;}
+   return sendJson(res,200,{ok:true,modelo:model,referencias:Object.keys(manifest.items).length,fotos:files.size,asociaciones:Number(manifest.asociaciones_foto)||0,pendientes:Number(manifest.referencias_pendientes)||0});
+  }catch(e){console.error('Importación de fotos de referencias:',e);return sendJson(res,400,{ok:false,error:e.message||'No se pudo importar el paquete de fotos.'});}
+ });return;
+}
+if(p.startsWith('/api/reference-photos/')&&req.method==='GET'){
+ const parts=p.split('/'),modelKey=parts[3],model=safePhotoModel(modelKey);if(!model)return sendJson(res,404,{ok:false,error:'Modelo no encontrado.'});
+ const dir=path.join(DATA_DIR,'reference-photos',modelKey);
+ if(parts[4]==='manifest'&&parts.length===5){fs.readFile(path.join(dir,'manifest.json'),(err,data)=>{if(err)return sendJson(res,404,{ok:false,error:'Aún no hay fotos cargadas para este modelo.'});res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'private, max-age=300'});res.end(data);});return;}
+ const file=parts[4]||'';if(parts.length!==5||! /^[a-f0-9]{40}\.webp$/i.test(file))return sendJson(res,404,{ok:false,error:'Foto no encontrada.'});
+ fs.readFile(path.join(dir,file),(err,data)=>{if(err)return sendJson(res,404,{ok:false,error:'Foto no encontrada.'});res.writeHead(200,{'Content-Type':'image/webp','Cache-Control':'private, max-age=86400'});res.end(data);});return;
+}
+
 if(p==='/api/state'&&req.method==='GET'){const safe=readState();delete safe.patinadoresAuth;return sendJson(res,200,safe);}
 if(p==='/api/jornada/cerrar'&&req.method==='POST'){
 let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{
