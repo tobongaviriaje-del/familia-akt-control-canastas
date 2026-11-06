@@ -62,7 +62,7 @@ function readZipEntries(buffer){
  }
  return out;
 }
-function safePhotoModel(value){return value==='xrs180'?'XRS-180':value==='cr4150'?'CR4-150':value==='nkd'?'NKD':null;}
+function safePhotoModel(value){return value==='xrs180'?'XRS-180':value==='cr4125'?'CR4 125':value==='cr4150'?'CR4-150':value==='nkd'?'NKD':null;}
 
 const server=http.createServer((req,res)=>{
 const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);const p=decodeURIComponent(url.pathname);
