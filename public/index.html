@@ -1075,10 +1075,10 @@ function claveGrupoLoteArchivado(t){
  return [modeloDeTareaEstandar(t),String(t.codigoLoteOperacion||'').trim(),String(t.archivadaEn||'').trim(),String(t.motivoArchivo||'').trim()].join('|');
 }
 function gruposLotesArchivadosPatinador(modelo){
- const activos=getTasks(),idsActivos=new Set(activos.map(x=>String(x.id)));
+ const activos=getTasks(),idsActivos=new Set(activos.map(x=>String(x.id))),idsConContinuidad=new Set(activos.map(x=>String(x.continuidadDeTareaId||'')).filter(Boolean));
  const pendientes=(Array.isArray(tareasArchivadas)?tareasArchivadas:[]).filter(x=>
   (x.standardNKD||esContinuidadXRS180(x))&&modeloDeTareaEstandar(x)===modelo&&tareaAsignadaAlPatinador(x)&&
-  !idsActivos.has(String(x.id))&&Math.max(0,unidadesObjetivoEstandar(x)-Math.max(0,Number(x.entregado)||0))>0
+  !idsActivos.has(String(x.id))&&!idsConContinuidad.has(String(x.id))&&Math.max(0,unidadesObjetivoEstandar(x)-Math.max(0,Number(x.entregado)||0))>0
  );
  const groups=new Map();
  pendientes.forEach(x=>{
