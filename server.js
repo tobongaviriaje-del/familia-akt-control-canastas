@@ -235,6 +235,51 @@ return sendJson(res,200,{ok:true,archived:archivedFile.file,archivedCount:snapsh
 }catch(e){console.error('Error preparando continuidad de pendientes:',e);return sendJson(res,500,{ok:false,error:'No se pudo preparar la continuidad de tareas.'});}
 });return;
 }
+if(p==='/api/jornada/continuar-estandar'&&req.method==='POST'){
+const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),state=readState();
+if(!session||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede preparar esta continuidad.'});
+let body='';req.on('data',c=>{body+=c;if(body.length>10000)req.destroy();});req.on('end',()=>{
+try{
+ const incoming=JSON.parse(body||'{}'),accion=String(incoming.accion||'previsualizar');
+ const modelo=String(incoming.modelo||'').trim().toUpperCase(),codigo=String(incoming.codigo||'').trim().toUpperCase();
+ const modelosPermitidos=new Set(['NKD','CR4 150','CR4 125','XRS-180','CHR']);
+ if(!modelosPermitidos.has(modelo)||!codigo)return sendJson(res,400,{ok:false,error:'Selecciona un modelo y un código de operación válidos.'});
+ const modelOf=t=>String(t&&(t.standardMoto||(t.standardNKD?'NKD':''))||'').trim().toUpperCase();
+ const seleccionadas=(Array.isArray(state.tasks)?state.tasks:[]).filter(t=>modelOf(t)===modelo&&String(t.codigoLoteOperacion||'').trim().toUpperCase()===codigo);
+ const objetivo=t=>{
+  if(modelo==='NKD'||t.standardNKD){
+   const lote=Number(String(t.lote??'').replace(',','.'))||0;if(lote>0)return lote;
+   const cap=Number(String(t.cantidadCanasta??'').replace(',','.'))||0,canastas=Number(String(t.numCanastas??'').replace(',','.'))||0;
+   if(cap>0&&canastas>0)return cap*canastas;
+   const unidad=Number(String(t.cantidadUnidad??'').replace(',','.'))||0,cantidad=Number(String(t.cantidad??'').replace(',','.'))||0;
+   return unidad>0?unidad:(cap>0?cap:cantidad);
+  }
+  return Math.max(0,Number(String(t.cantidad??'').replace(',','.'))||0);
+ };
+ const calcular=t=>{const total=Math.max(0,objetivo(t)),entregado=Math.min(total,Math.max(0,Number(String(t.entregado??0).replace(',','.'))||0));return {total,entregado,restante:Math.max(0,total-entregado)};};
+ const resumen={modelo,codigo,tareasEncontradas:seleccionadas.length,tareasPendientes:0,tareasCompletadas:0,unidadesObjetivo:0,unidadesEntregadas:0,unidadesPendientes:0};
+ seleccionadas.forEach(t=>{const v=calcular(t);resumen.unidadesObjetivo+=v.total;resumen.unidadesEntregadas+=v.entregado;resumen.unidadesPendientes+=v.restante;if(v.restante>0)resumen.tareasPendientes++;else resumen.tareasCompletadas++;});
+ const key=modelo+'|'+codigo,previous=state.continuidadOperaciones&&state.continuidadOperaciones[key];
+ const continuidadYaPreparada=!!(previous&&previous.activeFingerprint===JSON.stringify(seleccionadas));
+ if(accion==='previsualizar')return sendJson(res,200,{ok:true,resumen,continuidadYaPreparada,mensaje:seleccionadas.length?'Vista previa solamente. No se modificó ningún dato.':('No hay tareas activas para '+modelo+' / '+codigo+'.')});
+ if(accion!=='aplicar')return sendJson(res,400,{ok:false,error:'Acción no válida.'});
+ if(!seleccionadas.length)return sendJson(res,409,{ok:false,error:'No hay tareas activas para la selección indicada.'});
+ if(continuidadYaPreparada)return sendJson(res,409,{ok:false,error:'Esta continuidad ya fue preparada y no se duplicaron tareas.'});
+ const stamp=Date.now(),fecha=new Date().toLocaleString('es-CO'),pendientes=[];
+ seleccionadas.forEach((t,i)=>{const v=calcular(t);if(v.restante<=0)return;const next={...JSON.parse(JSON.stringify(t)),id:String(t.id)+'-continuidad-'+stamp+'-'+i,cantidad:v.restante,entregado:0,entregas:[],entrega:null,canastasEntregadas:0,confirmacionesCanastas:[],correcciones:[],estado:'Pendiente',continuidadDeTareaId:t.id,continuidadFecha:fecha,unidadesObjetivoAnterior:v.total,unidadesEntregadasJornadaAnterior:v.entregado,unidadesPendientesContinuadas:v.restante};if(modelo==='NKD'||t.standardNKD){next.lote=v.restante;if(Object.prototype.hasOwnProperty.call(t,'lotePiezas'))next.lotePiezas=v.restante;const cap=Number(String(t.cantidadCanasta??'').replace(',','.'))||0;if(cap>0){next.numCanastas=Math.ceil(v.restante/cap);if(Object.prototype.hasOwnProperty.call(t,'numCanastasRaw'))next.numCanastasRaw=String(next.numCanastas);}}pendientes.push(next);});
+ if(!pendientes.length)return sendJson(res,409,{ok:false,error:'No hay cantidades pendientes para esta operación. No se modificó nada.'});
+ const usuario=String(state.users[session.username].name||session.username),ids=new Set(seleccionadas.map(t=>String(t.id)));
+ const archivados=seleccionadas.map(t=>({...JSON.parse(JSON.stringify(t)),archivadaEn:fecha,archivadaPor:usuario,motivoArchivo:'Continuidad por modelo y operación: '+modelo+' / '+codigo+'. Se conserva el registro original íntegro.'}));
+ const archivo=archiveTasks(seleccionadas,{usuario,motivo:'Continuidad por modelo y operación: '+modelo+' / '+codigo,regla:'Solo se archivó esta selección. Las entregas anteriores quedan en el historial y únicamente las cantidades pendientes pasan a tareas activas nuevas.'});
+ state.tareasArchivadas=[...(Array.isArray(state.tareasArchivadas)?state.tareasArchivadas:[]),...archivados];
+ state.tasks=(Array.isArray(state.tasks)?state.tasks:[]).filter(t=>!ids.has(String(t.id))).concat(pendientes);
+ if(!state.continuidadOperaciones||typeof state.continuidadOperaciones!=='object')state.continuidadOperaciones={};
+ state.continuidadOperaciones[key]={fecha,archivo:archivo.file,activeFingerprint:JSON.stringify(pendientes)};
+ writeState(state);
+ return sendJson(res,200,{ok:true,resumen,archivo:archivo.file,tareasNuevas:pendientes.length,unidadesContinuadas:pendientes.reduce((n,t)=>n+Math.max(0,Number(t.cantidad)||0),0),mensaje:'Continuidad preparada solo para '+modelo+' / '+codigo+'. Las demás motos y operaciones permanecen intactas.'});
+}catch(e){console.error('Error preparando continuidad por modelo y operación:',e);return sendJson(res,500,{ok:false,error:'No se pudo preparar la continuidad de esta operación.'});}
+});return;
+}
 if(p==='/api/jornada/continuar-xrs180'&&req.method==='POST'){
 const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),state=readState();
 if(!session||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede preparar esta continuidad.'});
