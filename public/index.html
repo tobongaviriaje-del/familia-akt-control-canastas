@@ -1092,9 +1092,19 @@ function renderRetomarLotePatinador(modelo){
  const box=$('retomarLotePatinador');if(!box)return;
  if(!current||current.role!=='Patinador'){box.innerHTML='';return;}
  const groups=gruposLotesArchivadosPatinador(modelo);
- if(!groups.length){box.innerHTML='<b>↩️ Primer lote / lote guardado</b><p class="muted">No hay lotes archivados con unidades pendientes asignadas a tus puestos para '+modelo+'. Si el lote sigue activo, aparecerá en tu estándar.</p>';return;}
+ if(!groups.length){box.innerHTML='<b>↩️ Primer lote / lote guardado</b><p class="muted">Busca el primer lote guardado. Si ya está activo, sus referencias y avances seguirán apareciendo en tu estándar.</p><button type="button" onclick="buscarLoteArchivadoPatinador()">▶️ Continuar con el primer lote</button>';return;}
  const options=groups.map((g,i)=>'<option value="'+encodeURIComponent(g.key)+'">'+(g.codigo?'OPR '+g.codigo:'Lote sin código')+' · '+(g.fecha||'fecha no registrada')+' · '+g.items.length+' referencias pendientes</option>').join('');
  box.innerHTML='<b>↩️ Retomar lote guardado</b><p class="muted">Selecciona el lote anterior para continuar con las cantidades que faltan. Las entregas registradas se conservan.</p>'+(groups.length>1?'<select id="retomarLoteSelect">'+options+'</select>':'<input id="retomarLoteSelect" type="hidden" value="'+encodeURIComponent(groups[0].key)+'"><p><b>'+(groups[0].codigo?'OPR '+groups[0].codigo:'Lote sin código')+'</b> · '+(groups[0].fecha||'fecha no registrada')+' · '+groups[0].items.length+' referencias pendientes</p>')+'<button type="button" onclick="retomarLoteArchivadoPatinador()">▶️ Continuar con este lote</button>';
+}
+async function buscarLoteArchivadoPatinador(){
+ if(!current||current.role!=='Patinador')return;
+ const loaded=await cloudLoad();
+ if(!loaded){alert('No se pudo actualizar la información del servidor. No se modificó ningún lote.');return;}
+ const modelo=String($('modeloEstandarPatinador')?.value||localStorage.getItem('cc_modelo_moto')||'NKD');
+ const groups=gruposLotesArchivadosPatinador(modelo);
+ if(!groups.length){alert('No se encontró un lote archivado pendiente para tus puestos. Si el primer lote sigue activo, sus avances deben aparecer en «Mi estándar de moto».');return;}
+ if(groups.length===1){await retomarLoteArchivadoPatinador();return;}
+ $('retomarLotePatinador')?.scrollIntoView({behavior:'smooth',block:'center'});
 }
 async function retomarLoteArchivadoPatinador(){
  if(!current||current.role!=='Patinador'){alert('Esta opción está disponible para patinadores.');return;}
