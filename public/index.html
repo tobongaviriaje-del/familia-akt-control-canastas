@@ -1314,11 +1314,14 @@ function zonasEstibasUsuario(){
  const areas=Array.isArray(current?.areas)?current.areas.map(normalizar):[];
  const puestos=Array.isArray(current?.puestos)?current.puestos.map(normalizar):[];
  const coincide=(lista,patrones)=>lista.some(x=>patrones.some(p=>p.test(x)));
- return {
+ const zonas={
   ladoIzquierdo:coincide(areas.concat(puestos),[/izquierdo/,/lado izq/]),
   ladoDerecho:coincide(areas.concat(puestos),[/derecho/,/lado der/]),
   finalLinea:coincide(areas.concat(puestos),[/final/,/fin de linea/,/^fin(?: |$)/,/linea final/])
  };
+ // Si el perfil del patinador no trae zonas reconocibles (perfiles compartidos/antiguos),
+ // no ocultar todos los campos: permitir registrar las tres zonas.
+ return Object.values(zonas).some(Boolean)?zonas:{ladoIzquierdo:true,ladoDerecho:true,finalLinea:true};
 }
 function guardarEstibasRecibidas(){
  if(!current||current.role!=='Patinador'){alert('Solo los patinadores pueden registrar estibas recibidas.');return;}
