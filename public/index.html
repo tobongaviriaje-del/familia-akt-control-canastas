@@ -1072,12 +1072,12 @@ async function limpiarDuplicadosNKD(){
 }
 
 const fotosReferenciaCache={},fotosReferenciaUrls={},fotosReferenciaPorEan={};
-function slugFotoModelo(modelo){return String(modelo||'').toUpperCase()==='XRS-180'?'xrs180':String(modelo||'').toUpperCase()==='CR4 125'?'cr4125':String(modelo||'').toUpperCase()==='CR4 150'?'cr4150':String(modelo||'').toUpperCase()==='NKD'?'nkd':'';}
+function slugFotoModelo(modelo){const m=String(modelo||'').trim().toUpperCase();return m==='XRS-180'?'xrs180':m==='CR4 125'?'cr4125':m==='CR4 150'?'cr4150':m==='NKD'?'nkd':m==='CHR'?'chr':'';}
 function normalizarClaveFoto(v){const x=String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');let m=x.match(/^pre\s*0*(\d+)$/);if(m)return 'pre '+Number(m[1]);m=x.match(/^0*(\d+)\s*(derecho|izquierdo)$/);if(m)return m[2]+' '+Number(m[1]);m=x.match(/^(derecho|izquierdo|final(?: de linea)?)\s*0*(\d+)$/);if(m)return (m[1].startsWith('final')?'final':m[1])+' '+Number(m[2]);return x;}
 function claveFotoReferencia(ean,puesto){return String(ean||'').trim().replace(/\s+/g,'')+'|'+normalizarClaveFoto(puesto);}
 function actualizarFotosReferenciasPatinador(){
  let modelo='NKD';try{modelo=localStorage.getItem('cc_modelo_moto')||'NKD';}catch(e){}
- const slug=slugFotoModelo(modelo),msg=$('fotosPatinadorMsg');if(!slug){if(msg)msg.textContent='Selecciona NKD, CR4 125, CR4 150 o XRS-180 para consultar sus fotos.';return;}
+ const slug=slugFotoModelo(modelo),msg=$('fotosPatinadorMsg');if(!slug){if(msg)msg.textContent='Selecciona NKD, CR4 125, CR4 150, XRS-180 o CHR para consultar sus fotos.';return;}
  delete fotosReferenciaCache[slug];Object.keys(fotosReferenciaUrls).filter(k=>k.startsWith(slug+'/')).forEach(k=>{const u=fotosReferenciaUrls[k];if(u&&u!=='loading'&&u!=='error')URL.revokeObjectURL(u);delete fotosReferenciaUrls[k];});
  if(msg)msg.textContent='Actualizando fotos de '+modelo+'…';cargarManifiestoFotos(modelo);
 }
