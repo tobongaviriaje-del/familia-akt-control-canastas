@@ -775,6 +775,10 @@ function patinadorDeHojaEstandar(hoja){
  if(/^hamilton(?:$|\s|\d)/.test(n))return 'Hamilton';
  if(/^jorge(?:$|\s|\d)/.test(n))return 'Jorge';
  if(/^juan esteban(?:$|\s|\d)/.test(n))return 'Juan Esteban';
+ // Hojas del estándar CHR que identifican directamente al patinador.
+ if(/^velez(?:$|\s|\d)/.test(n))return 'Velez';
+ if(/^bryan(?:$|\s|\d)/.test(n))return 'Bryan';
+ if(/^arley(?:$|\s|\d)/.test(n))return 'Arley';
  return '';
 }
 function modeloEstandarSeleccionado(){return $('modeloEstandarAdmin')?.value||'NKD';}
@@ -1047,7 +1051,11 @@ function tareaAsignadaAlPatinador(tarea){
  // pendiente para el patinador del turno siguiente que cubre el mismo puesto.
  const puestos=Array.isArray(current.puestos)?current.puestos.map(normalizarPuestoEstandar).map(normalArea).filter(Boolean):[];
  const puesto=normalArea(normalizarPuestoEstandar(tarea.puesto));
- return !!puesto&&puestos.includes(puesto);
+ // Las hojas nominadas CHR asignan también la tarea al patinador indicado.
+ const responsable=normalArea(tarea.patinadorEstandar);
+ const identidades=[current.name,current.nombre,current.username].map(normalArea).filter(Boolean);
+ const coincideResponsable=!!responsable&&identidades.some(v=>v===responsable||v.startsWith(responsable+' ')||v.endsWith(' '+responsable));
+ return coincideResponsable||(!!puesto&&puestos.includes(puesto));
 }
 async function limpiarDuplicadosNKD(){
  const msg=$('limpiezaDuplicadosMsg');
