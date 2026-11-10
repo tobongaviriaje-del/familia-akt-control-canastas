@@ -8,10 +8,32 @@ const ROOT=path.join(__dirname,'public');
 const DATA_DIR=path.join(__dirname,'data');
 const STATE_FILE=path.join(DATA_DIR,'state.json');
 const HISTORY_DIR=path.join(DATA_DIR,'history');
+const SESSION_FILE=path.join(DATA_DIR,'sessions.json');
 const sessions=new Map();
 const SESSION_TTL=12*60*60*1000;
+function persistSessions(){
+ try{
+  fs.mkdirSync(DATA_DIR,{recursive:true});
+  const tmp=SESSION_FILE+'.tmp';
+  fs.writeFileSync(tmp,JSON.stringify([...sessions.entries()]),{mode:0o600});
+  fs.renameSync(tmp,SESSION_FILE);
+ }catch(e){console.error('No se pudieron guardar las sesiones:',e.message);}
+}
+function loadSessions(){
+ try{
+  if(!fs.existsSync(SESSION_FILE))return;
+  const saved=JSON.parse(fs.readFileSync(SESSION_FILE,'utf8'));
+  if(!Array.isArray(saved))return;
+  for(const entry of saved){
+   if(!Array.isArray(entry)||entry.length!==2)continue;
+   const [token,session]=entry;
+   if(typeof token==='string'&&session&&typeof session.username==='string'&&Number(session.expires)>Date.now())sessions.set(token,session);
+  }
+  persistSessions();
+ }catch(e){console.error('No se pudieron recuperar las sesiones:',e.message);}
+}
 function sendJson(res,status,data){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(data));}
-function authorized(req){const h=String(req.headers.authorization||'');const token=h.startsWith('Bearer ')?h.slice(7):'';const session=sessions.get(token);if(!session)return false;if(session.expires<Date.now()){sessions.delete(token);return false;}session.expires=Date.now()+SESSION_TTL;return true;}
+function authorized(req){const h=String(req.headers.authorization||'');const token=h.startsWith('Bearer ')?h.slice(7):'';const session=sessions.get(token);if(!session)return false;if(session.expires<Date.now()){sessions.delete(token);persistSessions();return false;}session.expires=Date.now()+SESSION_TTL;persistSessions();return true;}
 
 // Cuentas base: solo administración. Las cuentas de patinadores retiradas
 // no deben recrearse automáticamente al iniciar ni al leer el estado.
@@ -77,7 +99,7 @@ let body='';req.on('data',chunk=>{body+=chunk;if(body.length>10000)req.destroy()
   if(!turnoLogin)return sendJson(res,401,{ok:false,error:'Usuario o contraseña incorrectos'});
   const profiles=Object.entries(state.users||{}).filter(([,u])=>u&&u.role==='Patinador').map(([key,u])=>({username:key,name:u.name||key,role:'Patinador',areas:u.areas||[],puestos:u.puestos||[],turno:u.turno||'Todos'}));
   if(!profiles.length)return sendJson(res,409,{ok:false,error:'No hay patinadores registrados.'});
-  const token=require('crypto').randomBytes(32).toString('hex');sessions.set(token,{username:'patinadores',expires:Date.now()+SESSION_TTL});
+  const token=require('crypto').randomBytes(32).toString('hex');sessions.set(token,{username:'patinadores',expires:Date.now()+SESSION_TTL});persistSessions();
   return sendJson(res,200,{ok:true,token,sharedPatinadores:true,patinadores:profiles,user:{username:'patinadores',name:'Patinadores',role:'Patinador',turno:turnoLogin}});
  }
  let user=state.users[username],turnoLogin=null,passwordValid=false;
@@ -87,7 +109,7 @@ let body='';req.on('data',chunk=>{body+=chunk;if(body.length>10000)req.destroy()
  }else if(user&&typeof user.pass==='string'&&user.pass===password){passwordValid=true;turnoLogin=user.turno||'Todos';}
  if(!passwordValid&&username==='admin'&&process.env.ADMIN_RECOVERY_PASSWORD&&password===process.env.ADMIN_RECOVERY_PASSWORD&&!state.adminRecoveryUsed&&user&&user.role==='Admin'){user.pass=password;state.adminRecoveryUsed=true;writeState(state);passwordValid=true;}
  if(!user||!passwordValid)return sendJson(res,401,{ok:false,error:'Usuario o contraseña incorrectos'});
- const token=require('crypto').randomBytes(32).toString('hex');sessions.set(token,{username,expires:Date.now()+SESSION_TTL});
+ const token=require('crypto').randomBytes(32).toString('hex');sessions.set(token,{username,expires:Date.now()+SESSION_TTL});persistSessions();
  return sendJson(res,200,{ok:true,token,user:{username,name:user.name,role:user.role,turno:turnoLogin,areas:user.areas||[],puestos:user.puestos||[]}});
  }catch{return sendJson(res,400,{ok:false,error:'Solicitud inválida'});}});return;
 }
@@ -371,4 +393,4 @@ if(path.extname(file)==='.html'){
 }
 res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream'});res.end(output);});
 });
-ensureState();server.listen(PORT,()=>console.log('FAMILIA AKT funcionando en puerto '+PORT));
+ensureState();loadSessions();server.listen(PORT,()=>console.log('FAMILIA AKT funcionando en puerto '+PORT));
