@@ -775,10 +775,10 @@ function patinadorDeHojaEstandar(hoja){
  if(/^hamilton(?:$|\s|\d)/.test(n))return 'Hamilton';
  if(/^jorge(?:$|\s|\d)/.test(n))return 'Jorge';
  if(/^juan esteban(?:$|\s|\d)/.test(n))return 'Juan Esteban';
- // Hojas del estándar CHR que identifican directamente al patinador.
- if(/^velez(?:$|\s|\d)/.test(n))return 'Velez';
- if(/^bryan(?:$|\s|\d)/.test(n))return 'Bryan';
- if(/^arley(?:$|\s|\d)/.test(n))return 'Arley';
+ // Hojas CHR: aceptar variantes de escritura usadas para los patinadores.
+ if(/^(?:velez|v[eé]lez)(?:$|\s|\d)/.test(n))return 'Velez';
+ if(/^(?:bryan|breyan)(?:$|\s|\d)/.test(n))return 'Breyan';
+ if(/^(?:arley|arly)(?:\s+conesis)?(?:$|\s|\d)/.test(n))return 'Arly Conesis';
  return '';
 }
 function modeloEstandarSeleccionado(){return $('modeloEstandarAdmin')?.value||'NKD';}
