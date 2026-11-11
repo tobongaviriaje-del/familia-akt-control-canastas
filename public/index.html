@@ -1148,6 +1148,37 @@ function gruposLotesArchivadosPatinador(modelo){
  });
  return [...groups.values()].sort((a,b)=>String(a.fecha).localeCompare(String(b.fecha)));
 }
+function alertaSiguienteLoteActivada(){
+ try{return localStorage.getItem('cc_alerta_siguiente_lote')==='1';}catch(e){return false;}
+}
+function cambiarAlertaSiguienteLote(checked){
+ try{localStorage.setItem('cc_alerta_siguiente_lote',checked?'1':'0');}catch(e){}
+ if(checked) probarAlertaSiguienteLote();
+}
+function reproducirSonidoSiguienteLote(){
+ try{
+  const Ctx=window.AudioContext||window.webkitAudioContext;if(!Ctx)return;
+  const ctx=new Ctx(),osc=ctx.createOscillator(),gain=ctx.createGain();
+  osc.type='sine';osc.frequency.setValueAtTime(880,ctx.currentTime);
+  gain.gain.setValueAtTime(0.0001,ctx.currentTime);gain.gain.exponentialRampToValueAtTime(0.18,ctx.currentTime+0.025);
+  gain.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+0.42);
+  osc.connect(gain);gain.connect(ctx.destination);osc.start();osc.stop(ctx.currentTime+0.45);
+  osc.onended=()=>ctx.close();
+ }catch(e){}
+}
+function probarAlertaSiguienteLote(){
+ try{if(navigator.vibrate)navigator.vibrate([180,90,180]);}catch(e){}
+ reproducirSonidoSiguienteLote();
+}
+function notificarSiguienteLotePatinador(q){
+ if(!alertaSiguienteLoteActivada()||!q)return;
+ const id=String(q.id||q.codigo||'siguiente-lote');
+ let notified='';try{notified=localStorage.getItem('cc_alerta_siguiente_lote_notificada')||'';}catch(e){}
+ if(notified===id)return;
+ try{if(navigator.vibrate)navigator.vibrate([250,120,250,120,400]);}catch(e){}
+ reproducirSonidoSiguienteLote();
+ try{localStorage.setItem('cc_alerta_siguiente_lote_notificada',id);}catch(e){}
+}
 function renderRetomarLotePatinador(modelo){
  const box=$('retomarLotePatinador');if(!box)return;
  if(!current||current.role!=='Patinador'){box.innerHTML='';return;}
@@ -1162,8 +1193,8 @@ function renderRetomarLotePatinador(modelo){
  if(q){
   const asignadas=(Array.isArray(q.tasks)?q.tasks:[]).filter(t=>tareaAsignadaAlPatinador(t));
   if(asignadas.length){
-   const units=asignadas.reduce((n,t)=>n+Math.max(0,unidadesObjetivoEstandar(t)),0);
-   html+='<hr style="border:0;border-top:1px solid #cbd5e1;margin:14px 0"><b>📦 Siguiente lote disponible: OPR '+esc(q.codigo||'Sin código')+'</b><p class="muted">Tiene '+asignadas.length+' referencias asignadas a tus puestos. Puedes empezar este lote ahora; las tareas y los pendientes del lote anterior seguirán activos y separados.</p><button type="button" onclick="abrirSiguienteLotePatinador()">▶️ Continuar con el siguiente lote</button>';
+   notificarSiguienteLotePatinador(q);
+   html+='<hr style="border:0;border-top:1px solid #cbd5e1;margin:14px 0"><b>📦 Siguiente lote disponible: OPR '+esc(q.codigo||'Sin código')+'</b><p class="muted">Ya puedes comenzar este lote. Si activas la alerta, el dispositivo vibrará y sonará cuando haya un siguiente lote disponible.</p><label style="display:flex;align-items:center;gap:8px;margin:10px 0"><input type="checkbox" '+(alertaSiguienteLoteActivada()?'checked':'')+' onchange="cambiarAlertaSiguienteLote(this.checked)"> Activar vibración y sonido</label><button type="button" class="small secondary" onclick="probarAlertaSiguienteLote()">🔔 Probar alerta</button> <button type="button" onclick="abrirSiguienteLotePatinador()">▶️ Continuar con el siguiente lote</button>';
   }
  }else if(queuedStandardBatches.some(b=>b)){
   const next=queuedStandardBatches.find(Boolean);
