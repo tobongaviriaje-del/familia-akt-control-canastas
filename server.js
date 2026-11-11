@@ -188,7 +188,7 @@ if(p.startsWith('/api/admin/reference-photos/')&&req.method==='POST'){
 
 if(p==='/api/admin/archive-completed-lot'&&req.method==='POST'){
  const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),state=readState();
- if(!session||session.username!=='admin'||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede retirar lotes completados.'});
+ if(!session||session.username!=='admin'||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede retirar lotes.'});
  let body='';req.on('data',c=>{body+=c;if(body.length>10000)req.destroy();});req.on('end',()=>{
   try{
    const incoming=JSON.parse(body||'{}'),modelo=String(incoming.modelo||'').trim().toUpperCase(),codigo=String(incoming.codigo||'').trim().toUpperCase();
@@ -198,7 +198,9 @@ if(p==='/api/admin/archive-completed-lot'&&req.method==='POST'){
    if(!selected.length)return sendJson(res,404,{ok:false,error:'No hay tareas activas para ese lote.'});
    const objective=t=>{if(String(t.standardMoto||'').trim().toUpperCase()==='XRS-180'&&t.continuidadDeTareaId)return Math.max(0,Number(String(t.cantidad??'').replace(',','.'))||0);const lot=Number(String(t.lote??'').replace(',','.'))||0,cap=Number(String(t.cantidadCanasta??'').replace(',','.'))||0,baskets=Number(String(t.numCanastas??'').replace(',','.'))||0,unit=Number(String(t.cantidadUnidad??'').replace(',','.'))||0,qty=Number(String(t.cantidad??'').replace(',','.'))||0;return lot>0?lot:(cap>0&&baskets>0?cap*baskets:(unit>0?unit:(cap>0?cap:qty)));};
    const pending=selected.filter(t=>Math.max(0,objective(t))>Math.max(0,Number(t.entregado)||0));
-   
+   const untouched=selected.every(t=>Math.max(0,Number(t.entregado)||0)===0&&!(Array.isArray(t.entregas)&&t.entregas.length)&&!(Array.isArray(t.confirmacionesCanastas)&&t.confirmacionesCanastas.length));
+   const completed=pending.length===0;
+   if(!completed&&!untouched)return sendJson(res,409,{ok:false,error:'Este lote tiene entregas parciales. Solo se pueden retirar lotes totalmente terminados o lotes sin ninguna entrega.',tareasPendientes:pending.length});
    if(incoming.confirmacion!=='RETIRAR LOTE COMPLETADO')return sendJson(res,400,{ok:false,error:'Falta la confirmación de retiro.'});
    const fecha=new Date().toLocaleString('es-CO'),usuario=String(state.users[session.username].name||session.username);
    const archivados=selected.map(t=>({...JSON.parse(JSON.stringify(t)),archivadaEn:fecha,archivadaPor:usuario,motivoArchivo:'Lote retirado de tareas activas: '+modelo+' / '+codigo}));
@@ -207,7 +209,7 @@ if(p==='/api/admin/archive-completed-lot'&&req.method==='POST'){
    const ids=new Set(selected.map(t=>String(t.id)));state.tasks=(Array.isArray(state.tasks)?state.tasks:[]).filter(t=>!ids.has(String(t.id)));
    writeState(state);
    return sendJson(res,200,{ok:true,archivo:archivo.file,modelo,codigo,tareasRetiradas:selected.length,mensaje:'Lote retirado de tareas activas. Las entregas quedaron conservadas en el historial.'});
-  }catch(e){console.error('archive completed lot failed',e);return sendJson(res,500,{ok:false,error:'No se pudo retirar el lote completado.'});}
+  }catch(e){console.error('archive completed lot failed',e);return sendJson(res,500,{ok:false,error:'No se pudo retirar el lote.'});}
  });return;
 }
 
