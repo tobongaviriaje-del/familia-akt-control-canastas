@@ -1209,7 +1209,7 @@ function notificarSiguienteLotePatinador(q){
 function renderRetomarLotePatinador(modelo){
  const box=$('retomarLotePatinador');if(!box)return;
  if(!current||current.role!=='Patinador'){box.innerHTML='';return;}
- const groups=gruposLotesArchivadosPatinador(modelo),q=queuedStandardBatches.find(b=>b&&b.modelo===modelo),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const groups=gruposLotesArchivadosPatinador(modelo),q=queuedStandardBatches.find(b=>b&&Array.isArray(b.tasks)&&b.tasks.some(t=>tareaAsignadaAlPatinador(t))),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  let html='';
  if(groups.length){
   const options=groups.map(g=>'<option value="'+encodeURIComponent(g.key)+'">'+(g.codigo?'OPR '+esc(g.codigo):'Lote sin código')+' · '+esc(g.fecha||'fecha no registrada')+' · '+g.items.length+' referencias pendientes</option>').join('');
@@ -1233,8 +1233,8 @@ async function abrirSiguienteLotePatinador(){
  if(!current||current.role!=='Patinador'){alert('Esta opción está disponible para patinadores.');return;}
  if(!await cloudLoad()){alert('No se pudo actualizar la información de la nube. No se modificó ningún lote.');return;}
  const modelo=String($('modeloEstandarPatinador')?.value||localStorage.getItem('cc_modelo_moto')||'NKD');
- const q=queuedStandardBatches.find(b=>b&&b.modelo===modelo);
- if(!q||!Array.isArray(q.tasks)||!q.tasks.length){alert('No hay un siguiente lote preparado para '+modelo+'. No se modificó ningún dato.');return;}
+ const q=queuedStandardBatches.find(b=>b&&Array.isArray(b.tasks)&&b.tasks.some(t=>tareaAsignadaAlPatinador(t)));
+ if(!q||!Array.isArray(q.tasks)||!q.tasks.length){alert('No hay un siguiente lote preparado y asignado a tus puestos. No se modificó ningún dato.');return;}
  const asignadas=q.tasks.filter(t=>tareaAsignadaAlPatinador(t));
  if(!asignadas.length){alert('El siguiente lote no tiene tareas asignadas a tus puestos. Consulta con el administrador.');return;}
  const active=getTasks(),ids=new Set(active.map(t=>String(t.id)));
@@ -1246,6 +1246,8 @@ async function abrirSiguienteLotePatinador(){
  const ok=await cloudSave();
  if(!ok){cloudTasks=beforeTasks;queuedStandardBatches=beforeQueue;alert('No se confirmó la apertura en la nube. Se restauró el estado anterior; no vuelvas a pulsar hasta verificar la conexión.');return;}
  localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
+ if($('modeloEstandarPatinador'))$('modeloEstandarPatinador').value=q.modelo;
+ localStorage.setItem('cc_modelo_moto',q.modelo);
  render();
  alert('✅ Lote OPR '+(q.codigo||'')+' abierto. El lote anterior sigue activo con sus pendientes y entregas intactos.');
 }
