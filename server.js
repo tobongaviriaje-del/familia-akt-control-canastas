@@ -186,6 +186,31 @@ if(p.startsWith('/api/admin/reference-photos/')&&req.method==='POST'){
  });return;
 }
 
+if(p==='/api/admin/archive-completed-lot'&&req.method==='POST'){
+ const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),state=readState();
+ if(!session||session.username!=='admin'||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede retirar lotes completados.'});
+ let body='';req.on('data',c=>{body+=c;if(body.length>10000)req.destroy();});req.on('end',()=>{
+  try{
+   const incoming=JSON.parse(body||'{}'),modelo=String(incoming.modelo||'').trim().toUpperCase(),codigo=String(incoming.codigo||'').trim().toUpperCase();
+   if(!modelo||!codigo)return sendJson(res,400,{ok:false,error:'Falta el modelo o el código exacto del lote.'});
+   const modelOf=t=>String(t&&(t.standardMoto||(t.standardNKD?'NKD':''))||'').trim().toUpperCase();
+   const selected=(Array.isArray(state.tasks)?state.tasks:[]).filter(t=>(t.standardNKD||String(t.standardMoto||'').trim())&&modelOf(t)===modelo&&String(t.codigoLoteOperacion||'').trim().toUpperCase()===codigo);
+   if(!selected.length)return sendJson(res,404,{ok:false,error:'No hay tareas activas para ese lote.'});
+   const objective=t=>{if(String(t.standardMoto||'').trim().toUpperCase()==='XRS-180'&&t.continuidadDeTareaId)return Math.max(0,Number(String(t.cantidad??'').replace(',','.'))||0);const lot=Number(String(t.lote??'').replace(',','.'))||0,cap=Number(String(t.cantidadCanasta??'').replace(',','.'))||0,baskets=Number(String(t.numCanastas??'').replace(',','.'))||0,unit=Number(String(t.cantidadUnidad??'').replace(',','.'))||0,qty=Number(String(t.cantidad??'').replace(',','.'))||0;return lot>0?lot:(cap>0&&baskets>0?cap*baskets:(unit>0?unit:(cap>0?cap:qty)));};
+   const pending=selected.filter(t=>Math.max(0,objective(t))>Math.max(0,Number(t.entregado)||0));
+   if(pending.length)return sendJson(res,409,{ok:false,error:'El lote todavía tiene '+pending.length+' tarea(s) pendiente(s). No se retiró ningún registro.',tareasPendientes:pending.length});
+   if(incoming.confirmacion!=='RETIRAR LOTE COMPLETADO')return sendJson(res,400,{ok:false,error:'Falta la confirmación de retiro.'});
+   const fecha=new Date().toLocaleString('es-CO'),usuario=String(state.users[session.username].name||session.username);
+   const archivados=selected.map(t=>({...JSON.parse(JSON.stringify(t)),archivadaEn:fecha,archivadaPor:usuario,motivoArchivo:'Lote completado retirado de tareas activas: '+modelo+' / '+codigo}));
+   const archivo=archiveTasks(selected,{usuario,motivo:'Retiro de lote completado: '+modelo+' / '+codigo,regla:'Se conserva el detalle íntegro de tareas y entregas en el historial. Solo se retiran de la lista activa las tareas completadas de este modelo y código exactos.'});
+   state.tareasArchivadas=[...(Array.isArray(state.tareasArchivadas)?state.tareasArchivadas:[]),...archivados];
+   const ids=new Set(selected.map(t=>String(t.id)));state.tasks=(Array.isArray(state.tasks)?state.tasks:[]).filter(t=>!ids.has(String(t.id)));
+   writeState(state);
+   return sendJson(res,200,{ok:true,archivo:archivo.file,modelo,codigo,tareasRetiradas:selected.length,mensaje:'Lote completado retirado de tareas activas. Las entregas quedaron conservadas en el historial.'});
+  }catch(e){console.error('archive completed lot failed',e);return sendJson(res,500,{ok:false,error:'No se pudo retirar el lote completado.'});}
+ });return;
+}
+
 if(p==='/api/admin/reference-photos/diagnostic'&&req.method==='GET'){
  const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),state=readState();
  if(!session||session.username!=='admin'||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede consultar este diagnóstico.'});
