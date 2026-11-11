@@ -1082,7 +1082,8 @@ async function limpiarDuplicadosNKD(){
 const fotosReferenciaCache={},fotosReferenciaUrls={},fotosReferenciaPorEan={};
 function slugFotoModelo(modelo){const m=String(modelo||'').trim().toUpperCase();return m==='XRS-180'?'xrs180':m==='CR4 125'?'cr4125':m==='CR4 150'?'cr4150':m==='NKD'?'nkd':m==='CHR'?'chr':'';}
 function normalizarClaveFoto(v){const x=String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');let m=x.match(/^pre\s*0*(\d+)$/);if(m)return 'pre '+Number(m[1]);m=x.match(/^0*(\d+)\s*(derecho|izquierdo)$/);if(m)return m[2]+' '+Number(m[1]);m=x.match(/^(derecho|izquierdo|final(?: de linea)?)\s*0*(\d+)$/);if(m)return (m[1].startsWith('final')?'final':m[1])+' '+Number(m[2]);return x;}
-function claveFotoReferencia(ean,puesto){return String(ean||'').trim().replace(/\s+/g,'')+'|'+normalizarClaveFoto(puesto);}
+function normalizarEanFoto(ean){return String(ean||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');}
+function claveFotoReferencia(ean,puesto){return normalizarEanFoto(ean)+'|'+normalizarClaveFoto(puesto);}
 function actualizarFotosReferenciasPatinador(){
  let modelo='NKD';try{modelo=localStorage.getItem('cc_modelo_moto')||'NKD';}catch(e){}
  const slug=slugFotoModelo(modelo),msg=$('fotosPatinadorMsg');if(!slug){if(msg)msg.textContent='Selecciona NKD, CR4 125, CR4 150, XRS-180 o CHR para consultar sus fotos.';return;}
@@ -1093,11 +1094,11 @@ function cargarManifiestoFotos(modelo){
  const slug=slugFotoModelo(modelo);if(!slug)return;const cache=fotosReferenciaCache[slug]||(fotosReferenciaCache[slug]={loading:false,loaded:false,items:null});if(cache.loading||cache.loaded)return;cache.loading=true;
  const msg=$('fotosPatinadorMsg');if(msg)msg.textContent='Buscando fotos de '+modelo+'…';
  const token=sessionStorage.getItem('cc_session_token');
- fetch('/api/reference-photos/'+slug+'/manifest',{headers:{Authorization:'Bearer '+token}}).then(async r=>{if(!r.ok)throw new Error('No se pudo consultar el catálogo ('+r.status+').');return r.json();}).then(data=>{const map=new Map(),porEan=new Map();Object.values(data.items||{}).forEach(item=>{map.set(claveFotoReferencia(item.ean,item.puesto),item);const ean=String(item.ean||'').trim().replace(/\s+/g,'');if(ean){if(!porEan.has(ean))porEan.set(ean,[]);porEan.get(ean).push(item);}});cache.items=map;fotosReferenciaPorEan[slug]=porEan;cache.loaded=true;cache.loading=false;if(msg){const totalFotos=Object.values(data.items||{}).reduce((n,item)=>n+(Array.isArray(item.photos)?item.photos.filter(p=>p&&p.file).length:0),0);msg.textContent='Catálogo recibido: '+map.size+' referencias y '+totalFotos+' fotos. Se muestran todas las fotos junto al producto; toca cualquiera para ampliarla.';}renderPatinadorChecklist();}).catch(e=>{cache.loading=false;cache.loaded=true;cache.items=new Map();if(msg)msg.textContent='No se pudieron cargar las fotos: '+e.message+'. Pulsa “Actualizar fotos” para intentar de nuevo.';});
+ fetch('/api/reference-photos/'+slug+'/manifest',{headers:{Authorization:'Bearer '+token}}).then(async r=>{if(!r.ok)throw new Error('No se pudo consultar el catálogo ('+r.status+').');return r.json();}).then(data=>{const map=new Map(),porEan=new Map();Object.values(data.items||{}).forEach(item=>{map.set(claveFotoReferencia(item.ean,item.puesto),item);const ean=normalizarEanFoto(item.ean);if(ean){if(!porEan.has(ean))porEan.set(ean,[]);porEan.get(ean).push(item);}});cache.items=map;fotosReferenciaPorEan[slug]=porEan;cache.loaded=true;cache.loading=false;if(msg){const totalFotos=Object.values(data.items||{}).reduce((n,item)=>n+(Array.isArray(item.photos)?item.photos.filter(p=>p&&p.file).length:0),0);msg.textContent='Catálogo recibido: '+map.size+' referencias y '+totalFotos+' fotos. Se muestran todas las fotos junto al producto; toca cualquiera para ampliarla.';}renderPatinadorChecklist();}).catch(e=>{cache.loading=false;cache.loaded=true;cache.items=new Map();if(msg)msg.textContent='No se pudieron cargar las fotos: '+e.message+'. Pulsa “Actualizar fotos” para intentar de nuevo.';});
 }
 function fotoReferenciaHtml(t,modelo){
  const slug=slugFotoModelo(modelo),cache=slug&&fotosReferenciaCache[slug];if(!cache||!cache.loaded||!cache.items)return '<span class="muted" style="font-size:11px">Foto…</span>';
- let item=cache.items.get(claveFotoReferencia(t.ean,t.puesto));if(!item){const ean=String(t.ean||'').trim().replace(/\\s+/g,''),candidatos=(fotosReferenciaPorEan[slug]?.get(ean)||[]).filter(x=>Array.isArray(x.photos)&&x.photos.some(p=>p&&p.file));if(candidatos.length===1)item=candidatos[0];}
+ let item=cache.items.get(claveFotoReferencia(t.ean,t.puesto));if(!item){const ean=normalizarEanFoto(t.ean),candidatos=(fotosReferenciaPorEan[slug]?.get(ean)||[]).filter(x=>Array.isArray(x.photos)&&x.photos.some(p=>p&&p.file));if(candidatos.length===1)item=candidatos[0];}
  const photos=(item&&Array.isArray(item.photos)?item.photos:[]).filter(p=>p&&p.file);if(!photos.length)return '<span class="muted" style="font-size:11px">Sin foto</span>';
  const alt=String(t.producto||'referencia').replace(/[&<>"']/g,''),imgs=photos.map((photo,i)=>{
   const file=String(photo.file),key=slug+'/'+file;let url=fotosReferenciaUrls[key];
@@ -1106,7 +1107,7 @@ function fotoReferenciaHtml(t,modelo){
   if(url==='error')return '';
   return '<img src="'+url+'" alt="Foto '+(i+1)+' de '+alt+'" onclick="ampliarFotoReferencia(this.src)" title="Toca para ampliar" style="display:block;width:76px;height:76px;max-width:76px;object-fit:contain;background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:3px;cursor:zoom-in">';
  }).join('');
- return '<div style="display:flex;flex-wrap:wrap;gap:5px;max-width:245px">'+imgs+'</div>';
+ const referencia=String(item.ean||t.ean||'').replace(/[&<>\"']/g,'');const puesto=String(item.puesto||t.puesto||'').replace(/[&<>\"']/g,'');return '<div style="display:flex;flex-direction:column;gap:4px;max-width:245px"><small style="font-size:10px;font-weight:700;color:#334155">Ref. '+referencia+' · '+puesto+'</small><div style="display:flex;flex-wrap:wrap;gap:5px">'+imgs+'</div></div>';
 }
 function ampliarFotoReferencia(src){
  if(!src)return;const overlay=document.createElement('div');overlay.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;padding:16px;';
