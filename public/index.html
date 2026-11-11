@@ -1098,7 +1098,7 @@ function cargarManifiestoFotos(modelo){
 }
 function fotoReferenciaHtml(t,modelo){
  const slug=slugFotoModelo(modelo),cache=slug&&fotosReferenciaCache[slug];if(!cache||!cache.loaded||!cache.items)return '<span class="muted" style="font-size:11px">Foto…</span>';
- let item=cache.items.get(claveFotoReferencia(t.ean,t.puesto));if(!item){const ean=normalizarEanFoto(t.ean),candidatos=(fotosReferenciaPorEan[slug]?.get(ean)||[]).filter(x=>Array.isArray(x.photos)&&x.photos.some(p=>p&&p.file));if(candidatos.length===1)item=candidatos[0];}
+ const item=cache.items.get(claveFotoReferencia(t.ean,t.puesto));
  const photos=(item&&Array.isArray(item.photos)?item.photos:[]).filter(p=>p&&p.file);if(!photos.length)return '<span class="muted" style="font-size:11px">Sin foto</span>';
  const alt=String(t.producto||'referencia').replace(/[&<>"']/g,''),imgs=photos.map((photo,i)=>{
   const file=String(photo.file),key=slug+'/'+file;let url=fotosReferenciaUrls[key];
