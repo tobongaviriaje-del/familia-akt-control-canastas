@@ -1099,7 +1099,7 @@ function cargarManifiestoFotos(modelo){
 }
 function fotoReferenciaHtml(t,modelo){
  const slug=slugFotoModelo(modelo),cache=slug&&fotosReferenciaCache[slug];if(!cache||!cache.loaded||!cache.items)return '<span class="muted" style="font-size:11px">Foto…</span>';
- let item;if(slug==='chr'){let numero=normalizarNumeroReferencia(t.numeroReferencia);if(!numero){const legacy=cache.items.get(claveFotoReferencia(t.ean,t.puesto));numero=normalizarNumeroReferencia(legacy&&legacy.numeroReferencia);}item=numero&&cache.itemsPorNumero?cache.itemsPorNumero.get(numero+'|'+normalizarClaveFoto(t.puesto)):null;}else item=cache.items.get(claveFotoReferencia(t.ean,t.puesto));
+ let item;if(slug==='chr'){const numero=normalizarNumeroReferencia(t.numeroReferencia),porNumero=numero&&cache.itemsPorNumero?cache.itemsPorNumero.get(numero+'|'+normalizarClaveFoto(t.puesto)):null;item=porNumero||cache.items.get(claveFotoReferencia(t.ean,t.puesto));}else item=cache.items.get(claveFotoReferencia(t.ean,t.puesto));
  const photos=(item&&Array.isArray(item.photos)?item.photos:[]).filter(p=>p&&p.file);if(!photos.length)return '<span class="muted" style="font-size:11px">Sin foto</span>';
  const alt=String(t.producto||'referencia').replace(/[&<>"']/g,''),imgs=photos.map((photo,i)=>{
   const file=String(photo.file),key=slug+'/'+file;let url=fotosReferenciaUrls[key];
