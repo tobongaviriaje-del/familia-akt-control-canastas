@@ -5,13 +5,13 @@
   "scope": "/",
   "display": "standalone",
   "background_color": "#f3f4f6",
-  "theme_color": "#c8102e",
+  "theme_color": "#07162d",
   "description": "Sistema interno de control de canastas, tareas y entregas.",
   "lang": "es-CO",
   "orientation": "any",
   "icons": [
     {
-      "src": "/icon.svg?v=2",
+      "src": "/familia-akt-logo.svg?v=1",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
