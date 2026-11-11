@@ -578,7 +578,7 @@ function tareasSinDuplicadosEstandar(tasks){
   const puesto=clean(normalizarPuestoEstandar(x.puesto));
   // Evitar duplicados entre patinadores dentro del mismo lote físico,
   // pero nunca fusionar lotes distintos (p. ej. KK766 y KK767B).
-  const lote=clean(x.lpn||x.loteCodigo||x.codigoLote||x.loteId||'');
+  const lote=clean(x.codigoLoteOperacion||x.loteCodigo||x.codigoLote||x.loteId||x.lpn||'');
   return [modelo,lote,ean,puesto].join('|');
  };
  const chosen=new Map(),other=[];
@@ -1151,10 +1151,45 @@ function gruposLotesArchivadosPatinador(modelo){
 function renderRetomarLotePatinador(modelo){
  const box=$('retomarLotePatinador');if(!box)return;
  if(!current||current.role!=='Patinador'){box.innerHTML='';return;}
- const groups=gruposLotesArchivadosPatinador(modelo);
- if(!groups.length){box.innerHTML='<b>↩️ Primer lote / lote guardado</b><p class="muted">Busca el primer lote guardado. Si ya está activo, sus referencias y avances seguirán apareciendo en tu estándar.</p><button type="button" onclick="buscarLoteArchivadoPatinador()">▶️ Continuar con el primer lote</button>';return;}
- const options=groups.map((g,i)=>'<option value="'+encodeURIComponent(g.key)+'">'+(g.codigo?'OPR '+g.codigo:'Lote sin código')+' · '+(g.fecha||'fecha no registrada')+' · '+g.items.length+' referencias pendientes</option>').join('');
- box.innerHTML='<b>↩️ Retomar lote guardado</b><p class="muted">Selecciona el lote anterior para continuar con las cantidades que faltan. Las entregas registradas se conservan.</p>'+(groups.length>1?'<select id="retomarLoteSelect">'+options+'</select>':'<input id="retomarLoteSelect" type="hidden" value="'+encodeURIComponent(groups[0].key)+'"><p><b>'+(groups[0].codigo?'OPR '+groups[0].codigo:'Lote sin código')+'</b> · '+(groups[0].fecha||'fecha no registrada')+' · '+groups[0].items.length+' referencias pendientes</p>')+'<button type="button" onclick="retomarLoteArchivadoPatinador()">▶️ Continuar con este lote</button>';
+ const groups=gruposLotesArchivadosPatinador(modelo),q=queuedStandardBatches.find(b=>b&&b.modelo===modelo),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ let html='';
+ if(groups.length){
+  const options=groups.map(g=>'<option value="'+encodeURIComponent(g.key)+'">'+(g.codigo?'OPR '+esc(g.codigo):'Lote sin código')+' · '+esc(g.fecha||'fecha no registrada')+' · '+g.items.length+' referencias pendientes</option>').join('');
+  html+='<b>↩️ Retomar lote guardado</b><p class="muted">Selecciona un lote anterior para continuar con las cantidades que faltan. Las entregas registradas se conservan.</p>'+(groups.length>1?'<select id="retomarLoteSelect">'+options+'</select>':'<input id="retomarLoteSelect" type="hidden" value="'+encodeURIComponent(groups[0].key)+'"><p><b>'+(groups[0].codigo?'OPR '+esc(groups[0].codigo):'Lote sin código')+'</b> · '+esc(groups[0].fecha||'fecha no registrada')+' · '+groups[0].items.length+' referencias pendientes</p>')+'<button type="button" onclick="retomarLoteArchivadoPatinador()">▶️ Continuar con este lote</button>';
+ }else{
+  html+='<b>↩️ Lotes anteriores</b><p class="muted">No tienes lotes anteriores archivados pendientes para tus puestos.</p>';
+ }
+ if(q){
+  const asignadas=(Array.isArray(q.tasks)?q.tasks:[]).filter(t=>tareaAsignadaAlPatinador(t));
+  if(asignadas.length){
+   const units=asignadas.reduce((n,t)=>n+Math.max(0,unidadesObjetivoEstandar(t)),0);
+   html+='<hr style="border:0;border-top:1px solid #cbd5e1;margin:14px 0"><b>📦 Siguiente lote disponible: OPR '+esc(q.codigo||'Sin código')+'</b><p class="muted">Tiene '+asignadas.length+' referencias asignadas a tus puestos. Puedes empezar este lote ahora; las tareas y los pendientes del lote anterior seguirán activos y separados.</p><button type="button" onclick="abrirSiguienteLotePatinador()">▶️ Continuar con el siguiente lote</button>';
+  }
+ }else if(queuedStandardBatches.some(b=>b)){
+  const next=queuedStandardBatches.find(Boolean);
+  html+='<p class="muted">Hay un siguiente lote preparado para '+esc(next.modelo)+'. Selecciona ese modelo para abrirlo.</p>';
+ }
+ box.innerHTML=html;
+}
+async function abrirSiguienteLotePatinador(){
+ if(!current||current.role!=='Patinador'){alert('Esta opción está disponible para patinadores.');return;}
+ if(!await cloudLoad()){alert('No se pudo actualizar la información de la nube. No se modificó ningún lote.');return;}
+ const modelo=String($('modeloEstandarPatinador')?.value||localStorage.getItem('cc_modelo_moto')||'NKD');
+ const q=queuedStandardBatches.find(b=>b&&b.modelo===modelo);
+ if(!q||!Array.isArray(q.tasks)||!q.tasks.length){alert('No hay un siguiente lote preparado para '+modelo+'. No se modificó ningún dato.');return;}
+ const asignadas=q.tasks.filter(t=>tareaAsignadaAlPatinador(t));
+ if(!asignadas.length){alert('El siguiente lote no tiene tareas asignadas a tus puestos. Consulta con el administrador.');return;}
+ const active=getTasks(),ids=new Set(active.map(t=>String(t.id)));
+ if(q.tasks.some(t=>ids.has(String(t.id)))){alert('Este lote ya tiene tareas activas o parcialmente activadas. No se hizo ningún cambio para evitar duplicados.');return;}
+ const beforeTasks=active.slice(),beforeQueue=queuedStandardBatches.slice();
+ if(!confirm('¿Abrir el siguiente lote OPR '+(q.codigo||'Sin código')+'? Se agregarán sus '+q.tasks.length+' referencias sin cerrar ni archivar el lote actual. Los pendientes y entregas de ambos lotes quedarán separados.'))return;
+ cloudTasks=[...active,...q.tasks.map(t=>({...t}))];
+ queuedStandardBatches=queuedStandardBatches.filter(b=>b!==q);
+ const ok=await cloudSave();
+ if(!ok){cloudTasks=beforeTasks;queuedStandardBatches=beforeQueue;alert('No se confirmó la apertura en la nube. Se restauró el estado anterior; no vuelvas a pulsar hasta verificar la conexión.');return;}
+ localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
+ render();
+ alert('✅ Lote OPR '+(q.codigo||'')+' abierto. El lote anterior sigue activo con sus pendientes y entregas intactos.');
 }
 async function buscarLoteArchivadoPatinador(){
  if(!current||current.role!=='Patinador')return;
