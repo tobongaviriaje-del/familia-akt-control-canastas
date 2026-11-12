@@ -105,7 +105,7 @@ function cloudSave(){
         body:isSkater?JSON.stringify({model:patinadorWorkLot.model,lotId:patinadorWorkLot.id,tasks:cloudTasks}):snapshot
       });
       if(!r.ok)throw new Error('El servidor rechazó el guardado');
-      if(isSkater){const saved=await r.json();cloudTasks=Array.isArray(saved.tasks)?saved.tasks:cloudTasks;patinadorWorkLot=saved.lot||patinadorWorkLot;}
+      if(isSkater){const saved=await r.json();cloudTasks=Array.isArray(saved.tasks)?saved.tasks:cloudTasks;patinadorWorkLot={...patinadorWorkLot,...saved.lot};}
       cloudReady=true;
       return true;
     }catch(e){
@@ -386,7 +386,7 @@ function logout(){
  if(token)fetch('/api/auth/logout',{method:'POST',headers:{'Authorization':'Bearer '+token}}).catch(()=>{});
  localStorage.removeItem('cc_session_token');
  localStorage.removeItem('cc_users');
- current=null;users={};cloudTasks=[];lpnCatalog=[];cloudReady=false;
+ current=null;users={};cloudTasks=[];lpnCatalog=[];patinadorWorkLot=null;cloudReady=false;
  $('appView').classList.add('hidden');$('loginView').classList.remove('hidden');$('logout').classList.add('hidden');
 }
 function fillPuestos(){let arr=[];for(let i=1;i<=33;i++)arr.push('PRE '+i);for(let i=1;i<=16;i++){arr.push('Derecho '+i);arr.push('Izquierdo '+i)}for(let i=1;i<=20;i++)arr.push('Final '+i);$('puesto').innerHTML=arr.map(x=>`<option>${x}</option>`).join('');}
