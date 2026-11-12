@@ -4,15 +4,16 @@
     const box=document.getElementById('foundTask');
     const lpn=document.getElementById('scanLpn');
     const puesto=document.getElementById('scanPuesto');
-    if(!box||!lpn||!puesto||!lpn.value.trim()) return;
-    fetch('/api/state',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(s=>{
-      if(!s||!Array.isArray(s.tasks)) return;
-      const t=s.tasks.find(x=>String(x.lpn||'')===lpn.value.trim() && String(x.puesto||'')===puesto.value.trim() && x.estado!=='Entregada');
-      if(!t) return;
-      let old=box.querySelector('.estiba-destacada');
-      if(!old){old=document.createElement('div');old.className='estiba-destacada';box.prepend(old);}
-      old.innerHTML='📦 <b>ESTIBA: '+esc(t.estiba||'Sin número de estiba')+'</b>';
-    }).catch(()=>{});
+    if(!box||!lpn||!puesto)return;
+    const code=lpn.value.trim(),station=puesto.value.trim();
+    let highlight=box.querySelector('.estiba-destacada');
+    if(!code){if(highlight)highlight.remove();return;}
+    const tasks=Array.isArray(window.cloudTasks)?window.cloudTasks:[];
+    const task=tasks.find(x=>String(x.lpn||'')===code&&String(x.puesto||'')===station&&x.estado!=='Entregada');
+    if(!task){if(highlight)highlight.remove();return;}
+    const label='📦 ESTIBA: '+(task.estiba||'Sin número de estiba');
+    if(!highlight){highlight=document.createElement('div');highlight.className='estiba-destacada';box.prepend(highlight);}
+    if(highlight.textContent!==label)highlight.textContent=label;
   }
 
   function patinadorAsignado(puesto){
@@ -72,28 +73,40 @@
 
   async function guardarEntregaDirecta(id,qty,obs){
     const t=cloudTasks;
-    const x=t.find(a=>a.id===id);
-    if(!x) throw new Error('La tarea ya no está disponible.');
-    const objetivo=x.standardNKD&&typeof unidadesObjetivoEstandar==='function'
-      ? unidadesObjetivoEstandar(x)
-      : Number(x.cantidad||0);
+    const x=t.find(a=>String(a.id)===String(id));
+    if(!x)throw new Error('La tarea ya no está disponible.');
+    const objetivo=x.standardNKD&&typeof unidadesObjetivoEstandar==='function'?unidadesObjetivoEstandar(x):Number(x.cantidad||0);
     const restante=Math.max(0,objetivo-(Number(x.entregado)||0));
-    if(!Number.isInteger(qty)||qty<1||qty>restante) throw new Error('La cantidad supera lo pendiente: quedan '+restante+' unidades en esta referencia.');
+    if(!Number.isInteger(qty)||qty<1||qty>restante)throw new Error('La cantidad supera lo pendiente: quedan '+restante+' unidades en esta referencia.');
+    const anterior={entregado:x.entregado||0,estado:x.estado,entregas:Array.isArray(x.entregas)?[...x.entregas]:[],entrega:x.entrega,canastasEntregadas:x.canastasEntregadas};
     x.entregado=(Number(x.entregado)||0)+qty;
     const capacidad=typeof unidadesPorCanastaEstandar==='function'&&x.standardNKD?unidadesPorCanastaEstandar(x):0;
     if(capacidad>0)x.canastasEntregadas=Number((x.entregado/capacidad).toFixed(4));
     x.estado=x.entregado>=objetivo?'Entregada':'Parcial';
     x.entregas=x.entregas||[];
-    x.entregas.push({patinador:current.name,cantidad:qty,fechaHora:new Date().toLocaleString('es-CO'),metodo:'EAN / botón ENTREGAR',observaciones:obs||''});
+    x.entregas.push({patinador:current?.name||'Usuario',cantidad:qty,fechaHora:new Date().toLocaleString('es-CO'),metodo:'EAN / botón ENTREGAR',observaciones:obs||''});
     x.entrega=x.entregas[x.entregas.length-1];
-    const r=await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({users,tasks:t,lpnCatalog})});
-    if(!r.ok) throw new Error('El servidor no pudo guardar la entrega.');
-    const s=await r.json();
-    users=s.users||users; cloudTasks=Array.isArray(s.tasks)?s.tasks:t;
-    if(Array.isArray(s.lpnCatalog)) lpnCatalog=s.lpnCatalog;
-    localStorage.setItem('cc_users',JSON.stringify(users));
-    localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
-    localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));
+    try{
+      const isSkater=current?.role==='Patinador';
+      if(isSkater&&!patinadorWorkLot)throw new Error('No hay un lote de trabajo cargado.');
+      const r=await fetch(isSkater?'/api/work-lots':'/api/state',{
+        method:'PUT',headers:{'Content-Type':'application/json'},
+        body:isSkater?JSON.stringify({username:current.username,model:patinadorWorkLot.model,lotId:patinadorWorkLot.id,version:patinadorWorkLot.updatedAt,tasks:t}):JSON.stringify({users,tasks:t,lpnCatalog}),
+        cache:'no-store'
+      });
+      if(!r.ok){let detail='';try{const e=await r.json();detail=e.error||'';}catch{}throw new Error(detail||'El servidor no pudo guardar la entrega.');}
+      const saved=await r.json();
+      if(isSkater&&saved.lot)patinadorWorkLot={...patinadorWorkLot,...saved.lot};
+      if(Array.isArray(saved.tasks))cloudTasks=saved.tasks;
+      if(saved.users)users=saved.users;
+      if(Array.isArray(saved.lpnCatalog))lpnCatalog=saved.lpnCatalog;
+      localStorage.setItem('cc_users',JSON.stringify(users));
+      localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
+      localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));
+    }catch(e){
+      x.entregado=anterior.entregado;x.estado=anterior.estado;x.entregas=anterior.entregas;x.entrega=anterior.entrega;x.canastasEntregadas=anterior.canastasEntregadas;
+      throw e;
+    }
   }
 
   function instalar(){
