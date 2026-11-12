@@ -92,7 +92,7 @@ const WORK_LOT_CAPACITY_FIELDS=['cantidadCanasta','cantidadCanastaRaw','numCanas
 function stableWorkValue(v){if(Array.isArray(v))return v.map(stableWorkValue);if(v&&typeof v==='object')return Object.keys(v).sort().reduce((o,k)=>(o[k]=stableWorkValue(v[k]),o),{});return v;}
 function stableWorkString(v){return JSON.stringify(stableWorkValue(v));}
 function workLotNumber(v){const n=Number(v);return Number.isFinite(n)?n:0;}
-function workLotModel(v){return String(v||'').trim().toUpperCase().replace(/VOGUE 180/g,'VOGE 180').replace(/VOGI 180/g,'VOGE 180').replace(/^CH$/,'CHR');}
+function workLotModel(v){return String(v||'').trim().toUpperCase().replace(/VOGUE 180/g,'VOGE 180').replace(/VOGI 180/g,'VOGE 180').replace(/^CH$/,'CHR').replace(/^CR4[-_ ]?150$/,'CR4 150').replace(/^CR4[-_ ]?125$/,'CR4 125').replace(/^XRS[ _]?180$/,'XRS-180');}
 function workLotTarget(t){const lot=workLotNumber(t.lote),qty=workLotNumber(t.cantidad),cap=workLotNumber(t.cantidadCanasta),baskets=workLotNumber(t.numCanastas),unit=workLotNumber(t.cantidadUnidad);if(lot>1)return lot;if(qty>1)return qty;if(cap>0&&baskets>0)return cap*baskets;return unit>0?unit:(lot>0?lot:(cap>0?cap:qty));}
 function readWorkLots(){try{if(!fs.existsSync(WORK_LOTS_FILE))return [];const data=JSON.parse(fs.readFileSync(WORK_LOTS_FILE,'utf8'));return Array.isArray(data)?data:[];}catch(e){console.error('No se pudieron leer los lotes de trabajo:',e.message);throw new Error('No se pudieron leer los lotes de trabajo.');}}
 function writeWorkLots(rows){fs.mkdirSync(DATA_DIR,{recursive:true});const tmp=WORK_LOTS_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(rows,null,2),{mode:0o600});fs.renameSync(tmp,WORK_LOTS_FILE);}
