@@ -419,7 +419,7 @@ const queued=state.queuedStandardBatches[0];
 if(queued&&queued.modeloActual&&Array.isArray(queued.tasks)&&queued.tasks.length){
  const activeModel=String(queued.modeloActual),modelOf=t=>String(t&& (t.standardMoto||(t.standardNKD?'NKD':''))||'');
  const active=state.tasks.filter(t=>t&&t.standardNKD&&modelOf(t)===activeModel);
- const objective=t=>{const basket=Number(String(t.cantidadCanasta??'').replace(',','.'))||0,baskets=Number(String(t.numCanastas??'').replace(',','.'))||0,lot=Number(String(t.lote??'').replace(',','.'))||0,unit=Number(String(t.cantidadUnidad??'').replace(',','.'))||0,qty=Number(String(t.cantidad??'').replace(',','.'))||0;return lot>0?lot:(basket>0&&baskets>0?basket*baskets:(unit>0?unit:(basket>0?basket:qty)));};
+ const objective=t=>{if(String(t.standardMoto||'').trim().toUpperCase()==='XRS-180'&&t.continuidadDeTareaId)return Math.max(0,Number(String(t.cantidad??'').replace(',','.'))||0);const lot=Number(String(t.lote??'').replace(',','.'))||0,cap=Number(String(t.cantidadCanasta??'').replace(',','.'))||0,baskets=Number(String(t.numCanastas??'').replace(',','.'))||0,unit=Number(String(t.cantidadUnidad??'').replace(',','.'))||0,qty=Number(String(t.cantidad??'').replace(',','.'))||0;if(lot>1)return lot;if(qty>1)return qty;if(cap>0&&baskets>0)return cap*baskets;return unit>0?unit:(lot>0?lot:(cap>0?cap:qty));};
  const total=active.reduce((n,t)=>n+Math.max(0,objective(t)),0),delivered=active.reduce((n,t)=>n+Math.min(Math.max(0,Number(t.entregado)||0),Math.max(0,objective(t))),0);
  const target=state.tasks.filter(t=>t&&t.standardNKD&&modelOf(t)===String(queued.modelo)&&modelOf(t)!==activeModel);
  const targetHasPartial=target.some(t=>(Number(t.entregado)||0)>0&&(Number(t.entregado)||0)<objective(t));
