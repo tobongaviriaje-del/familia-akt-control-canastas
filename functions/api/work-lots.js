@@ -6,6 +6,7 @@ const DELIVERY_FIELDS = ["entregado","estado","entregas","entrega","canastasEntr
 
 function fail(message, status=400) { const e=new Error(message); e.status=status; throw e; }
 function number(v) { const n=Number(v); return Number.isFinite(n)?n:0; }
+function targetOf(task) { const lot=number(task.lote)||number(task.lotePiezas); if(lot>0)return lot; const baskets=number(task.cantidadCanasta), count=number(task.numCanastas); if(baskets>0&&count>0)return baskets*count; return number(task.cantidadUnidad)||number(task.cantidad)||baskets; }
 function modelOf(task) { return String(task.standardMoto || (task.standardNKD ? "NKD" : "")).trim().toUpperCase().replace("VOGUE 180","VOGE 180"); }
 function without(value, fields) { const copy={...(value||{})}; for(const f of fields) delete copy[f]; return copy; }
 function cleanNewLot(tasks) {
@@ -32,7 +33,7 @@ function validateAndMerge(saved, incoming, user) {
     if(!assigned.has(String(old.puesto||""))) fail("No tienes permiso para modificar este puesto.",403);
     if(stableStringify(without(old,[...DELIVERY_FIELDS,...CAPACITY_FIELDS]))!==stableStringify(without(candidate,[...DELIVERY_FIELDS,...CAPACITY_FIELDS]))) fail("No puedes modificar referencias ni cantidades originales.",403);
     const oldCapacity=number(old.cantidadCanasta), newCapacity=number(candidate.cantidadCanasta);
-    const oldDelivered=number(old.entregado), newDelivered=number(candidate.entregado), target=number(old.lote)||number(old.cantidad);
+    const oldDelivered=number(old.entregado), newDelivered=number(candidate.entregado), target=targetOf(old);
     const capacityFields=["cantidadCanasta","cantidadCanastaRaw","numCanastas","numCanastasRaw"];
     const capacityChanged=stableStringify(without(old,DELIVERY_FIELDS))!==stableStringify(without(candidate,DELIVERY_FIELDS)) &&
       stableStringify(capacityFields.map(k=>old[k]??null))!==stableStringify(capacityFields.map(k=>candidate[k]??null));
