@@ -86,6 +86,81 @@ function readZipEntries(buffer){
 }
 function safePhotoModel(value){return value==='xrs180'?'XRS-180':value==='cr4125'?'CR4 125':value==='cr4150'?'CR4-150':value==='nkd'?'NKD':value==='chr'?'CHR':null;}
 
+const WORK_LOTS_FILE=path.join(DATA_DIR,'work-lots.json');
+const WORK_LOT_DELIVERY_FIELDS=['entregado','estado','entregas','entrega','canastasEntregadas','confirmacionesCanastas','correcciones'];
+const WORK_LOT_CAPACITY_FIELDS=['cantidadCanasta','cantidadCanastaRaw','numCanastas','numCanastasRaw'];
+function stableWorkValue(v){if(Array.isArray(v))return v.map(stableWorkValue);if(v&&typeof v==='object')return Object.keys(v).sort().reduce((o,k)=>(o[k]=stableWorkValue(v[k]),o),{});return v;}
+function stableWorkString(v){return JSON.stringify(stableWorkValue(v));}
+function workLotNumber(v){const n=Number(v);return Number.isFinite(n)?n:0;}
+function workLotModel(v){return String(v||'').trim().toUpperCase().replace(/VOGUE 180/g,'VOGE 180').replace(/VOGI 180/g,'VOGE 180').replace(/^CH$/,'CHR').replace(/^CR4[-_ ]?150$/,'CR4 150').replace(/^CR4[-_ ]?125$/,'CR4 125').replace(/^XRS[ _]?180$/,'XRS-180');}
+function workLotTarget(t){const lot=workLotNumber(t.lote),qty=workLotNumber(t.cantidad),cap=workLotNumber(t.cantidadCanasta),baskets=workLotNumber(t.numCanastas),unit=workLotNumber(t.cantidadUnidad);if(lot>1)return lot;if(qty>1)return qty;if(cap>0&&baskets>0)return cap*baskets;return unit>0?unit:(lot>0?lot:(cap>0?cap:qty));}
+function readWorkLots(){try{if(!fs.existsSync(WORK_LOTS_FILE))return [];const data=JSON.parse(fs.readFileSync(WORK_LOTS_FILE,'utf8'));return Array.isArray(data)?data:[];}catch(e){console.error('No se pudieron leer los lotes de trabajo:',e.message);throw new Error('No se pudieron leer los lotes de trabajo.');}}
+function writeWorkLots(rows){fs.mkdirSync(DATA_DIR,{recursive:true});const tmp=WORK_LOTS_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(rows,null,2),{mode:0o600});fs.renameSync(tmp,WORK_LOTS_FILE);}
+function workLotNorm(v){return String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');}
+function workLotPosition(v){let x=workLotNorm(v),m=x.match(/^pre\s*0*(\d+)$/);if(m)return 'pre '+Number(m[1]);m=x.match(/^0*(\d+)\s*(derecho|izquierdo)$/);if(m)return m[2]+' '+Number(m[1]);m=x.match(/^(derecho|izquierdo|final(?: de linea)?)\s*0*(\d+)$/);if(m)return (m[1].startsWith('final')?'final':m[1])+' '+Number(m[2]);return x;}
+function workLotUserCanTask(user,username,task){const positions=new Set(Array.isArray(user.puestos)?user.puestos.map(workLotPosition).filter(Boolean):[]);const position=workLotPosition(task.puesto);if(position&&positions.has(position))return true;const responsible=workLotNorm(task.patinadorEstandar),identities=[user.name,username].map(workLotNorm).filter(Boolean);return !!responsible&&identities.some(v=>v===responsible||v.startsWith(responsible+' ')||v.endsWith(' '+responsible));}
+function workLotResponse(row,user,username,rows){return {ok:true,lot:{id:row.id,model:row.model,number:row.number,createdAt:row.createdAt,updatedAt:row.updatedAt},lots:rows.filter(x=>x.model===row.model).sort((a,b)=>a.number-b.number).map(x=>({id:x.id,number:x.number})),tasks:(row.tasks||[]).filter(t=>workLotUserCanTask(user,username,t))};}
+function validateWorkLot(saved,incoming,user,username){
+ if(!Array.isArray(incoming))throw new Error('La lista de referencias no es válida.');
+ const byId=new Map(incoming.map(x=>[String(x&&x.id),x]));
+ if(byId.size!==incoming.length)throw new Error('Hay referencias repetidas.');
+ const result=[];
+ for(const old of saved){
+  const key=String(old.id),candidate=byId.get(key);
+  if(!candidate){result.push(old);continue;}
+  byId.delete(key);
+  if(!workLotUserCanTask(user,username,old))throw new Error('No tienes permiso para modificar este puesto.');
+  if(stableWorkString(withoutWork(old,[...WORK_LOT_DELIVERY_FIELDS,...WORK_LOT_CAPACITY_FIELDS]))!==stableWorkString(withoutWork(candidate,[...WORK_LOT_DELIVERY_FIELDS,...WORK_LOT_CAPACITY_FIELDS])))throw new Error('No puedes modificar las referencias ni sus cantidades originales.');
+  const target=workLotTarget(old),oldDelivered=workLotNumber(old.entregado),newDelivered=workLotNumber(candidate.entregado);
+  const oldEvents=Array.isArray(old.entregas)?old.entregas:[],newEvents=Array.isArray(candidate.entregas)?candidate.entregas:[];
+  const oldConf=Array.isArray(old.confirmacionesCanastas)?old.confirmacionesCanastas:[],newConf=Array.isArray(candidate.confirmacionesCanastas)?candidate.confirmacionesCanastas:[];
+  const oldCorrections=Array.isArray(old.correcciones)?old.correcciones:[],newCorrections=Array.isArray(candidate.correcciones)?candidate.correcciones:[];
+  const capacityChanged=WORK_LOT_CAPACITY_FIELDS.some(k=>stableWorkString(old[k]??null)!==stableWorkString(candidate[k]??null));
+  if(newDelivered>target)throw new Error('La entrega no puede superar el lote.');
+  if(capacityChanged){
+   if(newDelivered!==oldDelivered||stableWorkString(newEvents)!==stableWorkString(oldEvents)||stableWorkString(newConf)!==stableWorkString(oldConf)||stableWorkString(newCorrections)!==stableWorkString(oldCorrections))throw new Error('Guarda la capacidad por separado de las entregas.');
+   const cap=workLotNumber(candidate.cantidadCanasta),baskets=workLotNumber(candidate.numCanastas);
+   if(!Number.isInteger(cap)||cap<1||String(candidate.cantidadCanastaRaw??'')!==String(cap))throw new Error('La capacidad debe ser un entero válido.');
+   const expected=target>0?Math.ceil(target/cap):baskets;
+   if(baskets!==expected||String(candidate.numCanastasRaw??'')!==String(expected))throw new Error('El cálculo de canastas no coincide con el lote.');
+  }
+  if(newDelivered<oldDelivered){
+   const correction=newCorrections[newCorrections.length-1],delta=oldDelivered-newDelivered;
+   if(capacityChanged||stableWorkString(newEvents)!==stableWorkString(oldEvents)||stableWorkString(newConf)!==stableWorkString(oldConf)||newCorrections.length!==oldCorrections.length+1||!oldCorrections.every((e,i)=>stableWorkString(e)===stableWorkString(newCorrections[i])))throw new Error('La corrección no coincide con el historial.');
+   const who=workLotNorm(correction&&correction.usuario),identities=[user.name,username].map(workLotNorm);
+   if(workLotNumber(correction&&correction.unidades)!==delta||workLotNumber(correction&&correction.entregadoAntes)!==oldDelivered||workLotNumber(correction&&correction.entregadoDespues)!==newDelivered||!String(correction&&correction.motivo||'').trim()||!identities.includes(who))throw new Error('Los datos de la corrección no son válidos.');
+   const expected=newDelivered>=target&&target>0?'Entregada':newDelivered>0?'Parcial':'Pendiente';
+   if(candidate.estado!==expected||stableWorkString(candidate.entrega||null)!==stableWorkString(old.entrega||null))throw new Error('El estado de la corrección no coincide.');
+  }else if(newDelivered>oldDelivered){
+   if(capacityChanged||newCorrections.length!==oldCorrections.length||!oldCorrections.every((e,i)=>stableWorkString(e)===stableWorkString(newCorrections[i])))throw new Error('No se permiten correcciones junto con una entrega nueva.');
+   if(newEvents.length!==oldEvents.length+1||!oldEvents.every((e,i)=>stableWorkString(e)===stableWorkString(newEvents[i])))throw new Error('El movimiento de entrega no coincide.');
+   const movement=newEvents[newEvents.length-1],physical=workLotNumber(movement&&movement.canastasFisicas);
+   if(physical!==0&&(!Number.isInteger(physical)||physical<1))throw new Error('La cantidad de canastas físicas no es válida.');
+   if(workLotNumber(movement&&movement.cantidad)!==newDelivered-oldDelivered)throw new Error('La cantidad del movimiento no coincide.');
+   const expected=newDelivered>=target?'Entregada':'Parcial';
+   if(candidate.estado!==expected||stableWorkString(candidate.entrega||null)!==stableWorkString(movement))throw new Error('El estado de entrega no coincide.');
+   if(newConf.length!==oldConf.length+(physical>0?1:0)||!oldConf.every((e,i)=>stableWorkString(e)===stableWorkString(newConf[i])))throw new Error('La confirmación de canastas no coincide.');
+   if(physical>0){const last=newConf[newConf.length-1];if(workLotNumber(last&&last.cantidad)!==physical||workLotNumber(last&&last.unidades)!==newDelivered-oldDelivered||workLotNumber(candidate.canastasEntregadas)!==workLotNumber(old.canastasEntregadas)+physical)throw new Error('Las canastas físicas no coinciden con las unidades.');}
+   else if(stableWorkString(newConf)!==stableWorkString(oldConf)||workLotNumber(candidate.canastasEntregadas)!==workLotNumber(old.canastasEntregadas))throw new Error('No se permiten cambios en las canastas físicas.');
+  }else{
+   if(stableWorkString(newEvents)!==stableWorkString(oldEvents)||stableWorkString(newCorrections)!==stableWorkString(oldCorrections)||candidate.estado!==old.estado||stableWorkString(candidate.entrega||null)!==stableWorkString(old.entrega||null))throw new Error('No se permiten cambios en el historial de entregas.');
+   if(!capacityChanged){
+    const added=newConf.length===oldConf.length+1&&oldConf.every((e,i)=>stableWorkString(e)===stableWorkString(newConf[i]));
+    if(added){const last=newConf[newConf.length-1],n=workLotNumber(last&&last.cantidad);if(last.soloConteo!==true||n<1||!Number.isInteger(n)||workLotNumber(last.unidades)!==0||workLotNumber(candidate.canastasEntregadas)!==workLotNumber(old.canastasEntregadas)+n)throw new Error('El conteo de canastas no es válido.');}
+    else if(stableWorkString(newConf)!==stableWorkString(oldConf)||workLotNumber(candidate.canastasEntregadas)!==workLotNumber(old.canastasEntregadas))throw new Error('No se permiten cambios en las canastas físicas.');
+   }
+  }
+  const merged={...old};
+  for(const k of WORK_LOT_CAPACITY_FIELDS){if(Object.prototype.hasOwnProperty.call(candidate,k))merged[k]=candidate[k];else delete merged[k];}
+  for(const k of WORK_LOT_DELIVERY_FIELDS){if(Object.prototype.hasOwnProperty.call(candidate,k))merged[k]=candidate[k];else delete merged[k];}
+  result.push(merged);
+ }
+ if(byId.size)throw new Error('La lista contiene referencias que no pertenecen a este lote.');
+ return result;
+}
+function withoutWork(value,fields){const copy={...(value||{})};for(const f of fields)delete copy[f];return copy;}
+function ensureWorkLot(rows,state,model,username){let row=rows.filter(x=>x.model===model).sort((a,b)=>b.number-a.number)[0];if(row)return row;const tasks=(Array.isArray(state.tasks)?state.tasks:[]).filter(t=>t&&t.standardNKD&&workLotModel(t.standardMoto||(t.standardNKD?'NKD':''))===model);if(!tasks.length)throw new Error('No hay referencias originales cargadas para '+model+'.');const now=new Date().toISOString();row={id:require('crypto').randomUUID(),model,number:1,tasks:JSON.parse(JSON.stringify(tasks)),createdBy:username,createdAt:now,updatedAt:now};rows.push(row);writeWorkLots(rows);return row;}
+
 const server=http.createServer((req,res)=>{
 const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);const p=decodeURIComponent(url.pathname);
 res.setHeader('Vary','Origin');res.setHeader('Permissions-Policy','camera=(self), microphone=(self)');res.setHeader('Cache-Control','no-store');
@@ -123,6 +198,33 @@ if(p==='/api/admin/patinadores-credentials'&&req.method==='POST'){
   return sendJson(res,200,{ok:true});
  }catch{return sendJson(res,400,{ok:false,error:'Solicitud inválida.'});}});
  return;
+}
+if(p==='/api/work-lots'&&['GET','POST','PUT'].includes(req.method)){
+ const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token);
+ if(!authorized(req)||!session)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
+ const state=readState();let body={};
+ const finish=(actor,model,action)=>{
+  const user=state.users&&state.users[actor];if(!user||user.role!=='Patinador')return sendJson(res,403,{ok:false,error:'Esta función está disponible para Patinadores.'});
+  const rows=readWorkLots();let row;
+  try{row=ensureWorkLot(rows,state,model,actor);}catch(e){return sendJson(res,404,{ok:false,error:e.message||'No hay estándar disponible.'});}
+  if(action==='GET')return sendJson(res,200,workLotResponse(row,user,actor,rows));
+  if(action==='POST'){
+   if(body.action==='select'){const selected=rows.find(x=>x.model===model&&x.id===String(body.lotId||''));if(!selected)return sendJson(res,404,{ok:false,error:'No se encontró el lote guardado.'});return sendJson(res,200,workLotResponse(selected,user,actor,rows));}
+   if(body.action!=='next')return sendJson(res,400,{ok:false,error:'Acción de lote no válida.'});
+   const nextNo=row.number+1;let selected=rows.find(x=>x.model===model&&x.number===nextNo);
+   if(!selected){const cloned=(row.tasks||[]).map(t=>({...t,entregado:0,estado:'Pendiente',entregas:[],entrega:null,canastasEntregadas:0,confirmacionesCanastas:[]}));const now=new Date().toISOString();selected={id:require('crypto').randomUUID(),model,number:nextNo,tasks:cloned,createdBy:actor,createdAt:now,updatedAt:now};rows.push(selected);writeWorkLots(rows);}
+   return sendJson(res,200,workLotResponse(selected,user,actor,rows));
+  }
+  if(action==='PUT'){
+   if(!body.lotId||!body.version)return sendJson(res,400,{ok:false,error:'Falta identificar la versión del lote.'});
+   const selected=rows.find(x=>x.model===model&&x.id===String(body.lotId));if(!selected)return sendJson(res,404,{ok:false,error:'El lote ya no existe. Actualiza la pantalla.'});
+   if(selected.updatedAt!==body.version)return sendJson(res,409,{ok:false,error:'Otro usuario guardó cambios en este lote. Actualiza antes de continuar.'});
+   let merged;try{merged=validateWorkLot(selected.tasks||[],body.tasks,user,actor);}catch(e){return sendJson(res,403,{ok:false,error:e.message||'No se pudo validar el cambio.'});}
+   selected.tasks=merged;selected.updatedAt=new Date().toISOString()+'#'+require('crypto').randomUUID();writeWorkLots(rows);return sendJson(res,200,workLotResponse(selected,user,actor,rows));
+  }
+ };
+ if(req.method==='GET'){const model=workLotModel(url.searchParams.get('model')),actor=session.username==='patinadores'?String(url.searchParams.get('username')||''):session.username;if(!model)return sendJson(res,400,{ok:false,error:'Selecciona un modelo válido.'});return finish(actor,model,'GET');}
+ let raw='';req.on('data',c=>{raw+=c;if(raw.length>10000000)req.destroy();});req.on('end',()=>{try{body=JSON.parse(raw||'{}');const model=workLotModel(body.model),actor=session.username==='patinadores'?String(body.username||''):session.username;if(!model)return sendJson(res,400,{ok:false,error:'Selecciona un modelo válido.'});return finish(actor,model,req.method);}catch(e){return sendJson(res,400,{ok:false,error:'Solicitud de lote inválida.'});}});return;
 }
 if(p.startsWith('/api/')&&p!=='/api/login'&&!authorized(req))return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
 if(p==='/api/admin/deduplicate-standard-tasks'&&req.method==='POST'){
