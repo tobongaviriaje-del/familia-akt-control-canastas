@@ -211,7 +211,7 @@ if(p==='/api/work-lots'&&['GET','POST','PUT'].includes(req.method)){
   if(action==='POST'){
    if(body.action==='select'){const selected=rows.find(x=>x.model===model&&x.id===String(body.lotId||''));if(!selected)return sendJson(res,404,{ok:false,error:'No se encontró el lote guardado.'});return sendJson(res,200,workLotResponse(selected,user,actor,rows));}
    if(body.action!=='next')return sendJson(res,400,{ok:false,error:'Acción de lote no válida.'});
-   const nextNo=row.number+1;let selected=rows.find(x=>x.model===model&&x.number===nextNo);
+   if(!body.lotId)return sendJson(res,400,{ok:false,error:'Falta identificar el lote actual.'});const source=rows.find(x=>x.model===model&&x.id===String(body.lotId));if(!source)return sendJson(res,404,{ok:false,error:'El lote actual ya no existe. Actualiza la pantalla.'});const nextNo=source.number+1;let selected=rows.find(x=>x.model===model&&x.number===nextNo);
    if(!selected){const cloned=(row.tasks||[]).map(t=>({...t,entregado:0,estado:'Pendiente',entregas:[],entrega:null,canastasEntregadas:0,confirmacionesCanastas:[]}));const now=new Date().toISOString();selected={id:require('crypto').randomUUID(),model,number:nextNo,tasks:cloned,createdBy:actor,createdAt:now,updatedAt:now};rows.push(selected);writeWorkLots(rows);}
    return sendJson(res,200,workLotResponse(selected,user,actor,rows));
   }
@@ -223,7 +223,7 @@ if(p==='/api/work-lots'&&['GET','POST','PUT'].includes(req.method)){
    selected.tasks=merged;selected.updatedAt=new Date().toISOString()+'#'+require('crypto').randomUUID();writeWorkLots(rows);return sendJson(res,200,workLotResponse(selected,user,actor,rows));
   }
  };
- if(req.method==='GET'){const model=workLotModel(url.searchParams.get('model')),actor=session.username==='patinadores'?String(url.searchParams.get('username')||''):session.username;if(!model)return sendJson(res,400,{ok:false,error:'Selecciona un modelo válido.'});return finish(actor,model,'GET');}
+ if(req.method==='GET'){const model=workLotModel(url.searchParams.get('model')),actor=session.username==='patinadores'?String(url.searchParams.get('username')||''):session.username;if(!model)return sendJson(res,400,{ok:false,error:'Selecciona un modelo válido.'});try{return finish(actor,model,'GET');}catch(e){console.error('Error leyendo lote de trabajo:',e);return sendJson(res,500,{ok:false,error:'No se pudo leer el lote de trabajo.'});}}
  let raw='';req.on('data',c=>{raw+=c;if(raw.length>10000000)req.destroy();});req.on('end',()=>{try{body=JSON.parse(raw||'{}');const model=workLotModel(body.model),actor=session.username==='patinadores'?String(body.username||''):session.username;if(!model)return sendJson(res,400,{ok:false,error:'Selecciona un modelo válido.'});return finish(actor,model,req.method);}catch(e){return sendJson(res,400,{ok:false,error:'Solicitud de lote inválida.'});}});return;
 }
 if(p.startsWith('/api/')&&p!=='/api/login'&&!authorized(req))return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
