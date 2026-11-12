@@ -1,5 +1,40 @@
 const DEFAULT_ADMIN_NAME = "Administrador";
 
+// D1 mantiene la misma vinculación durante la vida del isolate. Evita repetir
+// CREATE TABLE IF NOT EXISTS en cada petición de la API.
+const schemaInitialization = new WeakMap();
+
+export async function ensureDatabase(env) {
+  if (!env || !env.DB) {
+    const e = new Error("Falta vincular la base de datos D1 con el nombre DB.");
+    e.status = 503;
+    throw e;
+  }
+
+  const db = env.DB;
+  const existing = schemaInitialization.get(db);
+  if (existing) return existing;
+
+  const initialization = (async () => {
+    await db.prepare(
+      "CREATE TABLE IF NOT EXISTS app_state (id INTEGER PRIMARY KEY CHECK (id = 1), state_json TEXT NOT NULL, updated_at TEXT NOT NULL)"
+    ).run();
+    await db.prepare(
+      "CREATE TABLE IF NOT EXISTS app_sessions (token_hash TEXT PRIMARY KEY, username TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at TEXT NOT NULL)"
+    ).run();
+    await db.prepare(
+      "CREATE TABLE IF NOT EXISTS app_jornada_history (id INTEGER PRIMARY KEY AUTOINCREMENT, closed_at TEXT NOT NULL, metadata_json TEXT NOT NULL, tasks_json TEXT NOT NULL)"
+    ).run();
+  })();
+
+  schemaInitialization.set(db, initialization);
+  try {
+    await initialization;
+  } catch (error) {
+    schemaInitialization.delete(db);
+    throw error;
+  }
+}
 export async function ensureDatabase(env) {
   if (!env || !env.DB) {
     const e = new Error("Falta vincular la base de datos D1 con el nombre DB.");
