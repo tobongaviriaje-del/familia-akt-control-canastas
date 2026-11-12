@@ -1,4 +1,4 @@
-import { readState, writeState, stateForClient, json, errorResponse, stableStringify } from "../_lib/db.js";
+import { writeState, stateForClient, json, errorResponse, stableStringify } from "../_lib/db.js";
 import { authenticate } from "../_lib/auth.js";
 
 const MANAGERS = new Set(["Admin", "Mesanín", "Supervisor"]);
@@ -63,12 +63,6 @@ function mergePatinadorTasks(saved, incoming, user) {
     if (stableStringify(previous) === stableStringify(candidate)) {
       merged.push(previous);
       continue;
-    }
-
-    if (!puestos.has(String(previous.puesto || ""))) {
-      const e = new Error("Solo puedes modificar la capacidad o registrar entregas en los puestos asignados a tu usuario.");
-      e.status = 403;
-      throw e;
     }
 
     if (stableStringify(withoutFields(previous, protectedFields)) !==
