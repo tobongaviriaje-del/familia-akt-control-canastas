@@ -90,13 +90,17 @@ export function stateForClient(state, role, user = null) {
       : []
   );
   const allTasks = Array.isArray(state.tasks) ? state.tasks : [];
+  const allCatalog = Array.isArray(state.lpnCatalog) ? state.lpnCatalog : [];
   const visibleTasks = role === "Patinador"
     ? allTasks.filter(task => assignedPosts.has(String(task && task.puesto || "")))
     : allTasks;
+  const visibleCatalog = role === "Patinador"
+    ? allCatalog.filter(item => assignedPosts.has(String(item && item.puesto || "")))
+    : allCatalog;
   const copy = {
     users: {},
     tasks: visibleTasks,
-    lpnCatalog: Array.isArray(state.lpnCatalog) ? state.lpnCatalog : []
+    lpnCatalog: visibleCatalog
   };
   for (const [key, value] of Object.entries(state.users || {})) {
     const user = { ...(value || {}) };
