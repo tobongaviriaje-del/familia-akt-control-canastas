@@ -96,7 +96,33 @@
     localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));
   }
 
+  function instalarGuiaPatinador(){
+    const panel=document.getElementById('patinadorPanel');
+    const checklist=document.getElementById('standardChecklist');
+    if(!panel||!checklist||document.getElementById('guiaRapidaPatinador')) return;
+    const style=document.createElement('style');
+    style.id='guiaRapidaPatinadorStyles';
+    style.textContent=`
+      #guiaRapidaPatinador{background:#fff;border:1px solid #dbe3ec;border-radius:14px;padding:14px;margin:12px 0}
+      #guiaRapidaPatinador h2{font-size:19px;margin:0 0 6px}
+      #guiaRapidaPatinador .guia-intro{margin:0 0 12px;color:#475569;font-size:14px}
+      #guiaRapidaPatinador .guia-pasos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+      #guiaRapidaPatinador .guia-paso{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px;min-width:0}
+      #guiaRapidaPatinador .guia-num{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;background:#c8102e;color:#fff;font-weight:bold;margin-bottom:6px}
+      #guiaRapidaPatinador b{display:block;font-size:14px;margin-bottom:4px}
+      #guiaRapidaPatinador small{display:block;color:#475569;line-height:1.35;font-size:12px}
+      @media(max-width:480px){#guiaRapidaPatinador .guia-pasos{grid-template-columns:1fr}#guiaRapidaPatinador .guia-paso{display:grid;grid-template-columns:32px 1fr;column-gap:8px;align-items:start}#guiaRapidaPatinador .guia-num{grid-row:span 2}}
+    `;
+    document.head.appendChild(style);
+    const guide=document.createElement('section');
+    guide.id='guiaRapidaPatinador';
+    guide.setAttribute('aria-label','Guía rápida para patinadores');
+    guide.innerHTML='<h2>👋 ¿Qué debo hacer?</h2><p class="guia-intro">Sigue estos 3 pasos. No necesitas usar el escáner si vas a trabajar desde tu estándar.</p><div class="guia-pasos"><div class="guia-paso"><span class="guia-num">1</span><div><b>Busca tu moto</b><small>Selecciona el modelo y revisa las referencias que te corresponden.</small></div></div><div class="guia-paso"><span class="guia-num">2</span><div><b>Registra la entrega</b><small>Entra a la zona, elige la referencia y escribe la cantidad entregada.</small></div></div><div class="guia-paso"><span class="guia-num">3</span><div><b>Revisa lo pendiente</b><small>Comprueba el faltante antes de continuar con la siguiente referencia.</small></div></div></div><p class="guia-intro" style="margin:12px 0 0">💡 <b>Importante:</b> registra solo las unidades que entregaste físicamente. Si tienes dudas, consulta al responsable antes de confirmar.</p>';
+    panel.insertBefore(guide,checklist);
+  }
+
   function instalar(){
+    instalarGuiaPatinador();
     const box=document.getElementById('foundTask');
     if(!box)return;
     const eanInput=document.getElementById('scanEan');
