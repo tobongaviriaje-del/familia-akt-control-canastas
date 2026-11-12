@@ -178,7 +178,29 @@ if(p.startsWith('/api/admin/reference-photos/')&&req.method==='POST'){
    if(!used.size)throw new Error('El paquete no contiene fotos asociadas.');
    const files=new Map();for(const name of used){const data=entries.get('fotos/'+name);if(!data||data.length<16||data.toString('ascii',0,4)!=='RIFF'||data.toString('ascii',8,12)!=='WEBP')throw new Error('Falta una foto o no es WebP válida: '+name);files.set(name,data);}
    const base=path.join(DATA_DIR,'reference-photos'),target=path.join(base,modelKey),temp=path.join(base,modelKey+'.tmp-'+Date.now()),old=path.join(base,modelKey+'.old');fs.mkdirSync(temp,{recursive:true});
-   for(const [name,data] of files)fs.writeFileSync(path.join(temp,name),data);fs.writeFileSync(path.join(temp,'manifest.json'),JSON.stringify(manifest));
+   const existingManifestPath=path.join(target,'manifest.json');
+   if(fs.existsSync(target)){
+    let existingManifest=null;
+    if(fs.existsSync(existingManifestPath)){try{existingManifest=JSON.parse(fs.readFileSync(existingManifestPath,'utf8'));}catch(e){throw new Error('El catálogo existente no se pudo leer; se conservó sin cambios.');}}
+    if(existingManifest&&existingManifest.items&&typeof existingManifest.items==='object'&&!Array.isArray(existingManifest.items)){
+     for(const [itemKey,existingItem] of Object.entries(existingManifest.items)){
+      const incomingItem=manifest.items[itemKey];
+      if(!incomingItem){manifest.items[itemKey]=existingItem;}
+      else{
+       const combined=new Map();
+       for(const photo of [...(Array.isArray(existingItem.photos)?existingItem.photos:[]),...(Array.isArray(incomingItem.photos)?incomingItem.photos:[])])if(photo&&/^[a-f0-9]{40}\\.webp$/i.test(String(photo.file||'')))combined.set(photo.file,photo);
+       manifest.items[itemKey]={...existingItem,...incomingItem,photos:[...combined.values()]};
+      }
+      const mergedItem=manifest.items[itemKey];
+      for(const photo of Array.isArray(mergedItem.photos)?mergedItem.photos:[]){const file=String(photo&&photo.file||'');if(/^[a-f0-9]{40}\\.webp$/i.test(file)){const source=path.join(target,file);if(fs.existsSync(source)&&!fs.existsSync(path.join(temp,file)))fs.copyFileSync(source,path.join(temp,file));}}
+     }
+    }
+    for(const name of fs.readdirSync(target)){if(/^[a-f0-9]{40}\\.webp$/i.test(name)){const source=path.join(target,name),dest=path.join(temp,name);if(fs.statSync(source).isFile()&&!fs.existsSync(dest))fs.copyFileSync(source,dest);}}
+   }
+   for(const [name,data] of files)fs.writeFileSync(path.join(temp,name),data);
+   const mergedItems=Object.values(manifest.items),withPhotos=mergedItems.filter(item=>item&&Array.isArray(item.photos)&&item.photos.some(photo=>photo&&photo.file)).length;
+   manifest.referencias_confirmadas=withPhotos;manifest.referencias_pendientes=mergedItems.length-withPhotos;manifest.asociaciones_foto=withPhotos;
+   fs.writeFileSync(path.join(temp,'manifest.json'),JSON.stringify(manifest));
    fs.rmSync(old,{recursive:true,force:true});if(fs.existsSync(target))fs.renameSync(target,old);
    try{fs.renameSync(temp,target);fs.rmSync(old,{recursive:true,force:true});}catch(e){if(fs.existsSync(old)&&!fs.existsSync(target))fs.renameSync(old,target);throw e;}
    return sendJson(res,200,{ok:true,modelo:model,referencias:Object.keys(manifest.items).length,fotos:files.size,asociaciones:Number(manifest.asociaciones_foto)||0,pendientes:Number(manifest.referencias_pendientes)||0});
