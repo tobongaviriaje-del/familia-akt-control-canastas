@@ -172,14 +172,14 @@ if(p==='/api/work-lots'&&['GET','POST','PUT'].includes(req.method)){
    if(body.action!=='next')return sendJson(res,400,{ok:false,error:'Acción de lote no válida.'});
    const nextNo=row.number+1;let selected=rows.find(x=>x.model===model&&x.number===nextNo);
    if(!selected){const cloned=(row.tasks||[]).map(t=>({...t,entregado:0,estado:'Pendiente',entregas:[],entrega:null,canastasEntregadas:0,confirmacionesCanastas:[]}));const now=new Date().toISOString();selected={id:require('crypto').randomUUID(),model,number:nextNo,tasks:cloned,createdBy:actor,createdAt:now,updatedAt:now};rows.push(selected);writeWorkLots(rows);}
-   return sendJson(res,200,workLotResponse(selected,user,rows));
+   return sendJson(res,200,workLotResponse(selected,user,actor,rows));
   }
   if(action==='PUT'){
    if(!body.lotId||!body.version)return sendJson(res,400,{ok:false,error:'Falta identificar la versión del lote.'});
    const selected=rows.find(x=>x.model===model&&x.id===String(body.lotId));if(!selected)return sendJson(res,404,{ok:false,error:'El lote ya no existe. Actualiza la pantalla.'});
    if(selected.updatedAt!==body.version)return sendJson(res,409,{ok:false,error:'Otro usuario guardó cambios en este lote. Actualiza antes de continuar.'});
    let merged;try{merged=validateWorkLot(selected.tasks||[],body.tasks,user,actor);}catch(e){return sendJson(res,403,{ok:false,error:e.message||'No se pudo validar el cambio.'});}
-   selected.tasks=merged;selected.updatedAt=new Date().toISOString()+'#'+require('crypto').randomUUID();writeWorkLots(rows);return sendJson(res,200,workLotResponse(selected,user,rows));
+   selected.tasks=merged;selected.updatedAt=new Date().toISOString()+'#'+require('crypto').randomUUID();writeWorkLots(rows);return sendJson(res,200,workLotResponse(selected,user,actor,rows));
   }
  };
  if(req.method==='GET'){const model=workLotModel(url.searchParams.get('model')),actor=session.username==='patinadores'?String(url.searchParams.get('username')||''):session.username;if(!model)return sendJson(res,400,{ok:false,error:'Selecciona un modelo válido.'});return finish(actor,model,'GET');}
