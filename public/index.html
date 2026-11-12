@@ -1429,7 +1429,7 @@ async function confirmarCanastasEstandar(id){
  try{
   const isSkater=current&&current.role==='Patinador';if(isSkater&&!patinadorWorkLot)throw new Error('No hay un lote de trabajo cargado.');const response=await fetch(isSkater?'/api/work-lots':'/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:isSkater?JSON.stringify({username:current.username,model:patinadorWorkLot.model,lotId:patinadorWorkLot.id,version:patinadorWorkLot.updatedAt,tasks:cloudTasks}):JSON.stringify({users,tasks:cloudTasks,lpnCatalog})});
   if(!response.ok)throw new Error('No se pudo guardar');
-  const state=await response.json();users=state.users||users;cloudTasks=Array.isArray(state.tasks)?state.tasks:tasks;lpnCatalog=Array.isArray(state.lpnCatalog)?state.lpnCatalog:lpnCatalog;
+  const state=await response.json();if(isSkater&&state.lot)patinadorWorkLot={...patinadorWorkLot,...state.lot};users=state.users||users;cloudTasks=Array.isArray(state.tasks)?state.tasks:tasks;lpnCatalog=Array.isArray(state.lpnCatalog)?state.lpnCatalog:lpnCatalog;
   localStorage.setItem('cc_users',JSON.stringify(users));localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));
   render();
  }catch(err){
