@@ -33,10 +33,12 @@ function validateAndMerge(saved, incoming, user) {
     byId.delete(key);
     if(!assigned.has(String(old.puesto||""))) fail("No tienes permiso para modificar este puesto.",403);
     if(stableStringify(without(old,[...DELIVERY_FIELDS,...CAPACITY_FIELDS]))!==stableStringify(without(candidate,[...DELIVERY_FIELDS,...CAPACITY_FIELDS]))) fail("No puedes modificar referencias ni cantidades originales.",403);
-    const capacityChanged=stableStringify(without(old,["cantidadCanasta","cantidadCanastaRaw","numCanastas","numCanastasRaw"]))!==stableStringify(without(candidate,["cantidadCanasta","cantidadCanastaRaw","numCanastas","numCanastasRaw"])) && stableStringify(without(old,DELIVERY_FIELDS))!==stableStringify(without(candidate,DELIVERY_FIELDS));
     const oldCapacity=number(old.cantidadCanasta), newCapacity=number(candidate.cantidadCanasta);
     const oldDelivered=number(old.entregado), newDelivered=number(candidate.entregado), target=number(old.lote)||number(old.cantidad);
-    if(newCapacity!==oldCapacity) {
+    const capacityFields=["cantidadCanasta","cantidadCanastaRaw","numCanastas","numCanastasRaw"];
+    const capacityChanged=stableStringify(without(old,DELIVERY_FIELDS))!==stableStringify(without(candidate,DELIVERY_FIELDS)) &&
+      stableStringify(capacityFields.map(k=>old[k]??null))!==stableStringify(capacityFields.map(k=>candidate[k]??null));
+    if(capacityChanged) {
       if(!Number.isInteger(newCapacity)||newCapacity<1 || String(candidate.cantidadCanastaRaw??"")!==String(newCapacity)) fail("La capacidad debe ser un entero válido.");
       const expectedBaskets=target>0?Math.ceil(target/newCapacity):number(old.numCanastas);
       if(number(candidate.numCanastas)!==expectedBaskets || String(candidate.numCanastasRaw??"")!==String(expectedBaskets)) fail("El cálculo de canastas no coincide con el lote.");
