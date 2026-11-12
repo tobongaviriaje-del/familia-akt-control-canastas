@@ -28,19 +28,20 @@ function fieldsOnly(value, fields) {
 }
 
 function mergePatinadorTasks(saved, incoming, user) {
-  if (!Array.isArray(incoming) || incoming.length !== saved.length) {
-    const e = new Error("No se permite crear ni borrar tareas desde una sesión de entrega.");
-    e.status = 403;
+  if (!Array.isArray(incoming)) {
+    const e = new Error("La lista de tareas no es válida.");
+    e.status = 400;
     throw e;
   }
   const byId = new Map(incoming.map(task => [String(task && task.id), task]));
-  if (byId.size !== saved.length) {
-    const e = new Error("La lista de tareas no coincide con el estado guardado.");
+  if (byId.size !== incoming.length) {
+    const e = new Error("La lista contiene identificadores de tareas repetidos.");
     e.status = 409;
     throw e;
   }
 
   const puestos = new Set(Array.isArray(user.puestos) ? user.puestos.map(String) : []);
+  const seen = new Set();
   const merged = [];
   const protectedFields = [...DELIVERY_FIELDS, ...CAPACITY_FIELDS];
 
@@ -48,8 +49,14 @@ function mergePatinadorTasks(saved, incoming, user) {
     const key = String(previous && previous.id);
     const candidate = byId.get(key);
     if (!candidate) {
-      const e = new Error("Falta una tarea del estado guardado. No se guardó ningún cambio.");
-      e.status = 409;
+      // El patinador solo envía sus puestos asignados; el resto queda intacto.
+      merged.push(previous);
+      continue;
+    }
+    seen.add(key);
+    if (!puestos.has(String(previous.puesto || ""))) {
+      const e = new Error("Solo puedes enviar tareas de los puestos asignados a tu usuario.");
+      e.status = 403;
       throw e;
     }
 
@@ -197,6 +204,11 @@ function mergePatinadorTasks(saved, incoming, user) {
     merged.push(updated);
   }
 
+  if (seen.size !== byId.size) {
+    const e = new Error("La lista contiene tareas que no existen en el estado guardado.");
+    e.status = 409;
+    throw e;
+  }
   return merged;
 }
 
@@ -204,7 +216,7 @@ export async function onRequest({ request, env }) {
   try {
     const auth = await authenticate(request, env);
     if (request.method === "GET") {
-      return json(stateForClient(auth.state, auth.user.role));
+      return json(stateForClient(auth.state, auth.user.role, auth.user));
     }
 
     if (request.method !== "PUT") {
@@ -251,8 +263,7 @@ export async function onRequest({ request, env }) {
     }
 
     await writeState(env, next);
-    const stored = await readState(env);
-    return json(stateForClient(stored, role));
+    return json(stateForClient(next, role, auth.user));
   } catch (error) {
     return errorResponse(error, "No se pudo leer o guardar el estado. No vuelvas a intentar hasta verificar la conexión.");
   }
