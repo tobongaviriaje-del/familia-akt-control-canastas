@@ -672,7 +672,7 @@ async function cambiarLoteRemoto(payload){
  }catch(e){alert(e.message||'No se pudo cambiar el lote.');}
  finally{if(nav)nav.style.opacity='1';}
 }
-async async function cambiarModeloPatinador(modelo){
+async function cambiarModeloPatinador(modelo){
  try{localStorage.setItem('cc_modelo_moto',modelo);}catch(e){}
  const h=$('standardChecklist')?.querySelector('h2');if(h)h.textContent='✅ Mi estándar '+modelo;
  if(current&&current.role==='Patinador'){try{await loadPatinadorWorkLot(modelo);}catch(e){patinadorWorkLot=null;cloudTasks=[];alert(e.message);}}
