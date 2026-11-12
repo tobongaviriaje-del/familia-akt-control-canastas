@@ -273,8 +273,7 @@ const snapshot=state.tasks.map(t=>({...t,entregas:Array.isArray(t.entregas)?t.en
 const archived=archiveTasks(snapshot,{usuario:String(incoming.usuario||'Admin'),motivo:'Cierre de jornada e inicio de nueva operación',regla:'Se guarda una copia íntegra de la jornada cerrada en el historial. Todas las tareas continúan activas para la nueva operación, con entregas de unidades y canastas reiniciadas a cero para todos los patinadores.'});
 state.tasks=state.tasks.map(t=>({...t,entregado:0,entregas:[],entrega:null,canastasEntregadas:0,confirmacionesCanastas:[],correcciones:[],estado:'Pendiente'}));
 writeState(state);
-res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});
-res.end(JSON.stringify({ok:true,archived:archived.file,count:archived.count,completedRemoved:snapshot.filter(isComplete).length,remainingCount:state.tasks.length,tasks:state.tasks}));
+return sendJson(res,200,{ok:true,archived:archived.file,count:archived.count,remainingCount:state.tasks.length,tasks:state.tasks});
 }catch(e){console.error('Error cerrando jornada:',e);res.writeHead(500,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify({ok:false,error:'No se pudo cerrar la jornada'}));}});return;
 }
 if(p==='/api/jornada/continuar-pendientes'&&req.method==='POST'){
