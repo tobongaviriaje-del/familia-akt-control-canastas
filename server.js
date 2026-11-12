@@ -87,7 +87,7 @@ function readZipEntries(buffer){
 function safePhotoModel(value){return value==='xrs180'?'XRS-180':value==='cr4125'?'CR4 125':value==='cr4150'?'CR4-150':value==='nkd'?'NKD':value==='chr'?'CHR':null;}
 
 const WORK_LOTS_FILE=path.join(DATA_DIR,'work-lots.json');
-const WORK_LOT_DELIVERY_FIELDS=['entregado','estado','entregas','entrega','canastasEntregadas','confirmacionesCanastas'];
+const WORK_LOT_DELIVERY_FIELDS=['entregado','estado','entregas','entrega','canastasEntregadas','confirmacionesCanastas','correcciones'];
 const WORK_LOT_CAPACITY_FIELDS=['cantidadCanasta','cantidadCanastaRaw','numCanastas','numCanastasRaw'];
 function stableWorkValue(v){if(Array.isArray(v))return v.map(stableWorkValue);if(v&&typeof v==='object')return Object.keys(v).sort().reduce((o,k)=>(o[k]=stableWorkValue(v[k]),o),{});return v;}
 function stableWorkString(v){return JSON.stringify(stableWorkValue(v));}
@@ -102,20 +102,61 @@ function workLotUserCanTask(user,username,task){const positions=new Set(Array.is
 function workLotResponse(row,user,username,rows){return {ok:true,lot:{id:row.id,model:row.model,number:row.number,createdAt:row.createdAt,updatedAt:row.updatedAt},lots:rows.filter(x=>x.model===row.model).sort((a,b)=>a.number-b.number).map(x=>({id:x.id,number:x.number})),tasks:(row.tasks||[]).filter(t=>workLotUserCanTask(user,username,t))};}
 function validateWorkLot(saved,incoming,user,username){
  if(!Array.isArray(incoming))throw new Error('La lista de referencias no es válida.');
- const byId=new Map(incoming.map(x=>[String(x&&x.id),x]));if(byId.size!==incoming.length)throw new Error('Hay referencias repetidas.');
+ const byId=new Map(incoming.map(x=>[String(x&&x.id),x]));
+ if(byId.size!==incoming.length)throw new Error('Hay referencias repetidas.');
  const result=[];
- for(const old of saved){const key=String(old.id),candidate=byId.get(key);if(!candidate){result.push(old);continue;}byId.delete(key);
+ for(const old of saved){
+  const key=String(old.id),candidate=byId.get(key);
+  if(!candidate){result.push(old);continue;}
+  byId.delete(key);
   if(!workLotUserCanTask(user,username,old))throw new Error('No tienes permiso para modificar este puesto.');
   if(stableWorkString(withoutWork(old,[...WORK_LOT_DELIVERY_FIELDS,...WORK_LOT_CAPACITY_FIELDS]))!==stableWorkString(withoutWork(candidate,[...WORK_LOT_DELIVERY_FIELDS,...WORK_LOT_CAPACITY_FIELDS])))throw new Error('No puedes modificar las referencias ni sus cantidades originales.');
-  const target=workLotTarget(old),oldDelivered=workLotNumber(old.entregado),newDelivered=workLotNumber(candidate.entregado),oldEvents=Array.isArray(old.entregas)?old.entregas:[],newEvents=Array.isArray(candidate.entregas)?candidate.entregas:[],oldConf=Array.isArray(old.confirmacionesCanastas)?old.confirmacionesCanastas:[],newConf=Array.isArray(candidate.confirmacionesCanastas)?candidate.confirmacionesCanastas:[];
+  const target=workLotTarget(old),oldDelivered=workLotNumber(old.entregado),newDelivered=workLotNumber(candidate.entregado);
+  const oldEvents=Array.isArray(old.entregas)?old.entregas:[],newEvents=Array.isArray(candidate.entregas)?candidate.entregas:[];
+  const oldConf=Array.isArray(old.confirmacionesCanastas)?old.confirmacionesCanastas:[],newConf=Array.isArray(candidate.confirmacionesCanastas)?candidate.confirmacionesCanastas:[];
+  const oldCorrections=Array.isArray(old.correcciones)?old.correcciones:[],newCorrections=Array.isArray(candidate.correcciones)?candidate.correcciones:[];
   const capacityChanged=WORK_LOT_CAPACITY_FIELDS.some(k=>stableWorkString(old[k]??null)!==stableWorkString(candidate[k]??null));
-  if(newDelivered<oldDelivered||newDelivered>target)throw new Error('La entrega no puede disminuir ni superar el lote.');
-  if(capacityChanged){if(newDelivered!==oldDelivered||stableWorkString(newEvents)!==stableWorkString(oldEvents)||stableWorkString(newConf)!==stableWorkString(oldConf))throw new Error('Guarda la capacidad por separado de las entregas.');const cap=workLotNumber(candidate.cantidadCanasta),baskets=workLotNumber(candidate.numCanastas);if(!Number.isInteger(cap)||cap<1||String(candidate.cantidadCanastaRaw??'')!==String(cap))throw new Error('La capacidad debe ser un entero válido.');const expected=target>0?Math.ceil(target/cap):baskets;if(baskets!==expected||String(candidate.numCanastasRaw??'')!==String(expected))throw new Error('El cálculo de canastas no coincide con el lote.');}
-  if(newDelivered>oldDelivered){if(capacityChanged)throw new Error('Guarda la capacidad por separado de las entregas.');if(newEvents.length!==oldEvents.length+1||!oldEvents.every((e,i)=>stableWorkString(e)===stableWorkString(newEvents[i])))throw new Error('El movimiento de entrega no coincide.');const movement=newEvents[newEvents.length-1],physical=workLotNumber(movement&&movement.canastasFisicas);if(physical!==0&&(!Number.isInteger(physical)||physical<1))throw new Error('La cantidad de canastas físicas no es válida.');if(workLotNumber(movement&&movement.cantidad)!==newDelivered-oldDelivered)throw new Error('La cantidad del movimiento no coincide.');if(candidate.estado!==(newDelivered>=target?'Entregada':'Parcial')||stableWorkString(candidate.entrega||null)!==stableWorkString(movement))throw new Error('El estado de entrega no coincide.');if(newConf.length!==oldConf.length+(physical>0?1:0)||!oldConf.every((e,i)=>stableWorkString(e)===stableWorkString(newConf[i])))throw new Error('La confirmación de canastas no coincide.');if(physical>0){const last=newConf[newConf.length-1];if(workLotNumber(last&&last.cantidad)!==physical||workLotNumber(last&&last.unidades)!==newDelivered-oldDelivered||workLotNumber(candidate.canastasEntregadas)!==workLotNumber(old.canastasEntregadas)+physical)throw new Error('Las canastas físicas no coinciden con las unidades.');}else if(stableWorkString(newConf)!==stableWorkString(oldConf)||workLotNumber(candidate.canastasEntregadas)!==workLotNumber(old.canastasEntregadas))throw new Error('No se permiten cambios en las canastas físicas.');
-  }else{if(stableWorkString(newEvents)!==stableWorkString(oldEvents)||candidate.estado!==old.estado||stableWorkString(candidate.entrega||null)!==stableWorkString(old.entrega||null))throw new Error('No se permiten cambios en el historial de entregas.');if(!capacityChanged){const added=newConf.length===oldConf.length+1&&oldConf.every((e,i)=>stableWorkString(e)===stableWorkString(newConf[i]));if(added){const last=newConf[newConf.length-1],n=workLotNumber(last&&last.cantidad);if(last.soloConteo!==true||n<1||!Number.isInteger(n)||workLotNumber(last.unidades)!==0||workLotNumber(candidate.canastasEntregadas)!==workLotNumber(old.canastasEntregadas)+n)throw new Error('El conteo de canastas no es válido.');}else if(stableWorkString(newConf)!==stableWorkString(oldConf)||workLotNumber(candidate.canastasEntregadas)!==workLotNumber(old.canastasEntregadas))throw new Error('No se permiten cambios en las canastas físicas.');}}
-  const merged={...old};for(const k of WORK_LOT_CAPACITY_FIELDS){if(Object.prototype.hasOwnProperty.call(candidate,k))merged[k]=candidate[k];else delete merged[k];}for(const k of WORK_LOT_DELIVERY_FIELDS){if(Object.prototype.hasOwnProperty.call(candidate,k))merged[k]=candidate[k];else delete merged[k];}result.push(merged);
+  if(newDelivered>target)throw new Error('La entrega no puede superar el lote.');
+  if(capacityChanged){
+   if(newDelivered!==oldDelivered||stableWorkString(newEvents)!==stableWorkString(oldEvents)||stableWorkString(newConf)!==stableWorkString(oldConf)||stableWorkString(newCorrections)!==stableWorkString(oldCorrections))throw new Error('Guarda la capacidad por separado de las entregas.');
+   const cap=workLotNumber(candidate.cantidadCanasta),baskets=workLotNumber(candidate.numCanastas);
+   if(!Number.isInteger(cap)||cap<1||String(candidate.cantidadCanastaRaw??'')!==String(cap))throw new Error('La capacidad debe ser un entero válido.');
+   const expected=target>0?Math.ceil(target/cap):baskets;
+   if(baskets!==expected||String(candidate.numCanastasRaw??'')!==String(expected))throw new Error('El cálculo de canastas no coincide con el lote.');
+  }
+  if(newDelivered<oldDelivered){
+   const correction=newCorrections[newCorrections.length-1],delta=oldDelivered-newDelivered;
+   if(capacityChanged||stableWorkString(newEvents)!==stableWorkString(oldEvents)||stableWorkString(newConf)!==stableWorkString(oldConf)||newCorrections.length!==oldCorrections.length+1||!oldCorrections.every((e,i)=>stableWorkString(e)===stableWorkString(newCorrections[i])))throw new Error('La corrección no coincide con el historial.');
+   const who=workLotNorm(correction&&correction.usuario),identities=[user.name,username].map(workLotNorm);
+   if(workLotNumber(correction&&correction.unidades)!==delta||workLotNumber(correction&&correction.entregadoAntes)!==oldDelivered||workLotNumber(correction&&correction.entregadoDespues)!==newDelivered||!String(correction&&correction.motivo||'').trim()||!identities.includes(who))throw new Error('Los datos de la corrección no son válidos.');
+   const expected=newDelivered>=target&&target>0?'Entregada':newDelivered>0?'Parcial':'Pendiente';
+   if(candidate.estado!==expected||stableWorkString(candidate.entrega||null)!==stableWorkString(old.entrega||null))throw new Error('El estado de la corrección no coincide.');
+  }else if(newDelivered>oldDelivered){
+   if(capacityChanged||newCorrections.length!==oldCorrections.length||!oldCorrections.every((e,i)=>stableWorkString(e)===stableWorkString(newCorrections[i])))throw new Error('No se permiten correcciones junto con una entrega nueva.');
+   if(newEvents.length!==oldEvents.length+1||!oldEvents.every((e,i)=>stableWorkString(e)===stableWorkString(newEvents[i])))throw new Error('El movimiento de entrega no coincide.');
+   const movement=newEvents[newEvents.length-1],physical=workLotNumber(movement&&movement.canastasFisicas);
+   if(physical!==0&&(!Number.isInteger(physical)||physical<1))throw new Error('La cantidad de canastas físicas no es válida.');
+   if(workLotNumber(movement&&movement.cantidad)!==newDelivered-oldDelivered)throw new Error('La cantidad del movimiento no coincide.');
+   const expected=newDelivered>=target?'Entregada':'Parcial';
+   if(candidate.estado!==expected||stableWorkString(candidate.entrega||null)!==stableWorkString(movement))throw new Error('El estado de entrega no coincide.');
+   if(newConf.length!==oldConf.length+(physical>0?1:0)||!oldConf.every((e,i)=>stableWorkString(e)===stableWorkString(newConf[i])))throw new Error('La confirmación de canastas no coincide.');
+   if(physical>0){const last=newConf[newConf.length-1];if(workLotNumber(last&&last.cantidad)!==physical||workLotNumber(last&&last.unidades)!==newDelivered-oldDelivered||workLotNumber(candidate.canastasEntregadas)!==workLotNumber(old.canastasEntregadas)+physical)throw new Error('Las canastas físicas no coinciden con las unidades.');}
+   else if(stableWorkString(newConf)!==stableWorkString(oldConf)||workLotNumber(candidate.canastasEntregadas)!==workLotNumber(old.canastasEntregadas))throw new Error('No se permiten cambios en las canastas físicas.');
+  }else{
+   if(stableWorkString(newEvents)!==stableWorkString(oldEvents)||stableWorkString(newCorrections)!==stableWorkString(oldCorrections)||candidate.estado!==old.estado||stableWorkString(candidate.entrega||null)!==stableWorkString(old.entrega||null))throw new Error('No se permiten cambios en el historial de entregas.');
+   if(!capacityChanged){
+    const added=newConf.length===oldConf.length+1&&oldConf.every((e,i)=>stableWorkString(e)===stableWorkString(newConf[i]));
+    if(added){const last=newConf[newConf.length-1],n=workLotNumber(last&&last.cantidad);if(last.soloConteo!==true||n<1||!Number.isInteger(n)||workLotNumber(last.unidades)!==0||workLotNumber(candidate.canastasEntregadas)!==workLotNumber(old.canastasEntregadas)+n)throw new Error('El conteo de canastas no es válido.');}
+    else if(stableWorkString(newConf)!==stableWorkString(oldConf)||workLotNumber(candidate.canastasEntregadas)!==workLotNumber(old.canastasEntregadas))throw new Error('No se permiten cambios en las canastas físicas.');
+   }
+  }
+  const merged={...old};
+  for(const k of WORK_LOT_CAPACITY_FIELDS){if(Object.prototype.hasOwnProperty.call(candidate,k))merged[k]=candidate[k];else delete merged[k];}
+  for(const k of WORK_LOT_DELIVERY_FIELDS){if(Object.prototype.hasOwnProperty.call(candidate,k))merged[k]=candidate[k];else delete merged[k];}
+  result.push(merged);
  }
- if(byId.size)throw new Error('La lista contiene referencias que no pertenecen a este lote.');return result;
+ if(byId.size)throw new Error('La lista contiene referencias que no pertenecen a este lote.');
+ return result;
 }
 function withoutWork(value,fields){const copy={...(value||{})};for(const f of fields)delete copy[f];return copy;}
 function ensureWorkLot(rows,state,model,username){let row=rows.filter(x=>x.model===model).sort((a,b)=>b.number-a.number)[0];if(row)return row;const tasks=(Array.isArray(state.tasks)?state.tasks:[]).filter(t=>t&&t.standardNKD&&workLotModel(t.standardMoto||(t.standardNKD?'NKD':''))===model);if(!tasks.length)throw new Error('No hay referencias originales cargadas para '+model+'.');const now=new Date().toISOString();row={id:require('crypto').randomUUID(),model,number:1,tasks:JSON.parse(JSON.stringify(tasks)),createdBy:username,createdAt:now,updatedAt:now};rows.push(row);writeWorkLots(rows);return row;}
