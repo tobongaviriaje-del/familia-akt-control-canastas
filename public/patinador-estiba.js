@@ -8,7 +8,7 @@
     const code=lpn.value.trim(),station=puesto.value.trim();
     let highlight=box.querySelector('.estiba-destacada');
     if(!code){if(highlight)highlight.remove();return;}
-    const tasks=Array.isArray(window.cloudTasks)?window.cloudTasks:[];
+    const tasks=Array.isArray(cloudTasks)?cloudTasks:[];
     const task=tasks.find(x=>String(x.lpn||'')===code&&String(x.puesto||'')===station&&x.estado!=='Entregada');
     if(!task){if(highlight)highlight.remove();return;}
     const label='📦 ESTIBA: '+(task.estiba||'Sin número de estiba');
