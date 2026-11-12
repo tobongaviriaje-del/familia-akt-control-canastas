@@ -7,7 +7,7 @@ const CAPACITY_FIELDS = ["cantidadCanasta","cantidadCanastaRaw","numCanastas","n
 
 function fail(message, status=400) { const e=new Error(message); e.status=status; throw e; }
 function number(v) { const n=Number(v); return Number.isFinite(n)?n:0; }
-function targetOf(task) { const lot=number(task.lote)||number(task.lotePiezas); if(lot>0)return lot; const baskets=number(task.cantidadCanasta), count=number(task.numCanastas); if(baskets>0&&count>0)return baskets*count; return number(task.cantidadUnidad)||number(task.cantidad)||baskets; }
+function targetOf(task) { const lot=number(task.lote); if(lot>0)return lot; const baskets=number(task.cantidadCanasta), count=number(task.numCanastas); if(baskets>0&&count>0)return baskets*count; return number(task.cantidadUnidad)||number(task.cantidad)||baskets; }
 function modelOf(task) { return String(task.standardMoto || (task.standardNKD ? "NKD" : "")).trim().toUpperCase().replace("VOGUE 180","VOGE 180"); }
 function without(value, fields) { const copy={...(value||{})}; for(const f of fields) delete copy[f]; return copy; }
 function cleanNewLot(tasks) {
@@ -49,6 +49,7 @@ function validateAndMerge(saved, incoming, user) {
     if(newDelivered!==oldDelivered) {
       if(newEvents.length!==oldEvents.length+1 || !oldEvents.every((e,i)=>stableStringify(e)===stableStringify(newEvents[i]))) fail("El movimiento de entrega no coincide.",409);
       const movement=newEvents[newEvents.length-1], physical=number(movement&&movement.canastasFisicas);
+      if(physical!==0&&(!Number.isInteger(physical)||physical<1)) fail("La cantidad de canastas físicas no es válida.");
       if(number(movement&&movement.cantidad)!==newDelivered-oldDelivered) fail("La cantidad del movimiento no coincide.");
       const expected=newDelivered>=target?"Entregada":"Parcial";
       if(candidate.estado!==expected || stableStringify(candidate.entrega||null)!==stableStringify(movement)) fail("El estado de entrega no coincide.");
@@ -127,7 +128,7 @@ export async function onRequest({request,env}) {
       if(!row) fail("El lote de trabajo ya no existe. Actualiza la pantalla.",404);
       const saved=JSON.parse(row.tasks_json||"[]");
       const merged=validateAndMerge(saved,body.tasks,auth.user);
-      const now=new Date().toISOString();
+      const now=new Date().toISOString()+"#"+crypto.randomUUID();
       const updated=await env.DB.prepare("UPDATE app_work_lots SET tasks_json=?,updated_at=? WHERE id=? AND updated_at=?")
         .bind(JSON.stringify(merged),now,row.id,row.updated_at).run();
       if(Number(updated.meta&&updated.meta.changes||0)!==1) fail("Otro patinador guardó cambios al mismo tiempo. Actualiza el lote antes de continuar.",409);
