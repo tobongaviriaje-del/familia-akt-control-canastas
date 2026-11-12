@@ -35,17 +35,27 @@ function validateAndMerge(saved, incoming, user) {
     if(stableStringify(without(old,[...DELIVERY_FIELDS,...CAPACITY_FIELDS]))!==stableStringify(without(candidate,[...DELIVERY_FIELDS,...CAPACITY_FIELDS]))) fail("No puedes modificar referencias ni cantidades originales.",403);
     const capacityChanged=stableStringify(without(old,["cantidadCanasta","cantidadCanastaRaw","numCanastas","numCanastasRaw"]))!==stableStringify(without(candidate,["cantidadCanasta","cantidadCanastaRaw","numCanastas","numCanastasRaw"])) && stableStringify(without(old,DELIVERY_FIELDS))!==stableStringify(without(candidate,DELIVERY_FIELDS));
     const oldCapacity=number(old.cantidadCanasta), newCapacity=number(candidate.cantidadCanasta);
-    if(newCapacity!==oldCapacity && (!Number.isInteger(newCapacity)||newCapacity<1)) fail("La capacidad debe ser un entero mayor que cero.");
+    if(newCapacity!==oldCapacity) {
+      if(!Number.isInteger(newCapacity)||newCapacity<1 || String(candidate.cantidadCanastaRaw??"")!==String(newCapacity)) fail("La capacidad debe ser un entero válido.");
+      const expectedBaskets=target>0?Math.ceil(target/newCapacity):number(old.numCanastas);
+      if(number(candidate.numCanastas)!==expectedBaskets || String(candidate.numCanastasRaw??"")!==String(expectedBaskets)) fail("El cálculo de canastas no coincide con el lote.");
+    }
     const oldDelivered=number(old.entregado), newDelivered=number(candidate.entregado), target=number(old.lote)||number(old.cantidad);
     if(newDelivered<oldDelivered||newDelivered>target) fail("La entrega no puede disminuir ni superar el lote.",409);
     const oldEvents=Array.isArray(old.entregas)?old.entregas:[], newEvents=Array.isArray(candidate.entregas)?candidate.entregas:[];
+    const oldConf=Array.isArray(old.confirmacionesCanastas)?old.confirmacionesCanastas:[], newConf=Array.isArray(candidate.confirmacionesCanastas)?candidate.confirmacionesCanastas:[];
     if(newDelivered!==oldDelivered) {
       if(newEvents.length!==oldEvents.length+1 || !oldEvents.every((e,i)=>stableStringify(e)===stableStringify(newEvents[i]))) fail("El movimiento de entrega no coincide.",409);
-      const movement=newEvents[newEvents.length-1];
+      const movement=newEvents[newEvents.length-1], physical=number(movement&&movement.canastasFisicas);
       if(number(movement&&movement.cantidad)!==newDelivered-oldDelivered) fail("La cantidad del movimiento no coincide.");
       const expected=newDelivered>=target?"Entregada":"Parcial";
       if(candidate.estado!==expected || stableStringify(candidate.entrega||null)!==stableStringify(movement)) fail("El estado de entrega no coincide.");
-    } else if(stableStringify(newEvents)!==stableStringify(oldEvents) || candidate.estado!==old.estado || stableStringify(candidate.entrega||null)!==stableStringify(old.entrega||null)) fail("No se permiten cambios en el historial de entregas.",403);
+      if(newConf.length!==oldConf.length+(physical>0?1:0) || !oldConf.every((e,i)=>stableStringify(e)===stableStringify(newConf[i]))) fail("La confirmación de canastas no coincide.",409);
+      if(physical>0) {
+        const last=newConf[newConf.length-1];
+        if(number(last&&last.cantidad)!==physical || number(last&&last.unidades)!==newDelivered-oldDelivered || number(candidate.canastasEntregadas)!==number(old.canastasEntregadas)+physical) fail("Las canastas físicas no coinciden con las unidades.");
+      } else if(stableStringify(newConf)!==stableStringify(oldConf) || number(candidate.canastasEntregadas)!==number(old.canastasEntregadas)) fail("No se permiten cambios en las canastas físicas.",403);
+    } else if(stableStringify(newEvents)!==stableStringify(oldEvents) || stableStringify(newConf)!==stableStringify(oldConf) || number(candidate.canastasEntregadas)!==number(old.canastasEntregadas) || candidate.estado!==old.estado || stableStringify(candidate.entrega||null)!==stableStringify(old.entrega||null)) fail("No se permiten cambios en el historial de entregas.",403);
     const merged={...old};
     for(const f of CAPACITY_FIELDS) if(Object.prototype.hasOwnProperty.call(candidate,f)) merged[f]=candidate[f]; else delete merged[f];
     for(const f of DELIVERY_FIELDS) if(Object.prototype.hasOwnProperty.call(candidate,f)) merged[f]=candidate[f]; else delete merged[f];
