@@ -63,12 +63,10 @@ async function cloudLoad(){
 let cloudSaveQueue=Promise.resolve(true);
 let cloudSaveInFlightSnapshot=null;
 let cloudSaveInFlightPromise=null;
-let cloudLastSavedSnapshot=null;
 function cloudSave(){
   const snapshot=JSON.stringify({users,tasks:cloudTasks,lpnCatalog});
   // saveTasks/saveUsers y sus llamadores pueden solicitar el mismo PUT.
-  // Reutiliza el guardado en curso o evita repetir el último guardado exitoso.
-  if(snapshot===cloudLastSavedSnapshot)return Promise.resolve(true);
+  // Reutiliza un PUT idéntico que ya está en curso o en cola.
   if(snapshot===cloudSaveInFlightSnapshot&&cloudSaveInFlightPromise)return cloudSaveInFlightPromise;
 
   const savePromise=cloudSaveQueue.catch(()=>false).then(async()=>{
@@ -80,7 +78,6 @@ function cloudSave(){
       });
       if(!r.ok)throw new Error('El servidor rechazó el guardado');
       cloudReady=true;
-      cloudLastSavedSnapshot=snapshot;
       return true;
     }catch(e){
       cloudReady=false;
