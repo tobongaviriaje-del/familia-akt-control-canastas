@@ -3,6 +3,7 @@ import { authenticate } from "../_lib/auth.js";
 
 const MODELS = new Set(["NKD","CR4 150","CR4 125","VOGI 180","VOGE 180","CH"]);
 const DELIVERY_FIELDS = ["entregado","estado","entregas","entrega","canastasEntregadas","confirmacionesCanastas"];
+const CAPACITY_FIELDS = ["cantidadCanasta","cantidadCanastaRaw","numCanastas","numCanastasRaw"];
 
 function fail(message, status=400) { const e=new Error(message); e.status=status; throw e; }
 function number(v) { const n=Number(v); return Number.isFinite(n)?n:0; }
