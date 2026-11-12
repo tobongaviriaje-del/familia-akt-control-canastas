@@ -71,23 +71,29 @@
     document.getElementById('eanScannerBox')?.remove();
   }
 
-  async function guardarEntregaDirecta(id,qty,obs){
+  async function guardarEntregaDirecta(id,qty,obs,canastasFisicas=0){
     const t=cloudTasks;
     const x=t.find(a=>String(a.id)===String(id));
     if(!x)throw new Error('La tarea ya no está disponible.');
     const objetivo=x.standardNKD&&typeof unidadesObjetivoEstandar==='function'?unidadesObjetivoEstandar(x):Number(x.cantidad||0);
     const restante=Math.max(0,objetivo-(Number(x.entregado)||0));
     if(!Number.isInteger(qty)||qty<1||qty>restante)throw new Error('La cantidad supera lo pendiente: quedan '+restante+' unidades en esta referencia.');
-    const anterior={entregado:x.entregado||0,estado:x.estado,entregas:Array.isArray(x.entregas)?[...x.entregas]:[],entrega:x.entrega,canastasEntregadas:x.canastasEntregadas};
+    const isSkater=current?.role==='Patinador';
+    if(!Number.isInteger(canastasFisicas)||canastasFisicas<0)throw new Error('La cantidad de canastas físicas no es válida.');
+    const anterior={entregado:x.entregado||0,estado:x.estado,entregas:Array.isArray(x.entregas)?[...x.entregas]:[],entrega:x.entrega,canastasEntregadas:x.canastasEntregadas,confirmacionesCanastas:Array.isArray(x.confirmacionesCanastas)?[...x.confirmacionesCanastas]:[]};
     x.entregado=(Number(x.entregado)||0)+qty;
     const capacidad=typeof unidadesPorCanastaEstandar==='function'&&x.standardNKD?unidadesPorCanastaEstandar(x):0;
-    if(capacidad>0)x.canastasEntregadas=Number((x.entregado/capacidad).toFixed(4));
+    if(capacidad>0&&!isSkater&&canastasFisicas===0)x.canastasEntregadas=Number((x.entregado/capacidad).toFixed(4));
+    if(canastasFisicas>0){
+      x.canastasEntregadas=(Number(x.canastasEntregadas)||0)+canastasFisicas;
+      x.confirmacionesCanastas=Array.isArray(x.confirmacionesCanastas)?x.confirmacionesCanastas:[];
+      x.confirmacionesCanastas.push({patinador:current?.name||'Usuario',cantidad:canastasFisicas,unidades:qty,fechaHora:new Date().toLocaleString('es-CO'),turno:current?.turno||'',observaciones:'Canastas físicas registradas y descontadas del lote.'});
+    }
     x.estado=x.entregado>=objetivo?'Entregada':'Parcial';
     x.entregas=x.entregas||[];
-    x.entregas.push({patinador:current?.name||'Usuario',cantidad:qty,fechaHora:new Date().toLocaleString('es-CO'),metodo:'EAN / botón ENTREGAR',observaciones:obs||''});
+    x.entregas.push({patinador:current?.name||'Usuario',cantidad:qty,fechaHora:new Date().toLocaleString('es-CO'),metodo:canastasFisicas>0?'Entrega de canastas físicas':'EAN / botón ENTREGAR',...(canastasFisicas>0?{canastasFisicas}:{}),observaciones:obs||''});
     x.entrega=x.entregas[x.entregas.length-1];
     try{
-      const isSkater=current?.role==='Patinador';
       if(isSkater&&!patinadorWorkLot)throw new Error('No hay un lote de trabajo cargado.');
       const r=await fetch(isSkater?'/api/work-lots':'/api/state',{
         method:'PUT',headers:{'Content-Type':'application/json'},
@@ -104,7 +110,7 @@
       localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
       localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));
     }catch(e){
-      x.entregado=anterior.entregado;x.estado=anterior.estado;x.entregas=anterior.entregas;x.entrega=anterior.entrega;x.canastasEntregadas=anterior.canastasEntregadas;
+      x.entregado=anterior.entregado;x.estado=anterior.estado;x.entregas=anterior.entregas;x.entrega=anterior.entrega;x.canastasEntregadas=anterior.canastasEntregadas;x.confirmacionesCanastas=anterior.confirmacionesCanastas;
       throw e;
     }
   }
@@ -136,9 +142,9 @@
     mostrarEstiba();
   }
 
-  window.confirmarEntrega=async function(id,qty,obs){
+  window.confirmarEntrega=async function(id,qty,obs,canastasFisicas=0){
     try{
-      await guardarEntregaDirecta(id,Number(qty),obs||'');
+      await guardarEntregaDirecta(id,Number(qty),obs||'',Number(canastasFisicas)||0);
       const box=document.getElementById('foundTask');
       if(box)box.innerHTML='<p class="pill">✅ Entrega registrada correctamente.</p>';
       if(typeof render==='function')render();
