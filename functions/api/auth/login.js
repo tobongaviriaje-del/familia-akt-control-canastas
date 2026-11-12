@@ -32,7 +32,7 @@ export async function onRequestPost({ request, env }) {
         if (user.role !== "Admin") delete u.pass;
         return u;
       })(),
-      state: stateForClient(state, user.role)
+      state: stateForClient(state, user.role, user)
     });
   } catch (error) {
     return errorResponse(error, "No se pudo iniciar sesión.");
