@@ -290,13 +290,14 @@ const objetivo=t=>{
  if(!t)return 0;
  if(t.standardNKD){
   const lote=Number(String(t.lote??'').replace(',','.'))||0;
-  if(lote>0)return lote;
   const cap=Number(String(t.cantidadCanasta??'').replace(',','.'))||0;
   const canastas=Number(String(t.numCanastas??'').replace(',','.'))||0;
-  if(cap>0&&canastas>0)return cap*canastas;
   const unidad=Number(String(t.cantidadUnidad??'').replace(',','.'))||0;
   const cantidad=Number(String(t.cantidad??'').replace(',','.'))||0;
-  return unidad>0?unidad:(cap>0?cap:cantidad);
+  if(lote>1)return lote;
+  if(cantidad>1)return cantidad;
+  if(cap>0&&canastas>0)return cap*canastas;
+  return unidad>0?unidad:(lote>0?lote:(cap>0?cap:cantidad));
  }
  return Math.max(0,Number(t.cantidad)||0);
 };
@@ -339,11 +340,11 @@ try{
  const seleccionadas=(Array.isArray(state.tasks)?state.tasks:[]).filter(t=>modelOf(t)===modelo&&String(t.codigoLoteOperacion||'').trim().toUpperCase()===codigo);
  const objetivo=t=>{
   if(modelo==='NKD'||t.standardNKD){
-   const lote=Number(String(t.lote??'').replace(',','.'))||0;if(lote>0)return lote;
-   const cap=Number(String(t.cantidadCanasta??'').replace(',','.'))||0,canastas=Number(String(t.numCanastas??'').replace(',','.'))||0;
+   const lote=Number(String(t.lote??'').replace(',','.'))||0,cap=Number(String(t.cantidadCanasta??'').replace(',','.'))||0,canastas=Number(String(t.numCanastas??'').replace(',','.'))||0,unidad=Number(String(t.cantidadUnidad??'').replace(',','.'))||0,cantidad=Number(String(t.cantidad??'').replace(',','.'))||0;
+   if(lote>1)return lote;
+   if(cantidad>1)return cantidad;
    if(cap>0&&canastas>0)return cap*canastas;
-   const unidad=Number(String(t.cantidadUnidad??'').replace(',','.'))||0,cantidad=Number(String(t.cantidad??'').replace(',','.'))||0;
-   return unidad>0?unidad:(cap>0?cap:cantidad);
+   return unidad>0?unidad:(lote>0?lote:(cap>0?cap:cantidad));
   }
   return Math.max(0,Number(String(t.cantidad??'').replace(',','.'))||0);
  };
