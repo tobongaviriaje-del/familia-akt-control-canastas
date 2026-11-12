@@ -83,10 +83,19 @@ export async function writeState(env, state) {
   ).bind(json, new Date().toISOString()).run();
 }
 
-export function stateForClient(state, role) {
+export function stateForClient(state, role, user = null) {
+  const assignedPosts = new Set(
+    role === "Patinador" && Array.isArray(user && user.puestos)
+      ? user.puestos.map(String)
+      : []
+  );
+  const allTasks = Array.isArray(state.tasks) ? state.tasks : [];
+  const visibleTasks = role === "Patinador"
+    ? allTasks.filter(task => assignedPosts.has(String(task && task.puesto || "")))
+    : allTasks;
   const copy = {
     users: {},
-    tasks: Array.isArray(state.tasks) ? state.tasks : [],
+    tasks: visibleTasks,
     lpnCatalog: Array.isArray(state.lpnCatalog) ? state.lpnCatalog : []
   };
   for (const [key, value] of Object.entries(state.users || {})) {
