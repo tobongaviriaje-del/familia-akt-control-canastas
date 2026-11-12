@@ -223,7 +223,7 @@ if(p==='/api/work-lots'&&['GET','POST','PUT'].includes(req.method)){
    selected.tasks=merged;selected.updatedAt=new Date().toISOString()+'#'+require('crypto').randomUUID();writeWorkLots(rows);return sendJson(res,200,workLotResponse(selected,user,actor,rows));
   }
  };
- if(req.method==='GET'){const model=workLotModel(url.searchParams.get('model')),actor=session.username==='patinadores'?String(url.searchParams.get('username')||''):session.username;if(!model)return sendJson(res,400,{ok:false,error:'Selecciona un modelo válido.'});return finish(actor,model,'GET');}
+ if(req.method==='GET'){const model=workLotModel(url.searchParams.get('model')),actor=session.username==='patinadores'?String(url.searchParams.get('username')||''):session.username;if(!model)return sendJson(res,400,{ok:false,error:'Selecciona un modelo válido.'});try{return finish(actor,model,'GET');}catch(e){console.error('Error leyendo lote de trabajo:',e);return sendJson(res,500,{ok:false,error:'No se pudo leer el lote de trabajo.'});}}
  let raw='';req.on('data',c=>{raw+=c;if(raw.length>10000000)req.destroy();});req.on('end',()=>{try{body=JSON.parse(raw||'{}');const model=workLotModel(body.model),actor=session.username==='patinadores'?String(body.username||''):session.username;if(!model)return sendJson(res,400,{ok:false,error:'Selecciona un modelo válido.'});return finish(actor,model,req.method);}catch(e){return sendJson(res,400,{ok:false,error:'Solicitud de lote inválida.'});}});return;
 }
 if(p.startsWith('/api/')&&p!=='/api/login'&&!authorized(req))return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
