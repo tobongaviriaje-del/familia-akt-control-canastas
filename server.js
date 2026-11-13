@@ -159,7 +159,38 @@ function validateWorkLot(saved,incoming,user,username){
  return result;
 }
 function withoutWork(value,fields){const copy={...(value||{})};for(const f of fields)delete copy[f];return copy;}
-function ensureWorkLot(rows,state,model,username){let row=rows.filter(x=>x.model===model).sort((a,b)=>b.number-a.number)[0];if(row)return row;const tasks=(Array.isArray(state.tasks)?state.tasks:[]).filter(t=>t&&t.standardNKD&&workLotModel(t.standardMoto||(t.standardNKD?'NKD':''))===model);if(!tasks.length)throw new Error('No hay referencias originales cargadas para '+model+'.');const now=new Date().toISOString();row={id:require('crypto').randomUUID(),model,number:1,tasks:JSON.parse(JSON.stringify(tasks)),createdBy:username,createdAt:now,updatedAt:now};rows.push(row);writeWorkLots(rows);return row;}
+function workLotReferenceKey(task){
+ const ean=String(task&&task.ean||'').trim().toUpperCase().replace(/\\s+/g,'');
+ const position=workLotPosition(task&&task.puesto);
+ const operation=workLotNorm(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote||''));
+ return ean&&position?[ean,position,operation].join('|'):'id|'+String(task&&task.id||'');
+}
+function ensureWorkLot(rows,state,model,username){
+ let row=rows.filter(x=>x.model===model).sort((a,b)=>b.number-a.number)[0];
+ const tasks=(Array.isArray(state.tasks)?state.tasks:[]).filter(t=>t&&t.standardNKD&&workLotModel(t.standardMoto||(t.standardNKD?'NKD':''))===model);
+ if(row){
+  // Los lotes guardados son una instantánea, pero deben incorporar referencias
+  // nuevas del estándar sin reemplazar entregas, correcciones ni cantidades ya registradas.
+  if(!Array.isArray(row.tasks))row.tasks=[];
+  const known=new Set(row.tasks.map(workLotReferenceKey));
+  let added=0;
+  for(const task of tasks){
+   const key=workLotReferenceKey(task);
+   if(known.has(key))continue;
+   row.tasks.push(JSON.parse(JSON.stringify(task)));
+   known.add(key);added++;
+  }
+  if(added){
+   row.updatedAt=new Date().toISOString()+'#'+require('crypto').randomUUID();
+   writeWorkLots(rows);
+  }
+  return row;
+ }
+ if(!tasks.length)throw new Error('No hay referencias originales cargadas para '+model+'.');
+ const now=new Date().toISOString();
+ row={id:require('crypto').randomUUID(),model,number:1,tasks:JSON.parse(JSON.stringify(tasks)),createdBy:username,createdAt:now,updatedAt:now};
+ rows.push(row);writeWorkLots(rows);return row;
+}
 
 const server=http.createServer((req,res)=>{
 const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);const p=decodeURIComponent(url.pathname);
