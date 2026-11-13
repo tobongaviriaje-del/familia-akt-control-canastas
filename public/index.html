@@ -94,9 +94,15 @@ async function cloudLoad(){
 }
 let patinadorWorkLot=null;
 let cloudSaveQueue=Promise.resolve(true);
+let cloudSaveInFlightSnapshot=null;
+let cloudSaveInFlightPromise=null;
 function cloudSave(){
   const snapshot=JSON.stringify({users,tasks:cloudTasks,lpnCatalog});
-  cloudSaveQueue=cloudSaveQueue.catch(()=>false).then(async()=>{
+  // saveTasks/saveUsers y sus llamadores pueden solicitar el mismo PUT.
+  // Reutiliza un PUT idéntico que ya está en curso o en cola.
+  if(snapshot===cloudSaveInFlightSnapshot&&cloudSaveInFlightPromise)return cloudSaveInFlightPromise;
+
+  const savePromise=cloudSaveQueue.catch(()=>false).then(async()=>{
     try{
       const isSkater=current&&current.role==='Patinador';
       if(isSkater&&!patinadorWorkLot)throw new Error('No hay un lote de trabajo cargado. Vuelve a ingresar antes de guardar.');
@@ -114,7 +120,15 @@ function cloudSave(){
       return false;
     }
   });
-  return cloudSaveQueue;
+  cloudSaveInFlightSnapshot=snapshot;
+  cloudSaveInFlightPromise=savePromise;
+  cloudSaveQueue=savePromise.finally(()=>{
+    if(cloudSaveInFlightPromise===savePromise){
+      cloudSaveInFlightSnapshot=null;
+      cloudSaveInFlightPromise=null;
+    }
+  });
+  return savePromise;
 }
 function loadUsers(){return users;}
 function saveUsers(){localStorage.setItem('cc_users',JSON.stringify(users));cloudSave();}
