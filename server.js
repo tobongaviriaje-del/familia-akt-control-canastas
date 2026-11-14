@@ -268,6 +268,7 @@ if(p==='/api/admin/activate-work-lot'&&req.method==='POST'){
    const incoming=JSON.parse(raw||'{}'),batchId=String(incoming.batchId||'');
    if(!batchId)return sendJson(res,400,{ok:false,error:'Falta identificar el lote preparado.'});
    originalState=readState();originalRows=readWorkLots();
+   const rollbackState=JSON.parse(JSON.stringify(originalState));
    const queue=Array.isArray(originalState.queuedStandardBatches)?originalState.queuedStandardBatches:[];
    const batch=queue.find(x=>String(x.id)===batchId);
    if(!batch||!Array.isArray(batch.tasks)||!batch.tasks.length)return sendJson(res,404,{ok:false,error:'No se encontró el lote preparado o no tiene referencias.'});
@@ -280,7 +281,9 @@ if(p==='/api/admin/activate-work-lot'&&req.method==='POST'){
    const delivered=activeModelTasks.reduce((n,t)=>n+Math.min(Math.max(0,workLotNumber(t.entregado)),Math.max(0,workLotTarget(t))),0);
    if(total>0&&delivered<total)return sendJson(res,409,{ok:false,error:'El lote activo todavía tiene unidades pendientes.'});
    const targetExisting=activeTasks.filter(t=>workLotModel(t.standardMoto||(t.standardNKD?'NKD':''))===targetModel&&targetModel!==activeModel);
-   if(targetExisting.some(t=>workLotNumber(t.entregado)>0&&workLotNumber(t.entregado)<workLotTarget(t)))return sendJson(res,409,{ok:false,error:'El modelo de destino tiene entregas parciales. Se conservaron sin cambios.'});
+   const targetIncomplete=targetExisting.some(t=>workLotNumber(t.entregado)<workLotTarget(t));
+   const targetHasDelivery=targetExisting.some(t=>workLotNumber(t.entregado)>0);
+   if(targetIncomplete&&targetHasDelivery)return sendJson(res,409,{ok:false,error:'El modelo de destino ya tiene entregas registradas y tareas pendientes. Se conservaron sin cambios.'});
    const now=new Date().toLocaleString('es-CO'),archived=activeTasks.map(t=>({...t,archivadaEn:now,archivadaPor:admin.name||session.username,motivoArchivo:'Cierre de lote para activar el siguiente'}));
    const preserved=(Array.isArray(originalState.tasks)?originalState.tasks:[]).filter(t=>!(t&&t.standardNKD&&affected.has(workLotModel(t.standardMoto||(t.standardNKD?'NKD':'')))));
    originalState.tasks=[...preserved,...batch.tasks.map(t=>({...t}))];
@@ -289,7 +292,7 @@ if(p==='/api/admin/activate-work-lot'&&req.method==='POST'){
    const previousRows=originalRows.filter(x=>x.model===targetModel),nextNumber=previousRows.reduce((n,x)=>Math.max(n,workLotNumber(x.number)),0)+1;
    const nowIso=new Date().toISOString(),newRow={id:require('crypto').randomUUID(),model:targetModel,number:nextNumber,tasks:JSON.parse(JSON.stringify(batch.tasks)),createdBy:session.username,createdAt:nowIso,updatedAt:nowIso};
    const nextRows=[...originalRows,newRow];
-   try{writeState(originalState);writeWorkLots(nextRows);}catch(writeError){try{writeState(currentState);writeWorkLots(originalRows);}catch(rollbackError){console.error('No se pudo revertir la activación de lote:',rollbackError.message);}throw writeError;}
+   try{writeState(originalState);writeWorkLots(nextRows);}catch(writeError){try{writeState(rollbackState);writeWorkLots(originalRows);}catch(rollbackError){console.error('No se pudo revertir la activación de lote:',rollbackError.message);}throw writeError;}
    return sendJson(res,200,{ok:true,tasks:originalState.tasks,queuedStandardBatches:originalState.queuedStandardBatches,tareasArchivadas:originalState.tareasArchivadas,lot:{id:newRow.id,model:newRow.model,number:newRow.number}});
   }catch(e){console.error('Error activando lote preparado:',e);return sendJson(res,500,{ok:false,error:e.message||'No se pudo activar el lote.'});}
  });
