@@ -1350,7 +1350,7 @@ function renderPatinadorChecklist(){
  let modelo='NKD';
  try{modelo=localStorage.getItem('cc_modelo_moto')||'NKD';}catch(e){}
  if(selector&&selector.value!==modelo)selector.value=modelo;
- const lotNumber=$('patinadorWorkLotNumber');if(lotNumber){const activeLot=patinadorWorkLot&&patinadorWorkLot.model===modelo?patinadorWorkLot:null;const lotTasks=activeLot?getTasks().filter(t=>modeloDeTareaEstandar(t)===modelo):[];const oprCodes=[...new Set(lotTasks.map(t=>String(t&&t.codigoLoteOperacion||'').trim().toUpperCase()).filter(Boolean))];lotNumber.textContent=activeLot?'El número de lote: '+(oprCodes.length?oprCodes.join(' / '):activeLot.number):'Sin lote cargado';}
+ const lotNumber=$('patinadorWorkLotNumber');if(lotNumber){const activeLot=patinadorWorkLot&&patinadorWorkLot.model===modelo?patinadorWorkLot:null;const allLotTasks=activeLot?getTasks():[];const modelLotTasks=allLotTasks.filter(t=>modeloDeTareaEstandar(t)===modelo);const codeTasks=modelLotTasks.length?modelLotTasks:allLotTasks;const oprCodes=[...new Set(codeTasks.map(t=>String(t&&(t.codigoLoteOperacion||t.loteCodigo||t.codigoLote)||'').trim().toUpperCase()).filter(Boolean))];const userCode=String(current&&current.numeroOperacion||'').trim().toUpperCase();const lotCode=oprCodes.length?oprCodes.join(' / '):userCode;lotNumber.textContent=activeLot?'El número de lote: '+(lotCode||'Código no registrado'):'Sin lote cargado';}
  const nav=$('patinadorWorkLotNav');if(nav)nav.style.display=patinadorWorkLot&&patinadorWorkLot.model===modelo?'block':'none';
  renderRetomarLotePatinador(modelo);
  cargarManifiestoFotos(modelo);
