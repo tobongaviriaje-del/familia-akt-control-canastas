@@ -310,7 +310,7 @@ function renderProgresoPatinadores(){
  const fechaOperacion=t=>{
   const raw=String(t.fechaCreacion||t.createdAt||'').trim();
   if(raw){const parsed=Date.parse(raw);if(Number.isFinite(parsed))return parsed;
-   const m=raw.match(/(\d{1,2})[\\/-](\d{1,2})[\\/-](\d{4})(?:[^0-9]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+   const m=raw.replace(/\//g,'-').match(/(\d{1,2})-(\d{1,2})-(\d{4})(?:[^0-9]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
    if(m)return new Date(Number(m[3]),Number(m[2])-1,Number(m[1]),Number(m[4]||0),Number(m[5]||0),Number(m[6]||0)).getTime();
   }
   const id=Number(t.id);return Number.isFinite(id)?id:0;
