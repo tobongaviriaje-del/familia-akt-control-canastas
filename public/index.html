@@ -843,6 +843,7 @@ async function crearReferenciaManualEstandar(){
  const lote=Number($('manualStdLote').value),cap=Number($('manualStdCap').value),canastas=Number($('manualStdCanastas').value),msg=$('manualStdMsg');
  if(!modelo||!codigo||!puestos.length||!producto){alert('Completa modelo, código del lote, al menos un puesto y nombre de referencia.');return;}
  if(!Number.isInteger(lote)||lote<1||!Number.isInteger(cap)||cap<1||!Number.isInteger(canastas)||canastas<1){alert('Unidades, piezas por canasta y cantidad de canastas deben ser enteros mayores que cero.');return;}
+ const beforeTasks=cloudTasks,beforeQueue=JSON.parse(JSON.stringify(queuedStandardBatches));
  const now=Date.now(),baseId='manual-'+modelo.replace(/[^A-Z0-9]/g,'')+'-'+codigo.replace(/[^A-Z0-9]/g,'')+'-'+now;
  const newTasks=puestos.map((puesto,i)=>{
   const area=/^PRE /i.test(puesto)?'PRE':/^Derecho /i.test(puesto)?'Derecho':/^Izquierdo /i.test(puesto)?'Izquierdo':'Final de línea';
@@ -855,13 +856,12 @@ async function crearReferenciaManualEstandar(){
  if(queuedSameModel){
   if(String(queuedSameModel.codigo||'').trim().toUpperCase()!==codigo){alert('Ya hay un siguiente lote preparado para '+modelo+' ('+queuedSameModel.codigo+'). Actívalo antes de preparar otro.');return;}
   destination='queued';batch=queuedSameModel;
- }else if(active.length&&activeCodes.length&&!activeCodes.includes(codigo)){
+ }else if(active.length&&!activeCodes.includes(codigo)){
   if(queuedStandardBatches.some(x=>String(x.modelo||'').trim().toUpperCase()===modelo)){alert('Ya existe un lote siguiente preparado para '+modelo+'.');return;}
   destination='queued';
   batch={id:'queue-'+now+'-'+Math.random().toString(36).slice(2,7),modelo,modeloActual:modelo,codigo,createdAt:new Date().toISOString(),createdBy:current.name||current.username||'Admin',tasks:[]};
   queuedStandardBatches=[...queuedStandardBatches,batch];
  }
- const beforeTasks=cloudTasks,beforeQueue=queuedStandardBatches;
  if(destination==='queued'){
   batch.tasks=[...(batch.tasks||[]),...newTasks];
  }else cloudTasks=[...cloudTasks,...newTasks];
@@ -973,6 +973,7 @@ async function moverLotePatinador(direction){
  const lots=patinadorWorkLot.lots||[],index=lots.findIndex(x=>x.id===patinadorWorkLot.id),model=patinadorWorkLot.model;
  if(direction==='previous'){if(index<=0){alert('Este es el primer lote guardado.');return;}await cambiarLoteRemoto({action:'select',model,lotId:lots[index-1].id});return;}
  const next=lots[index+1];if(next){await cambiarLoteRemoto({action:'select',model,lotId:next.id});return;}
+ if(getTasks().some(t=>t&&t.standardManual&&modeloDeTareaEstandar(t)===model)){alert('Todavía no hay un siguiente lote activado por Administración. Cuando esté listo, aparecerá aquí para avanzar.');return;}
  if(!confirm('Se creará el siguiente lote con las mismas referencias y cantidades originales. Las entregas y canastas comenzarán en cero. ¿Continuar?'))return;
  await cambiarLoteRemoto({action:'next',model,lotId:patinadorWorkLot.id});
 }
@@ -1614,6 +1615,7 @@ function renderSiguienteLoteAdmin(){
  const r=resumenOperacionModelo(modelo);
  const q=queuedStandardBatches.find(x=>String(x.modeloActual||x.modelo||'').trim().toUpperCase()===modelo);
  const total=r.total,progreso=total?Math.round(r.pct)+'% entregado ('+r.entregado+' / '+total+')':'Sin lote activo';
+ const esc=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
  const pendientes=queuedStandardBatches.length?'<p><b>Lotes siguientes en espera:</b> '+queuedStandardBatches.map(x=>esc(x.modelo)+' · '+esc(x.codigo)).join(' | ')+'</p>':'';
  const qhtml=q?'<p><b>Siguiente lote preparado:</b> '+esc(q.modelo)+' · OPR '+esc(q.codigo)+' · '+q.tasks.length+' referencias.</p><p>Está guardado por separado. '+(r.total&&r.pct>=100?'<b>El lote actual está completo. Ya puedes continuar.</b>':'Se habilitará al completar el 100% del lote actual.')+'</p><button type="button" class="secondary" onclick="activarSiguienteLote()" '+(r.total&&r.pct>=100?'':'disabled')+' style="width:100%;font-weight:800;margin:8px 0">🔔 Activar siguiente lote</button>':'<p>No hay siguiente lote preparado para '+esc(modelo)+'.</p>';
  box.innerHTML='<b>🔁 Continuidad de lotes</b><p><b>Lote activo seleccionado ('+esc(modelo)+'):</b> '+progreso+'</p>'+pendientes+qhtml;
