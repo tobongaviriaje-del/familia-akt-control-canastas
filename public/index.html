@@ -307,14 +307,33 @@ function renderProgresoPatinadores(){
  if(!['Admin','Supervisor'].includes(current.role)&&!isCoordinator){panel.classList.add('hidden');return;}
  panel.classList.remove('hidden');if(progress)progress.innerHTML='Consulta de avance por lote u operación. Esta vista no modifica entregas ni estándares.';
  const opMap=new Map();
- tasks.filter(x=>x.standardNKD||esContinuidadXRS180(x)).forEach(x=>{const modelo=modeloDeTareaEstandar(x),codigo=String(x.codigoLoteOperacion||'').trim(),key=modelo+'|||'+codigo;if(!opMap.has(key))opMap.set(key,{key,modelo,codigo,tasks:[]});opMap.get(key).tasks.push(x);});
- const ops=[...opMap.values()].sort((a,b)=>a.modelo.localeCompare(b.modelo,'es')||a.codigo.localeCompare(b.codigo,'es'));
- if(!ops.some(x=>x.key===selectedTrackingOperation))selectedTrackingOperation=ops[0]?.key||'';
- const selected=ops.find(x=>x.key===selectedTrackingOperation)||null;
- const options=ops.map(x=>'<option value="'+esc(x.key)+'" '+(selected&&x.key===selected.key?'selected':'')+'>'+esc(x.modelo)+' · OPR/lote '+esc(x.codigo||'Sin código')+'</option>').join('');
- if(!selected){box.innerHTML='<p>No hay lotes u operaciones de estándares cargados para consultar.</p>';return;}
- const total=selected.tasks.reduce((n,x)=>n+Math.max(0,Number(unidadesObjetivoEstandar(x))||0),0);
- const delivered=selected.tasks.reduce((n,x)=>n+Math.min(Math.max(0,Number(x.entregado)||0),Math.max(0,Number(unidadesObjetivoEstandar(x))||0)),0);
+ const fechaOperacion=t=>{
+  const raw=String(t.fechaCreacion||t.createdAt||'').trim();
+  if(raw){const parsed=Date.parse(raw);if(Number.isFinite(parsed))return parsed;
+   const m=raw.match(/(\\d{1,2})[\\/-](\\d{1,2})[\\/-](\\d{4})(?:[^0-9]+(\\d{1,2}):(\\d{2})(?::(\\d{2}))?)?/);
+   if(m)return new Date(Number(m[3]),Number(m[2])-1,Number(m[1]),Number(m[4]||0),Number(m[5]||0),Number(m[6]||0)).getTime();
+  }
+  const id=Number(t.id);return Number.isFinite(id)?id:0;
+ };
+ tasks.filter(x=>x.standardNKD||esContinuidadXRS180(x)).forEach(x=>{
+  const modelo=modeloDeTareaEstandar(x),codigo=String(x.codigoLoteOperacion||'').trim(),key=modelo+'|||'+codigo;
+  if(!opMap.has(key))opMap.set(key,{key,modelo,codigo,tasks:[],latestAt:0,total:0,delivered:0,pending:0});
+  const op=opMap.get(key),objetivo=Math.max(0,Number(unidadesObjetivoEstandar(x))||0),entregado=Math.min(objetivo,Math.max(0,Number(x.entregado)||0));
+  op.tasks.push(x);op.latestAt=Math.max(op.latestAt,fechaOperacion(x));op.total+=objetivo;op.delivered+=entregado;op.pending+=Math.max(0,objetivo-entregado);
+ });
+ // Solo se muestran operaciones que aún tienen unidades pendientes; las completadas
+ // salen de la vista activa sin borrar tareas, entregas ni correcciones del historial.
+ const ops=[...opMap.values()].filter(x=>x.pending>0).sort((a,b)=>b.latestAt-a.latestAt);
+ const recentOps=ops.slice(0,3);
+ if(!recentOps.some(x=>x.key===selectedTrackingOperation))selectedTrackingOperation=recentOps[0]?.key||'';
+ const selected=recentOps.find(x=>x.key===selectedTrackingOperation)||null;
+ const options=recentOps.map(x=>'<option value="'+esc(x.key)+'" '+(selected&&x.key===selected.key?'selected':'')+'>'+esc(x.modelo)+' · OPR/lote '+esc(x.codigo||'Sin código')+'</option>').join('');
+ if(!selected){
+  box.innerHTML='<h4>📦 Operaciones activas</h4><p class="muted">No hay operaciones pendientes. El avance activo está en 0%.</p><div class="notice"><b>Avance / entregado (+)</b><h2>0%</h2><p>0 unidades activas por entregar</p></div><p class="muted">Las operaciones terminadas y sus entregas permanecen conservadas en el historial.</p>';
+  return;
+ }
+ const total=selected.total;
+ const delivered=selected.delivered;
  const pending=Math.max(0,total-delivered),deliveredPct=total?pct(delivered/total*100):0,pendingPct=total?Math.max(0,100-deliveredPct):0;
  const individual=Object.entries(users||{}).filter(([key,u])=>u&&u.role==='Patinador').map(([key,u])=>{
   const assignedTasks=selected.tasks.filter(x=>tareasAsignadasAUsuarioEstandar(x,u,key));
@@ -322,7 +341,7 @@ function renderProgresoPatinadores(){
   const estibas=new Set(assignedTasks.map(x=>String(x.lpn||x.estiba||'').trim()).filter(Boolean)).size;
   return {done,row:'<tr><td>'+esc(u.name||u.nombre||key)+'</td><td>'+estibas+'</td><td>'+r.assigned+'</td><td>'+r.delivered.toLocaleString('es-CO')+' / '+r.total.toLocaleString('es-CO')+'</td><td><div style="display:flex;width:100%;height:22px;background:#e5e7eb;border-radius:8px;overflow:hidden;margin-top:5px;font-size:10px;font-weight:700;line-height:22px;text-align:center;white-space:nowrap"><div style="height:22px;width:'+done+'%;min-width:0;background:#16a34a;color:white;overflow:visible">+'+fmt(done)+'%</div><div style="height:22px;width:'+left+'%;min-width:0;background:#e5e7eb;color:#374151;overflow:visible">−'+fmt(left)+'%</div></div></td></tr>'};
  }).sort((a,b)=>b.done-a.done).map(x=>x.row).join('');
- box.innerHTML='<label style="display:block;max-width:520px">Seleccionar lote u operación de los patinadores<select id="seguimientoOperacionSelect" onchange="cambiarOperacionSeguimiento(this.value)" style="width:100%;padding:10px;margin-top:5px">'+options+'</select></label><h4>📦 '+esc(selected.modelo)+' · OPR/lote '+esc(selected.codigo||'Sin código')+'</h4><div class="grid"><div class="notice"><b>Avance / entregado (+)</b><h2>'+fmt(deliveredPct)+'%</h2><p>'+delivered.toLocaleString('es-CO')+' de '+total.toLocaleString('es-CO')+' unidades</p></div><div class="notice"><b>Falta / pendiente (−)</b><h2>'+fmt(pendingPct)+'%</h2><p>'+pending.toLocaleString('es-CO')+' unidades por entregar</p></div></div><h4>Seguimiento por patinador en esta operación</h4><div class="scroll"><table><thead><tr><th>Patinador</th><th>Estibas asignadas</th><th>Referencias asignadas</th><th>Entregadas / total</th><th>Avance y pendiente</th></tr></thead><tbody>'+(individual||'<tr><td colspan="5">No hay patinadores asignados a esta operación.</td></tr>')+'</tbody></table></div><p class="muted">Vista de consulta. Las entregas anteriores se conservan en el historial.</p>'+(current.role==='Admin'&&selected.codigo?'<button type="button" class="danger" onclick="retirarLoteCompletado()">🗑️ Retirar este lote de tareas activas</button><p class="muted">Puedes retirar lotes terminados o lotes que finalmente no se trabajaron.</p>':'');
+ box.innerHTML='<h4>📦 Últimas 3 operaciones pendientes o en proceso</h4><label style="display:block;max-width:520px">Seleccionar operación<select id="seguimientoOperacionSelect" onchange="cambiarOperacionSeguimiento(this.value)" style="width:100%;padding:10px;margin-top:5px">'+options+'</select></label><p class="muted">Las operaciones completadas salen automáticamente de esta lista; el historial se conserva.</p><h4>📦 '+esc(selected.modelo)+' · OPR/lote '+esc(selected.codigo||'Sin código')+'</h4><div class="grid"><div class="notice"><b>Avance / entregado (+)</b><h2>'+fmt(deliveredPct)+'%</h2><p>'+delivered.toLocaleString('es-CO')+' de '+total.toLocaleString('es-CO')+' unidades</p></div><div class="notice"><b>Falta / pendiente (−)</b><h2>'+fmt(pendingPct)+'%</h2><p>'+pending.toLocaleString('es-CO')+' unidades por entregar</p></div></div><h4>Seguimiento por patinador en esta operación</h4><div class="scroll"><table><thead><tr><th>Patinador</th><th>Estibas asignadas</th><th>Referencias asignadas</th><th>Entregadas / total</th><th>Avance y pendiente</th></tr></thead><tbody>'+(individual||'<tr><td colspan="5">No hay patinadores asignados a esta operación.</td></tr>')+'</tbody></table></div><p class="muted">Vista de consulta. Las entregas anteriores se conservan en el historial.</p>'+(current.role==='Admin'&&selected.codigo?'<button type="button" class="danger" onclick="retirarLoteCompletado()">🗑️ Retirar este lote de tareas activas</button><p class="muted">Puedes retirar lotes terminados o lotes que finalmente no se trabajaron.</p>':'');
 }
 async function retirarLoteCompletado(){
  if(!isAdmin())return;
