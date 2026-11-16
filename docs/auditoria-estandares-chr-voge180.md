@@ -47,10 +47,12 @@ Por tanto, la auditoría anterior de imágenes del libro XRS-180 no constituye u
 
 ### Revisión de artefactos históricos recuperados
 
-Se recuperó el paquete histórico `Paquete_fotos_CHR_CORREGIDO_NUMERO_PUESTO.zip` y se inspeccionó su manifiesto contra `DISTRIBUCION_CHR_PATINADORES_LISTO.xlsx`:
-- 83 archivos de imagen únicos y 84 asociaciones.
-- 18 claves de referencia en el manifiesto; 2 registros tienen EAN `0`.
-- El manifiesto declara 0 pendientes, pero esa cifra no demuestra cobertura total del libro ni resuelve por sí sola las discrepancias de EAN/puesto.
-- Se detectó al menos una diferencia que requiere revisión antes de cargarlo como catálogo completo: EAN `7701023378215` aparece con puesto `06 Derecho` en el manifiesto, mientras las filas localizadas en el libro recuperado lo muestran en `03 Izquierdo`. No se debe certificar la asociación hasta resolverla.
+Se recuperó el paquete histórico `Paquete_fotos_CHR_CORREGIDO_NUMERO_PUESTO.zip` y se cotejó su manifiesto contra `DISTRIBUCION_CHR_PATINADORES_LISTO.xlsx` usando la clave compuesta **número de referencia + EAN + puesto**, no el EAN aislado:
+- 18 asociaciones de referencia del manifiesto cotejadas con filas reales del libro; las 18 claves compuestas coinciden.
+- 83 archivos WebP únicos y 84 asociaciones de foto (una imagen se reutiliza en dos asociaciones).
+- 2 referencias tienen EAN `0`, igual que el libro fuente; no se inventó un EAN.
+- La aparente diferencia del EAN `7701023378215` no es un error: el libro lo repite en dos puestos y patinadores distintos. La foto del manifiesto corresponde a `06 Derecho` (Arley); la fila `03 Izquierdo` (Vélez) es otra asignación y no debe usarse para reasignar esas fotos.
+- El manifiesto conserva las fotos complementarias de cada referencia; no se eliminaron fotografías.
+- La coincidencia de las 18 claves demuestra la asociación declarada del manifiesto con filas del Excel, aunque no certifica por sí sola que cada imagen represente visualmente la pieza correcta.
 
-También se recuperó `ESTANDAR_VOGE_180_BORRADOR_VALIDADO.xlsx`; su BOM etiqueta explícitamente el modelo como `XRS-180` y las referencias incluyen denominaciones `180ADV`. Este archivo y el ZIP `VOGE_180_XRS180_FOTOS_VALIDADO.zip` son artefactos XRS-180, no evidencia válida para VOGE 180BES. No se reasignan ni se renombran como VOGE.
+También se recuperó `ESTANDAR_VOGE_180_BORRADOR_VALIDADO.xlsx`; su BOM etiqueta explícitamente el modelo como `XRS-180` y sus referencias incluyen denominaciones `180ADV`. El ZIP `VOGE_180_XRS180_FOTOS_VALIDADO.zip` y su auditoría son de ese mismo alcance. Estos artefactos no prueban el estándar de VOGE 180BES y no se reasignan ni se renombran como VOGE.
