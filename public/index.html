@@ -874,7 +874,7 @@ async function crearReferenciaManualEstandar(){
  $('manualStdPuesto').value='';$('manualStdProducto').value='';$('manualStdEan').value='';
 }
 
-function normalizarModeloContinuidad(v){return String(v||'').trim().toUpperCase().replace(/\\s+/g,' ');}
+function normalizarModeloContinuidad(v){return String(v||'').trim().toUpperCase().replace(/VOGUE 180BES|VOGUE 180|VOGE 180BES/g,'VOGE 180').replace(/\\s+/g,' ');}
 function modeloContinuidadDeTarea(t){return normalizarModeloContinuidad(t&&(t.standardMoto||(t.standardNKD?'NKD':'')));}
 function actualizarOperacionesContinuidad(){
  const modelo=normalizarModeloContinuidad($('continuidadModelo')?.value||'NKD'),sel=$('continuidadOperacion'),lista=$('continuidadOperacionesLista');if(!sel)return;
