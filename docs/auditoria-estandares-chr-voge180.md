@@ -44,3 +44,13 @@ Por tanto, la auditoría anterior de imágenes del libro XRS-180 no constituye u
 - No se certifica ningún ZIP final de fotos CHR o VOGE 180BES con esta revisión. Las fotos de Patinadores deben permanecer disponibles y asociadas a su referencia; ninguna foto se elimina para simplificar el catálogo.
 - No se cargaron estándares ni fotografías en producción, no se desplegó Railway y el PR sigue separado de `main`.
 - La publicación queda pendiente de validar el archivo fuente inequívoco de VOGE 180BES y de completar la asociación visual de fotos CHR por referencia y puesto.
+
+### Revisión de artefactos históricos recuperados
+
+Se recuperó el paquete histórico `Paquete_fotos_CHR_CORREGIDO_NUMERO_PUESTO.zip` y se inspeccionó su manifiesto contra `DISTRIBUCION_CHR_PATINADORES_LISTO.xlsx`:
+- 83 archivos de imagen únicos y 84 asociaciones.
+- 18 claves de referencia en el manifiesto; 2 registros tienen EAN `0`.
+- El manifiesto declara 0 pendientes, pero esa cifra no demuestra cobertura total del libro ni resuelve por sí sola las discrepancias de EAN/puesto.
+- Se detectó al menos una diferencia que requiere revisión antes de cargarlo como catálogo completo: EAN `7701023378215` aparece con puesto `06 Derecho` en el manifiesto, mientras las filas localizadas en el libro recuperado lo muestran en `03 Izquierdo`. No se debe certificar la asociación hasta resolverla.
+
+También se recuperó `ESTANDAR_VOGE_180_BORRADOR_VALIDADO.xlsx`; su BOM etiqueta explícitamente el modelo como `XRS-180` y las referencias incluyen denominaciones `180ADV`. Este archivo y el ZIP `VOGE_180_XRS180_FOTOS_VALIDADO.zip` son artefactos XRS-180, no evidencia válida para VOGE 180BES. No se reasignan ni se renombran como VOGE.
