@@ -84,7 +84,7 @@ function readZipEntries(buffer){
  }
  return out;
 }
-function safePhotoModel(value){return value==='xrs180'?'XRS-180':value==='cr4125'?'CR4 125':value==='cr4150'?'CR4-150':value==='nkd'?'NKD':value==='chr'?'CHR':null;}
+function safePhotoModel(value){return value==='xrs180'?'XRS-180':value==='cr4125'?'CR4 125':value==='cr4150'?'CR4-150':value==='nkd'?'NKD':value==='chr'?'CHR':value==='voge180'?'VOGE 180':null;}
 
 const WORK_LOTS_FILE=path.join(DATA_DIR,'work-lots.json');
 const WORK_LOT_DELIVERY_FIELDS=['entregado','estado','entregas','entrega','canastasEntregadas','confirmacionesCanastas','correcciones'];
