@@ -30,3 +30,17 @@ La revisión de imágenes encontró hojas con más fotos grandes que filas de re
 3. Generar los ZIP con `manifest.json` y fotos WebP, validando el límite de 15 MB por paquete.
 4. Probar la vista previa del Excel y el catálogo en un entorno de prueba.
 5. Solicitar autorización explícita antes de cualquier escritura de estándares o fotos en producción.
+
+## Corrección de identidad y estado real (16-nov-2026)
+
+El usuario confirmó que **VOGE 180 corresponde a 180BES y no a XRS-180**. En los artefactos de trabajo recuperables aparece un libro con encabezado `Moto XRS 180 Bla 27PT` y referencias que identifican XRS/180ADV. Ese material no se debe reutilizar ni renombrar como VOGE 180BES, ni compartir sus fotos con el catálogo XRS-180. La fuente inequívoca de VOGE 180BES y sus fotos debe cotejarse por separado antes de crear el manifiesto definitivo.
+
+Por tanto, la auditoría anterior de imágenes del libro XRS-180 no constituye una validación del catálogo VOGE 180BES. Las cifras de fotos, referencias y pendientes anotadas en la sección VOGE describen únicamente ese libro XRS-180 y no deben interpretarse como resultado final de VOGE 180BES.
+
+## Estado de entrega
+
+- La rama incorpora el selector y el slug independiente `voge180`; se corrigió además una opción duplicada de VOGE 180 en el selector de continuidad.
+- La compatibilidad de nombres VOGE/VOGUE 180BES no autoriza a mezclar los catálogos XRS-180 y VOGE 180BES.
+- No se certifica ningún ZIP final de fotos CHR o VOGE 180BES con esta revisión. Las fotos de Patinadores deben permanecer disponibles y asociadas a su referencia; ninguna foto se elimina para simplificar el catálogo.
+- No se cargaron estándares ni fotografías en producción, no se desplegó Railway y el PR sigue separado de `main`.
+- La publicación queda pendiente de validar el archivo fuente inequívoco de VOGE 180BES y de completar la asociación visual de fotos CHR por referencia y puesto.
