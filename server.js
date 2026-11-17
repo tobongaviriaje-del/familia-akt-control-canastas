@@ -365,7 +365,7 @@ if(p.startsWith('/api/admin/reference-photos/')&&req.method==='POST'){
        const combined=new Map();
        if(!replaceAssociations)for(const photo of (Array.isArray(existingItem.photos)?existingItem.photos:[]))if(photo&&/^[a-f0-9]{40}\.webp$/i.test(String(photo.file||'')))combined.set(photo.file,photo);
        for(const photo of (Array.isArray(incomingItem.photos)?incomingItem.photos:[]))if(photo&&/^[a-f0-9]{40}\.webp$/i.test(String(photo.file||'')))combined.set(photo.file,photo);
-       manifest.items[itemKey]={...existingItem,...incomingItem,photos:replaceAssociations?[...combined.values()]:[...combined.values()]};
+       manifest.items[itemKey]={...existingItem,...incomingItem,photos:[...combined.values()]};
       }
       const mergedItem=manifest.items[itemKey];
       for(const photo of Array.isArray(mergedItem.photos)?mergedItem.photos:[]){const file=String(photo&&photo.file||'');if(/^[a-f0-9]{40}\.webp$/i.test(file)){const source=path.join(target,file);if(fs.existsSync(source)&&!fs.existsSync(path.join(temp,file)))fs.copyFileSync(source,path.join(temp,file));}}
