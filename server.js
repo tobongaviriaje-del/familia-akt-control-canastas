@@ -357,12 +357,14 @@ if(p.startsWith('/api/admin/reference-photos/')&&req.method==='POST'){
     let existingManifest=null;
     if(fs.existsSync(existingManifestPath)){try{existingManifest=JSON.parse(fs.readFileSync(existingManifestPath,'utf8'));}catch(e){throw new Error('El catálogo existente no se pudo leer; se conservó sin cambios.');}}
     if(existingManifest&&existingManifest.items&&typeof existingManifest.items==='object'&&!Array.isArray(existingManifest.items)){
+     const replaceAssociations=manifest.reemplazar_asociaciones===true;
      for(const [itemKey,existingItem] of Object.entries(existingManifest.items)){
       const incomingItem=manifest.items[itemKey];
       if(!incomingItem){manifest.items[itemKey]=existingItem;}
       else{
        const combined=new Map();
-       for(const photo of [...(Array.isArray(existingItem.photos)?existingItem.photos:[]),...(Array.isArray(incomingItem.photos)?incomingItem.photos:[])])if(photo&&/^[a-f0-9]{40}\.webp$/i.test(String(photo.file||'')))combined.set(photo.file,photo);
+       if(!replaceAssociations)for(const photo of (Array.isArray(existingItem.photos)?existingItem.photos:[]))if(photo&&/^[a-f0-9]{40}\.webp$/i.test(String(photo.file||'')))combined.set(photo.file,photo);
+       for(const photo of (Array.isArray(incomingItem.photos)?incomingItem.photos:[]))if(photo&&/^[a-f0-9]{40}\.webp$/i.test(String(photo.file||'')))combined.set(photo.file,photo);
        manifest.items[itemKey]={...existingItem,...incomingItem,photos:[...combined.values()]};
       }
       const mergedItem=manifest.items[itemKey];
@@ -373,7 +375,7 @@ if(p.startsWith('/api/admin/reference-photos/')&&req.method==='POST'){
    }
    for(const [name,data] of files)fs.writeFileSync(path.join(temp,name),data);
    const mergedItems=Object.values(manifest.items),withPhotos=mergedItems.filter(item=>item&&Array.isArray(item.photos)&&item.photos.some(photo=>photo&&photo.file)).length;
-   manifest.referencias_confirmadas=withPhotos;manifest.referencias_pendientes=mergedItems.length-withPhotos;manifest.asociaciones_foto=withPhotos;
+   manifest.referencias_confirmadas=withPhotos;manifest.referencias_pendientes=mergedItems.length-withPhotos;manifest.asociaciones_foto=mergedItems.reduce((n,item)=>n+(Array.isArray(item&&item.photos)?item.photos.filter(photo=>photo&&photo.file).length:0),0);
    fs.writeFileSync(path.join(temp,'manifest.json'),JSON.stringify(manifest));
    fs.rmSync(old,{recursive:true,force:true});if(fs.existsSync(target))fs.renameSync(target,old);
    try{fs.renameSync(temp,target);fs.rmSync(old,{recursive:true,force:true});}catch(e){if(fs.existsSync(old)&&!fs.existsSync(target))fs.renameSync(old,target);throw e;}
