@@ -263,6 +263,31 @@ if(p==='/api/work-lots/open-queued'&&req.method==='POST'){
   }catch(e){console.error('Error abriendo lote preparado para patinador:',e);return sendJson(res,500,{ok:false,error:e.message||'No se pudo abrir el siguiente lote.'});}
  });return;
 }
+if(p==='/api/estibas-recibidas'&&req.method==='POST'){
+ const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token);
+ if(!authorized(req)||!session)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
+ let raw='';req.on('data',chunk=>{raw+=chunk;if(raw.length>50000)req.destroy();});req.on('end',()=>{
+  try{
+   const body=JSON.parse(raw||'{}'),actor=session.username==='patinadores'?String(body.username||''):session.username;
+   const state=readState(),user=state.users&&state.users[actor];
+   if(!user||user.role!=='Patinador')return sendJson(res,403,{ok:false,error:'Solo los patinadores pueden registrar estibas recibidas.'});
+   const keys=['ladoIzquierdo','ladoDerecho','finalLinea'];
+   const values={};
+   for(const key of keys){const value=Number(body[key]);if(!Number.isInteger(value)||value<0||value>100000)return sendJson(res,400,{ok:false,error:'Cada zona debe tener un número entero de estibas igual o mayor que cero.'});values[key]=value;}
+   const cantidad=values.ladoIzquierdo+values.ladoDerecho+values.finalLinea;
+   if(cantidad<1||Number(body.cantidad)!==cantidad)return sendJson(res,400,{ok:false,error:'Registra al menos una estiba y verifica el total por zonas.'});
+   const id=String(body.id||'').trim();
+   if(!/^estibas-[a-zA-Z0-9-]{8,100}$/.test(id))return sendJson(res,400,{ok:false,error:'El identificador del registro no es válido.'});
+   if(!Array.isArray(state.estibasRecibidas))state.estibasRecibidas=[];
+   const existing=state.estibasRecibidas.find(x=>x&&x.id===id);
+   if(existing)return sendJson(res,200,{ok:true,record:existing,duplicate:true});
+   const record={id,...values,cantidad,patinador:String(user.name||actor),username:actor,turno:String(body.turno||user.turno||'Todos'),fechaHora:String(body.fechaHora||new Date().toLocaleString('es-CO'))};
+   state.estibasRecibidas.push(record);writeState(state);
+   return sendJson(res,200,{ok:true,record});
+  }catch(e){console.error('Error guardando estibas recibidas:',e);return sendJson(res,500,{ok:false,error:'No se pudieron guardar las estibas recibidas. No se modificaron las tareas.'});}
+ });
+ return;
+}
 if(p==='/api/work-lots'&&['GET','POST','PUT'].includes(req.method)){
  const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token);
  if(!authorized(req)||!session)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
