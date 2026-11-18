@@ -1558,8 +1558,11 @@ function guardarEstibasRecibidas(){
  if(!visible){msg.className='error';msg.textContent='Tu usuario no tiene una zona asignada. Pide al administrador que revise tus zonas o puestos.';return;}
  if(!Object.values(values).some(n=>n>0)){msg.className='error';msg.textContent='Registra al menos una estiba recibida.';return;}
  const registro={id:'estibas-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),...values,cantidad:values.ladoIzquierdo+values.ladoDerecho+values.finalLinea,patinador:current.name||current.username||'Patinador',username:current.username||'',turno:current.turno||'Todos',fechaHora:new Date().toLocaleString('es-CO')};
- estibasRecibidas.push(registro);localStorage.setItem('cc_estibas_recibidas',JSON.stringify(estibasRecibidas));
- cloudSave().then(ok=>{if(!ok){estibasRecibidas=estibasRecibidas.filter(x=>x.id!==registro.id);localStorage.setItem('cc_estibas_recibidas',JSON.stringify(estibasRecibidas));msg.className='error';msg.textContent='No se pudo confirmar el guardado en la nube. Intenta de nuevo.';return;}fields.forEach(([key,input])=>{if(input){input.value='0';}});msg.className='muted';msg.textContent='✅ Registro guardado: '+registro.cantidad+' estibas recibidas en tu zona.';renderEstibasRecibidas();});
+ const token=sessionStorage.getItem('cc_session_token');
+ fetch('/api/estibas-recibidas',{method:'POST',headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},body:JSON.stringify(registro)})
+ .then(async response=>{const data=await response.json().catch(()=>null);if(!response.ok||!data||!data.ok)throw new Error(data&&data.error?data.error:'No se pudo confirmar el guardado en la nube.');return data;})
+ .then(data=>{if(!estibasRecibidas.some(x=>x.id===registro.id))estibasRecibidas.push(data.record||registro);localStorage.setItem('cc_estibas_recibidas',JSON.stringify(estibasRecibidas));fields.forEach(([key,input])=>{if(input){input.value='0';}});msg.className='muted';msg.textContent='✅ Registro guardado y confirmado en la nube: '+registro.cantidad+' estibas recibidas en tu zona.';renderEstibasRecibidas();})
+ .catch(error=>{estibasRecibidas=estibasRecibidas.filter(x=>x.id!==registro.id);localStorage.setItem('cc_estibas_recibidas',JSON.stringify(estibasRecibidas));msg.className='error';msg.textContent=String(error&&error.message||'No se pudo confirmar el guardado en la nube.');});
 }
 function renderEstibasRecibidas(){
  const panel=$('estibasRecibidasPanel'),form=$('estibasRecibidasForm'),box=$('estibasRecibidasTabla');
