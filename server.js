@@ -60,7 +60,7 @@ if(!Array.isArray(s.tasks))s.tasks=[];
 if(!Array.isArray(s.lpnCatalog))s.lpnCatalog=[];
 if(!Array.isArray(s.freeDeliveries))s.freeDeliveries=[];
 return s;
-}catch{return {users:defaultUsers,tasks:[],lpnCatalog:[],freeDeliveries:[]};}
+}catch(e){console.error('No se pudo leer el estado persistente; se bloquea la operación para proteger los datos:',e.message);throw new Error('No se pudo leer el estado persistente. No se aplicaron cambios.');}
 }
 function writeState(s){ensureState();const tmp=STATE_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(s,null,2));fs.renameSync(tmp,STATE_FILE);}
 function archiveTasks(tasks,meta={}){fs.mkdirSync(HISTORY_DIR,{recursive:true});const stamp=new Date().toISOString().replace(/[:.]/g,'-');const file=path.join(HISTORY_DIR,'jornada-'+stamp+'.json');fs.writeFileSync(file,JSON.stringify({app:'Familia AKT Control de Canastas',fechaCierre:new Date().toISOString(),meta,tasks},null,2));return {file:path.basename(file),count:tasks.length};}
@@ -200,7 +200,7 @@ function ensureWorkLot(rows,state,model,username){
  rows.push(row);writeWorkLots(rows);return row;
 }
 
-const server=http.createServer((req,res)=>{
+const server=http.createServer((req,res)=>{try{
 const url=new URL(req.url||'/',`http://${req.headers.host||'localhost'}`);const p=decodeURIComponent(url.pathname);
 res.setHeader('Vary','Origin');res.setHeader('Permissions-Policy','camera=(self), microphone=(self)');res.setHeader('Cache-Control','no-store');
 if(req.method==='OPTIONS'){res.setHeader('Access-Control-Allow-Methods','GET,PUT,POST,OPTIONS');res.setHeader('Access-Control-Allow-Headers','Content-Type, Authorization');return res.end();}
@@ -626,5 +626,6 @@ if(path.extname(file)==='.html'){
   output=Buffer.from(data.toString('utf8').replace('</body>','<style>.estiba-destacada{background:#fff7ed;border:3px solid #f97316;color:#9a3412;border-radius:14px;padding:16px;margin:12px 0;font-size:24px;text-align:center}</style><script src="/patinador-estiba.js?v=44"></script><script src="/profesional.js?v=3"></script></body>'),'utf8');
 }
 res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream'});res.end(output);});
+}catch(e){console.error('Error procesando solicitud:',e);if(!res.headersSent)sendJson(res,503,{ok:false,error:'No se pudo leer o procesar el estado persistente. No se guardaron cambios.'});else res.destroy();}
 });
 ensureState();loadSessions();server.listen(PORT,()=>console.log('FAMILIA AKT funcionando en puerto '+PORT));
