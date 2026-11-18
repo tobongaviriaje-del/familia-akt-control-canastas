@@ -1041,6 +1041,8 @@ function prepararEstandarNKD(input){
       const test={numeroReferencia:exact(['#','numero de referencia','numero referencia','no. referencia','n° referencia']),ean:find(['ean','ean 13','ean / codigo','ean codigo','codigo ean','cod ean','codigo de barras','codigo barras','codigo de pieza','referencia de pieza','ref. pieza','referencia']),producto:find(['nombre de pieza','nombre pieza','descripcion de pieza','descripcion pieza','nombre','producto','descripcion','mercancia','material','componente','denominacion']),cantidad:exact(['cantidad','unidades','piezas']),cantidadUnidad:exact(['cant.','cant','cantidad por unidad','unidades por unidad']),lote:find(['lote','cantidad lote','total lote','saldo lote','cantidad total','total piezas','lote (unidades)']),cantidadCanasta:find(['unidades por canasta','unidad por canasta','cantidad por canasta','capacidad canasta','cant. canasta','piezas por canasta','cantidad canasta']),canasta:exact(['canasta']),numCanastas:find(['#canastas','n°canastas','num canastas','numero de canastas','cantidad de canastas','canastas','# canasta por lote','total canasta']),puesto:find(['puesto de trabajo','puesto','ubicacion','ubicación','posicion','posición','estacion','estación','equipo','operacion','operación','estacion de trabajo']),grupo:exact(['grupo','patinador','responsable']),linea:find(['linea','línea'])};
       if(test.cantidad<0)test.cantidad=find(['cantidad','qty']);
       if(test.cantidadUnidad<0)test.cantidadUnidad=find(['cant.','cant','cantidad por unidad']);
+      // CHR usa CANTIDAD como capacidad por canasta; Cant. sigue siendo piezas por referencia.
+      if(modelo==='CHR'&&test.cantidadCanasta<0)test.cantidadCanasta=test.cantidad;
       if(test.puesto<0&&test.linea>=0)test.puesto=test.linea;
       if(test.ean>=0&&test.producto>=0&&test.puesto>=0){headerAt=ri;dataStart=ri+span;ix=test;break;}
      }
@@ -1060,8 +1062,11 @@ function prepararEstandarNKD(input){
      const loteModelo=loteInicialPorModelo(modelo);
      const lote=loteExcel>0?loteExcel:loteModelo;
      const cantidadCol=Number(String(cantidadRaw).replace(',','.'))||0;
-     // No inferir unidades por canasta ni cantidad de canastas: se capturan manualmente en la aplicación.
-     const cantidadCanastaRaw='',canasta='',cantidadCanasta=0,numCanastasRaw='',numCanastas=0;
+     // Conservar la configuración de canastas explícita del estándar. En CHR, CANTIDAD
+     // indica unidades por canasta; Cant. indica cuántas piezas corresponden a la referencia.
+     const cantidadCanastaRaw=get('cantidadCanasta'),canasta=get('canasta'),numCanastasRaw=get('numCanastas');
+     const cantidadCanasta=Number(String(cantidadCanastaRaw).replace(',','.'))||0;
+     const numCanastas=Number(String(numCanastasRaw).replace(',','.'))||0;
      const cantidad=lote>0?lote:(cantidadCol>0?cantidadCol:cantidadUnidad);
      const productoHeader=normalHeader(producto),puestoHeader=normalHeader(puesto),eanHeader=normalHeader(eanOriginal);
      // Algunas hojas repiten sus encabezados entre los datos; no convertirlos en tareas.
