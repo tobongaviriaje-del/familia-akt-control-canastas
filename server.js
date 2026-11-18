@@ -154,7 +154,13 @@ function validateWorkLot(saved,incoming,user,username){
   const merged={...old};
   for(const k of WORK_LOT_CAPACITY_FIELDS){if(Object.prototype.hasOwnProperty.call(candidate,k))merged[k]=candidate[k];else delete merged[k];}
   for(const k of WORK_LOT_DELIVERY_FIELDS){if(Object.prototype.hasOwnProperty.call(candidate,k))merged[k]=candidate[k];else delete merged[k];}
-  for(const k of WORK_LOT_OPERATION_FIELDS){if(Object.prototype.hasOwnProperty.call(candidate,k))merged[k]=candidate[k];else delete merged[k];}
+  const incomingOperationCode=String(candidate.codigoLoteOperacion??'').trim().toUpperCase(),savedOperationCode=String(old.codigoLoteOperacion??'').trim();
+  if(incomingOperationCode!==savedOperationCode){
+   if(!incomingOperationCode)throw new Error('El código de operación no puede quedar vacío.');
+   merged.codigoLoteOperacion=incomingOperationCode;
+   merged.codigoOperacionActualizadoPor=user.name||username;
+   merged.codigoOperacionActualizadoEn=new Date().toLocaleString('es-CO');
+  }
   result.push(merged);
  }
  if(byId.size)throw new Error('La lista contiene referencias que no pertenecen a este lote.');
