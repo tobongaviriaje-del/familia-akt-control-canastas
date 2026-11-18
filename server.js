@@ -168,7 +168,7 @@ function validateWorkLot(saved,incoming,user,username){
 }
 function withoutWork(value,fields){const copy={...(value||{})};for(const f of fields)delete copy[f];return copy;}
 function workLotReferenceKey(task){
- const ean=String(task&&task.ean||'').trim().toUpperCase().replace(/\\s+/g,'');
+ const ean=String(task&&task.ean||'').trim().toUpperCase().replace(/\s+/g,'');
  const position=workLotPosition(task&&task.puesto);
  const operation=workLotNorm(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote||''));
  return ean&&position?[ean,position,operation].join('|'):'id|'+String(task&&task.id||'');
