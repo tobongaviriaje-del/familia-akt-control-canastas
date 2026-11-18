@@ -1,10 +1,11 @@
 const CACHE='familia-akt-v66';
 const APP_SCRIPT='/patinador-estiba.js?v=46';
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['/','/index.html','/manifest.json','/familia-akt-logo.svg?v=3','/icon.svg?v=6',APP_SCRIPT])))});
-self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
+self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>caches.open(CACHE)).then(cache=>cache.keys()).then(keys=>Promise.all(keys.filter(request=>{const url=new URL(request.url);return url.origin===location.origin&&url.pathname.startsWith('/api/');}).map(request=>caches.open(CACHE).then(cache=>cache.delete(request))))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',e=>{
   if(e.request.method!=='GET') return;
   const url=new URL(e.request.url);
+  if(url.origin===location.origin && url.pathname.startsWith('/api/')){e.respondWith(fetch(e.request));return;}
   if(url.origin===location.origin && (url.pathname==='/'||url.pathname==='/index.html')){
     e.respondWith(fetch(e.request).then(async r=>{
       const text=await r.text();
