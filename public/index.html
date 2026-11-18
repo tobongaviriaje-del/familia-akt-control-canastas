@@ -145,6 +145,7 @@ async function cloudLoad(){
 }
 let patinadorWorkLot=null;
 let cloudSaveQueue=Promise.resolve(true);
+let cloudSaveLastError='';
 function cloudSave(){
   const snapshot=JSON.stringify({users,tasks:cloudTasks,lpnCatalog,queuedStandardBatches,freeDeliveries,estibasRecibidas,tareasArchivadas});
   cloudSaveQueue=cloudSaveQueue.catch(()=>false).then(async()=>{
@@ -155,8 +156,9 @@ function cloudSave(){
         method:'PUT',headers:{'Content-Type':'application/json'},
         body:isSkater?JSON.stringify({username:current.username,model:patinadorWorkLot.model,lotId:patinadorWorkLot.id,version:patinadorWorkLot.updatedAt,tasks:cloudTasks}):snapshot
       });
-      if(!r.ok)throw new Error('El servidor rechazó el guardado');
-      const saved=await r.json().catch(()=>null);
+      const responseData=await r.json().catch(()=>null);
+      if(!r.ok)throw new Error(responseData&&responseData.error?responseData.error:'El servidor rechazó el guardado ('+r.status+').');
+      const saved=responseData;
       if(isSkater&&saved){cloudTasks=Array.isArray(saved.tasks)?saved.tasks:cloudTasks;if(saved.lot)patinadorWorkLot={...patinadorWorkLot,...saved.lot};}
       if(saved&&Array.isArray(saved.tasks)){
         cloudTasks=saved.tasks;
@@ -165,9 +167,11 @@ function cloudSave(){
         localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
         try{localStorage.setItem('cc_tareas_archivadas',JSON.stringify(tareasArchivadas));}catch(_){}
       }
+      cloudSaveLastError='';
       cloudReady=true;
       return true;
     }catch(e){
+      cloudSaveLastError=String(e&&e.message||'Error desconocido al guardar.');
       cloudReady=false;
       return false;
     }
@@ -279,7 +283,7 @@ function guardarCodigoOperacionCompartido(){
  if(existentes.length&&!existentes.includes(codigo)&&!confirm('Este modelo ya tiene el código '+existentes.join(', ')+'. ¿Deseas actualizarlo a '+codigo+' para todos?'))return;
  grupo.forEach(x=>{x.codigoLoteOperacion=codigo;x.codigoOperacionActualizadoPor=current.name||current.username||'Patinador';x.codigoOperacionActualizadoEn=new Date().toLocaleString('es-CO');});
  cloudTasks=tasks;localStorage.setItem('cc_tasks',JSON.stringify(tasks));
- cloudSave().then(ok=>{if(!ok){alert('No se pudo confirmar el guardado en la nube. Revisa la conexión e intenta de nuevo.');return;}render();alert('Código '+codigo+' guardado para '+modelo+'. Todos los turnos podrán verlo.');});
+ cloudSave().then(ok=>{if(!ok){alert('No se pudo guardar el código de operación: '+(cloudSaveLastError||'revisa la conexión e intenta de nuevo.')+' No repitas el cambio hasta verificar el lote.');return;}render();alert('Código '+codigo+' guardado para '+modelo+'. Todos los turnos podrán verlo.');});
 }
 let selectedTrackingOperation='';
 let ccAlertAudio=null,ccAlertAudioEnabled=localStorage.getItem('cc_alertas_lote_audio')==='1';
@@ -1283,7 +1287,9 @@ function notificarSiguienteLotePatinador(q){
 function renderRetomarLotePatinador(modelo){
  const box=$('retomarLotePatinador');if(!box)return;
  if(!current||current.role!=='Patinador'){box.innerHTML='';return;}
- const groups=gruposLotesArchivadosPatinador(modelo),q=queuedStandardBatches.find(b=>b&&b.modelo===modelo&&Array.isArray(b.tasks)&&b.tasks.some(t=>modeloDeTareaEstandar(t)===modelo&&tareaAsignadaAlPatinador(t))),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const groups=gruposLotesArchivadosPatinador(modelo);
+ const q=queuedStandardBatches.find(b=>b&&b.modelo===modelo&&Array.isArray(b.tasks)&&b.tasks.some(t=>modeloDeTareaEstandar(t)===modelo&&tareaAsignadaAlPatinador(t))&&!(patinadorWorkLot&&String(patinadorWorkLot.sourceBatchId||'')===String(b.id)));
+ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  let html='';
  if(groups.length){
   const options=groups.map(g=>'<option value="'+encodeURIComponent(g.key)+'">'+(g.codigo?'OPR '+esc(g.codigo):'Lote sin código')+' · '+esc(g.fecha||'fecha no registrada')+' · '+g.items.length+' referencias pendientes</option>').join('');
@@ -1307,23 +1313,18 @@ async function abrirSiguienteLotePatinador(){
  if(!current||current.role!=='Patinador'){alert('Esta opción está disponible para patinadores.');return;}
  if(!await cloudLoad()){alert('No se pudo actualizar la información de la nube. No se modificó ningún lote.');return;}
  const modelo=String($('modeloEstandarPatinador')?.value||localStorage.getItem('cc_modelo_moto')||'NKD');
- const q=queuedStandardBatches.find(b=>b&&b.modelo===modelo&&Array.isArray(b.tasks)&&b.tasks.some(t=>modeloDeTareaEstandar(t)===modelo&&tareaAsignadaAlPatinador(t)));
+ const q=queuedStandardBatches.find(b=>b&&b.modelo===modelo&&Array.isArray(b.tasks)&&b.tasks.some(t=>modeloDeTareaEstandar(t)===modelo&&tareaAsignadaAlPatinador(t))&&!(patinadorWorkLot&&String(patinadorWorkLot.sourceBatchId||'')===String(b.id)));
  if(!q||!Array.isArray(q.tasks)||!q.tasks.length){alert('No hay un siguiente lote preparado y asignado a tus puestos. No se modificó ningún dato.');return;}
- const asignadas=q.tasks.filter(t=>tareaAsignadaAlPatinador(t));
- if(!asignadas.length){alert('El siguiente lote no tiene tareas asignadas a tus puestos. Consulta con el administrador.');return;}
- const active=getTasks(),ids=new Set(active.map(t=>String(t.id)));
- if(q.tasks.some(t=>ids.has(String(t.id)))){alert('Este lote ya tiene tareas activas o parcialmente activadas. No se hizo ningún cambio para evitar duplicados.');return;}
- const beforeTasks=active.slice(),beforeQueue=queuedStandardBatches.slice();
- if(!confirm('¿Abrir el siguiente lote OPR '+(q.codigo||'Sin código')+'? Se agregarán sus '+q.tasks.length+' referencias sin cerrar ni archivar el lote actual. Los pendientes y entregas de ambos lotes quedarán separados.'))return;
- cloudTasks=[...active,...q.tasks.map(t=>({...t}))];
- queuedStandardBatches=queuedStandardBatches.filter(b=>b!==q);
- const ok=await cloudSave();
- if(!ok){cloudTasks=beforeTasks;queuedStandardBatches=beforeQueue;alert('No se confirmó la apertura en la nube. Se restauró el estado anterior; no vuelvas a pulsar hasta verificar la conexión.');return;}
+ const response=await fetch('/api/work-lots/open-queued',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:current.username,model:modelo,batchId:q.id})});
+ const data=await response.json().catch(()=>({}));
+ if(!response.ok||!data.ok){alert(data.error||'No se pudo abrir el siguiente lote. No se modificó el lote anterior.');return;}
+ patinadorWorkLot={...data.lot,lots:data.lots||[]};
+ cloudTasks=Array.isArray(data.tasks)?data.tasks:[];
  localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
- if($('modeloEstandarPatinador'))$('modeloEstandarPatinador').value=q.modelo;
- localStorage.setItem('cc_modelo_moto',q.modelo);
+ if($('modeloEstandarPatinador'))$('modeloEstandarPatinador').value=modelo;
+ localStorage.setItem('cc_modelo_moto',modelo);
  render();
- alert('✅ Lote OPR '+(q.codigo||'')+' abierto. El lote anterior sigue activo con sus pendientes y entregas intactos.');
+ alert('✅ Lote OPR '+(q.codigo||'')+' abierto como lote independiente. El lote anterior conserva sus pendientes y entregas.');
 }
 async function buscarLoteArchivadoPatinador(){
  if(!current||current.role!=='Patinador')return;
@@ -1422,33 +1423,53 @@ function renderPatinadorChecklist(){
  }).join('');
  wrap.innerHTML='<div class="grid" style="margin:8px 0"><button type="button" class="secondary" onclick="mostrarEntregasZona(\'PRE\')">📍 PRE</button><button type="button" class="secondary" onclick="mostrarEntregasZona(\'Izquierdo\')">📍 IZQUIERDO</button><button type="button" class="secondary" onclick="mostrarEntregasZona(\'Derecho\')">📍 DERECHO</button></div><p class="muted">La foto aparece al lado del nombre y EAN de cada referencia. Tócala para ampliarla. Registra las unidades entregadas por separado; las canastas se cuentan manualmente.</p><div class="scroll"><table><thead><tr><th>Referencia / EAN</th><th>Puesto</th><th>Cant. unitaria</th><th>Lote total (unidades)</th><th>Unidades entregadas</th><th>Unidades pendientes</th><th>Registrar unidades</th><th>Canastas entregadas</th><th>Corregir saldo</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
-function guardarLoteEstandar(id){
- const x=getTasks().find(a=>String(a.id)===String(id));
- if(!x||!x.standardNKD){alert('No encontré esta referencia.');return;}
+async function guardarLoteEstandar(id){
+ const tasks=getTasks(),target=tasks.find(a=>String(a.id)===String(id));
+ if(!target||!target.standardNKD){alert('No encontré esta referencia.');return;}
  if(!current||!['Admin','Supervisor'].includes(current.role)){alert('Solo administración puede cambiar el lote inicial.');return;}
- const input=$('stdLote'+id),total=Number(input?.value),entregado=Number(x.entregado)||0;
+ const input=$('stdLote'+id),total=Number(input?.value),entregado=Number(target.entregado)||0;
  if(!Number.isInteger(total)||total<1){alert('Ingresa el total de piezas del lote, mayor que cero.');input?.focus();return;}
  if(total<entregado){alert('El total del lote no puede ser menor que las piezas ya entregadas ('+entregado+').');input?.focus();return;}
- const tasks=getTasks(),target=tasks.find(a=>String(a.id)===String(id));
+ const before={lote:target.lote,lotePiezas:target.lotePiezas,cantidad:target.cantidad,numCanastas:target.numCanastas};
  target.lote=total;target.lotePiezas=total;target.cantidad=total;
  if(target.standardManual&&Number(target.cantidadCanasta)>0)target.numCanastas=Math.ceil(total/Number(target.cantidadCanasta));
- saveTasks(tasks);
- cloudSave().then(()=>{render();const msg=$('estandarNKDMsg');if(msg)msg.textContent='✅ Lote guardado para '+target.producto+': '+total+' piezas iniciales. Las entregas se descuentan de ese total.';});
+ cloudTasks=tasks;localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
+ const ok=await cloudSave();
+ if(!ok){
+  Object.assign(target,before);cloudTasks=tasks;localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
+  alert('No se pudo guardar el lote: '+(cloudSaveLastError||'error de conexión')+'. El cambio local se revirtió; verifica el lote antes de volver a intentarlo.');
+  return;
+ }
+ render();const msg=$('estandarNKDMsg');if(msg)msg.textContent='✅ Lote guardado para '+target.producto+': '+total+' piezas iniciales. Las entregas se descuentan de ese total.';
 }
-function guardarCapacidadCanastaEstandar(id){
- const scrollAntes=window.scrollY;
- const x=getTasks().find(a=>String(a.id)===String(id));
- if(!x||!x.standardNKD){alert('No encontré esta referencia.');return;}
+async function guardarCapacidadCanastaEstandar(id){
+ const scrollAntes=window.scrollY,tasks=getTasks(),target=tasks.find(a=>String(a.id)===String(id));
+ if(!target||!target.standardNKD){alert('No encontré esta referencia.');return;}
  if(!current){alert('Inicia sesión para guardar la capacidad.');return;}
- if(current.role==='Patinador'&&!tareaAsignadaAlPatinador(x)){alert('Esta referencia no está asignada a tu puesto.');return;}
- if(current.role!=='Patinador'&&current.role!=='Admin'&&current.role!=='Admin'&&current.role!=='Supervisor'){alert('Tu usuario no tiene permiso para editar esta referencia.');return;}
- const input=$('stdCapCanasta'+id),n=Number(input?.value),basketInput=$('stdNumCanastas'+id),basketQty=basketInput?Number(basketInput.value):Number(x.numCanastas||0);
+ if(current.role==='Patinador'&&!tareaAsignadaAlPatinador(target)){alert('Esta referencia no está asignada a tu puesto.');return;}
+ if(!['Patinador','Admin','Supervisor'].includes(current.role)){alert('Tu usuario no tiene permiso para editar esta referencia.');return;}
+ const input=$('stdCapCanasta'+id),n=Number(input?.value),basketInput=$('stdNumCanastas'+id),basketQty=basketInput?Number(basketInput.value):Number(target.numCanastas||0);
  if(!Number.isInteger(n)||n<1){alert('Ingresa cuántas unidades caben en una canasta (por ejemplo, 30).');if(input){input.focus();input.select();}return;}
  if(basketInput&&(!Number.isInteger(basketQty)||basketQty<1)){alert('Ingresa una cantidad de canastas mayor que cero.');basketInput.focus();basketInput.select();return;}
- const tasks=getTasks(),target=tasks.find(a=>String(a.id)===String(id));
- target.cantidadCanasta=n;target.cantidadCanastaRaw=String(n);if(basketInput){target.numCanastas=basketQty;target.numCanastasRaw=String(basketQty);}
- if(target.standardManual){target.lote=n*basketQty;target.cantidad=n*basketQty;target.cantidadUnidad=n;target.lotePiezas=n*basketQty;}else if(modeloDeTareaEstandar(target)==='NKD'){target.cantidad=n*(Number(target.numCanastas)||0)||Number(target.cantidad)||n;if(!(Number(target.lote)>0))target.lote=target.cantidad;}
- saveTasks(tasks);cloudSave().then(()=>{render();const msg=$('estandarNKDMsg');if(msg)msg.textContent='✅ Capacidad guardada para '+target.producto+': '+n+' unidades por canasta. Las entregas parciales se registrarán en unidades.';});
+ const fields=['cantidadCanasta','cantidadCanastaRaw','numCanastas','numCanastasRaw','lote','cantidad','cantidadUnidad','lotePiezas'];
+ const before={};fields.forEach(k=>{before[k]=Object.prototype.hasOwnProperty.call(target,k)?target[k]:undefined;});
+ target.cantidadCanasta=n;target.cantidadCanastaRaw=String(n);
+ if(basketInput){target.numCanastas=basketQty;target.numCanastasRaw=String(basketQty);}
+ // Un Patinador puede ajustar la capacidad, pero no reescribir la cantidad original del lote.
+ if(current.role!=='Patinador'){
+  if(target.standardManual){target.lote=n*basketQty;target.cantidad=n*basketQty;target.cantidadUnidad=n;target.lotePiezas=n*basketQty;}
+  else if(modeloDeTareaEstandar(target)==='NKD'){target.cantidad=n*(Number(target.numCanastas)||0)||Number(target.cantidad)||n;if(!(Number(target.lote)>0))target.lote=target.cantidad;}
+ }
+ cloudTasks=tasks;localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
+ const ok=await cloudSave();
+ if(!ok){
+  fields.forEach(k=>{if(before[k]===undefined)delete target[k];else target[k]=before[k];});
+  cloudTasks=tasks;localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
+  alert('No se pudo guardar la capacidad: '+(cloudSaveLastError||'error de conexión')+'. El cambio local se revirtió; verifica el lote antes de volver a intentarlo.');
+  return;
+ }
+ render();window.scrollTo(0,scrollAntes);
+ const msg=$('estandarNKDMsg');if(msg)msg.textContent='✅ Capacidad guardada para '+target.producto+': '+n+' unidades por canasta. Las entregas parciales se registrarán en unidades.';
 }
 function registrarEntregaEstandar(id){
  const x=getTasks().find(a=>String(a.id)===String(id));
