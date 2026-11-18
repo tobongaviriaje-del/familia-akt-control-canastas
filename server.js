@@ -322,9 +322,12 @@ if(p==='/api/admin/activate-work-lot'&&req.method==='POST'){
    originalState.tasks=[...preserved,...batch.tasks.map(t=>({...t}))];
    originalState.tareasArchivadas=[...(Array.isArray(originalState.tareasArchivadas)?originalState.tareasArchivadas:[]),...archived];
    originalState.queuedStandardBatches=queue.filter(x=>String(x.id)!==batchId);
+   // Si Patinadores ya abrió este lote preparado, reutilizar su registro:
+   // nunca crear un segundo número ni sobrescribir sus entregas y correcciones.
+   const existingQueuedRow=originalRows.find(x=>x.model===targetModel&&String(x.sourceBatchId||'')===batchId);
    const previousRows=originalRows.filter(x=>x.model===targetModel),nextNumber=previousRows.reduce((n,x)=>Math.max(n,workLotNumber(x.number)),0)+1;
-   const nowIso=new Date().toISOString(),newRow={id:require('crypto').randomUUID(),model:targetModel,number:nextNumber,sourceBatchId:batch.id,tasks:JSON.parse(JSON.stringify(batch.tasks)),createdBy:session.username,createdAt:nowIso,updatedAt:nowIso};
-   const nextRows=[...originalRows,newRow];
+   const nowIso=new Date().toISOString(),newRow=existingQueuedRow||{id:require('crypto').randomUUID(),model:targetModel,number:nextNumber,sourceBatchId:batch.id,tasks:JSON.parse(JSON.stringify(batch.tasks)),createdBy:session.username,createdAt:nowIso,updatedAt:nowIso};
+   const nextRows=existingQueuedRow?originalRows:[...originalRows,newRow];
    try{writeState(originalState);writeWorkLots(nextRows);}catch(writeError){try{writeState(rollbackState);writeWorkLots(originalRows);}catch(rollbackError){console.error('No se pudo revertir la activación de lote:',rollbackError.message);}throw writeError;}
    return sendJson(res,200,{ok:true,tasks:originalState.tasks,queuedStandardBatches:originalState.queuedStandardBatches,tareasArchivadas:originalState.tareasArchivadas,lot:{id:newRow.id,model:newRow.model,number:newRow.number}});
   }catch(e){console.error('Error activando lote preparado:',e);return sendJson(res,500,{ok:false,error:e.message||'No se pudo activar el lote.'});}
