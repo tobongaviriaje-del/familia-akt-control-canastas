@@ -100,7 +100,6 @@ function writeWorkLots(rows){fs.mkdirSync(DATA_DIR,{recursive:true});const tmp=W
 function workLotNorm(v){return String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');}
 function workLotPosition(v){let x=workLotNorm(v),m=x.match(/^pre\s*0*(\d+)$/);if(m)return 'pre '+Number(m[1]);m=x.match(/^0*(\d+)\s*(derecho|izquierdo)$/);if(m)return m[2]+' '+Number(m[1]);m=x.match(/^(derecho|izquierdo|final(?: de linea)?)\s*0*(\d+)$/);if(m)return (m[1].startsWith('final')?'final':m[1])+' '+Number(m[2]);return x;}
 function workLotUserCanTask(user,username,task){const positions=new Set(Array.isArray(user.puestos)?user.puestos.map(workLotPosition).filter(Boolean):[]);const position=workLotPosition(task.puesto);if(position&&positions.has(position))return true;const responsible=workLotNorm(task.patinadorEstandar),identities=[user.name,username].map(workLotNorm).filter(Boolean);return !!responsible&&identities.some(v=>v===responsible||v.startsWith(responsible+' ')||v.endsWith(' '+responsible));}
-function stateUserForQueuedWorkLot(username){const state=readState();return state.users&&state.users[username]||null;}
 function workLotResponse(row,user,username,rows){return {ok:true,lot:{id:row.id,model:row.model,number:row.number,createdAt:row.createdAt,updatedAt:row.updatedAt,sourceBatchId:row.sourceBatchId||null},lots:rows.filter(x=>x.model===row.model).sort((a,b)=>a.number-b.number).map(x=>({id:x.id,number:x.number})),tasks:(row.tasks||[]).filter(t=>workLotUserCanTask(user,username,t))};}
 function validateWorkLot(saved,incoming,user,username){
  if(!Array.isArray(incoming))throw new Error('La lista de referencias no es válida.');
@@ -245,12 +244,13 @@ if(p==='/api/work-lots/open-queued'&&req.method==='POST'){
  let raw='';req.on('data',chunk=>{raw+=chunk;if(raw.length>100000)req.destroy();});req.on('end',()=>{
   try{
    const body=JSON.parse(raw||'{}'),model=workLotModel(body.model),actor=session.username==='patinadores'?String(body.username||''):session.username;
-   const user=stateUserForQueuedWorkLot(actor);
+   const state=readState(),user=state.users&&state.users[actor];
    if(!model)return sendJson(res,400,{ok:false,error:'Selecciona un modelo válido.'});
    if(!user||user.role!=='Patinador')return sendJson(res,403,{ok:false,error:'Esta función está disponible para Patinadores.'});
-   const state=readState(),queue=Array.isArray(state.queuedStandardBatches)?state.queuedStandardBatches:[];
+   const queue=Array.isArray(state.queuedStandardBatches)?state.queuedStandardBatches:[];
    const batch=queue.find(x=>x&&String(x.id)===String(body.batchId)&&workLotModel(x.modelo)===model);
    if(!batch||!Array.isArray(batch.tasks)||!batch.tasks.length)return sendJson(res,404,{ok:false,error:'El siguiente lote ya no está disponible. Actualiza la pantalla.'});
+   if(batch.tasks.some(t=>workLotModel(t&&(t.standardMoto||(t.standardNKD?'NKD':'')))!==model))return sendJson(res,400,{ok:false,error:'El lote preparado contiene referencias de otro modelo. Se conservó sin cambios.'});
    if(!batch.tasks.some(t=>workLotUserCanTask(user,actor,t)))return sendJson(res,403,{ok:false,error:'El siguiente lote no tiene referencias asignadas a tus puestos.'});
    const rows=readWorkLots();
    let row=rows.find(x=>x.model===model&&String(x.sourceBatchId||'')===String(batch.id));
