@@ -89,6 +89,7 @@ function safePhotoModel(value){return value==='xrs180'?'XRS-180':value==='cr4125
 const WORK_LOTS_FILE=path.join(DATA_DIR,'work-lots.json');
 const WORK_LOT_DELIVERY_FIELDS=['entregado','estado','entregas','entrega','canastasEntregadas','confirmacionesCanastas','correcciones'];
 const WORK_LOT_CAPACITY_FIELDS=['cantidadCanasta','cantidadCanastaRaw','numCanastas','numCanastasRaw'];
+const WORK_LOT_OPERATION_FIELDS=['codigoLoteOperacion','codigoOperacionActualizadoPor','codigoOperacionActualizadoEn'];
 function stableWorkValue(v){if(Array.isArray(v))return v.map(stableWorkValue);if(v&&typeof v==='object')return Object.keys(v).sort().reduce((o,k)=>(o[k]=stableWorkValue(v[k]),o),{});return v;}
 function stableWorkString(v){return JSON.stringify(stableWorkValue(v));}
 function workLotNumber(v){const n=Number(v);return Number.isFinite(n)?n:0;}
@@ -110,7 +111,7 @@ function validateWorkLot(saved,incoming,user,username){
   if(!candidate){result.push(old);continue;}
   byId.delete(key);
   if(!workLotUserCanTask(user,username,old))throw new Error('No tienes permiso para modificar este puesto.');
-  if(stableWorkString(withoutWork(old,[...WORK_LOT_DELIVERY_FIELDS,...WORK_LOT_CAPACITY_FIELDS]))!==stableWorkString(withoutWork(candidate,[...WORK_LOT_DELIVERY_FIELDS,...WORK_LOT_CAPACITY_FIELDS])))throw new Error('No puedes modificar las referencias ni sus cantidades originales.');
+  if(stableWorkString(withoutWork(old,[...WORK_LOT_DELIVERY_FIELDS,...WORK_LOT_CAPACITY_FIELDS,...WORK_LOT_OPERATION_FIELDS]))!==stableWorkString(withoutWork(candidate,[...WORK_LOT_DELIVERY_FIELDS,...WORK_LOT_CAPACITY_FIELDS,...WORK_LOT_OPERATION_FIELDS])))throw new Error('No puedes modificar las referencias ni sus cantidades originales.');
   const target=workLotTarget(old),oldDelivered=workLotNumber(old.entregado),newDelivered=workLotNumber(candidate.entregado);
   const oldEvents=Array.isArray(old.entregas)?old.entregas:[],newEvents=Array.isArray(candidate.entregas)?candidate.entregas:[];
   const oldConf=Array.isArray(old.confirmacionesCanastas)?old.confirmacionesCanastas:[],newConf=Array.isArray(candidate.confirmacionesCanastas)?candidate.confirmacionesCanastas:[];
@@ -153,6 +154,7 @@ function validateWorkLot(saved,incoming,user,username){
   const merged={...old};
   for(const k of WORK_LOT_CAPACITY_FIELDS){if(Object.prototype.hasOwnProperty.call(candidate,k))merged[k]=candidate[k];else delete merged[k];}
   for(const k of WORK_LOT_DELIVERY_FIELDS){if(Object.prototype.hasOwnProperty.call(candidate,k))merged[k]=candidate[k];else delete merged[k];}
+  for(const k of WORK_LOT_OPERATION_FIELDS){if(Object.prototype.hasOwnProperty.call(candidate,k))merged[k]=candidate[k];else delete merged[k];}
   result.push(merged);
  }
  if(byId.size)throw new Error('La lista contiene referencias que no pertenecen a este lote.');
