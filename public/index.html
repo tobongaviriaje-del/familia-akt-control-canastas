@@ -286,6 +286,8 @@ function guardarCodigoOperacionCompartido(){
  cloudSave().then(ok=>{if(!ok){alert('No se pudo guardar el código de operación: '+(cloudSaveLastError||'revisa la conexión e intenta de nuevo.')+' No repitas el cambio hasta verificar el lote.');return;}render();alert('Código '+codigo+' guardado para '+modelo+'. Todos los turnos podrán verlo.');});
 }
 let selectedTrackingOperation='';
+let selectedSupervisorSkater='';
+function seleccionarPatinadorSupervisor(username){selectedSupervisorSkater=String(username||'');renderProgresoPatinadores();}
 let ccAlertAudio=null,ccAlertAudioEnabled=localStorage.getItem('cc_alertas_lote_audio')==='1';
 async function activarAvisosLote(){try{const AC=window.AudioContext||window.webkitAudioContext;if(AC){ccAlertAudio=ccAlertAudio||new AC();if(ccAlertAudio.state==='suspended')await ccAlertAudio.resume();}ccAlertAudioEnabled=true;localStorage.setItem('cc_alertas_lote_audio','1');if(navigator.vibrate)navigator.vibrate([120,70,120]);reproducirAvisoLote();renderProgresoPatinadores();}catch(e){alert('El navegador no permitió activar el sonido. Revisa los permisos del dispositivo.');}}
 function reproducirAvisoLote(){if(!ccAlertAudioEnabled||!ccAlertAudio)return;try{if(ccAlertAudio.state==='suspended')ccAlertAudio.resume();const now=ccAlertAudio.currentTime;[0,0.22,0.44].forEach((d,i)=>{const o=ccAlertAudio.createOscillator(),g=ccAlertAudio.createGain();o.type='sine';o.frequency.value=i===1?1046:880;g.gain.setValueAtTime(0.0001,now+d);g.gain.exponentialRampToValueAtTime(0.18,now+d+0.025);g.gain.exponentialRampToValueAtTime(0.0001,now+d+0.18);o.connect(g);g.connect(ccAlertAudio.destination);o.start(now+d);o.stop(now+d+0.19);});}catch(e){}}
@@ -325,51 +327,36 @@ function renderProgresoPatinadores(){
  const isCoordinator=current.role==='Coordinador'||String(current.role||'').toLowerCase()==='coordinador';
  if(!['Admin','Supervisor'].includes(current.role)&&!isCoordinator){panel.classList.add('hidden');return;}
  panel.classList.remove('hidden');if(progress)progress.innerHTML='Consulta de avance por lote u operación. Esta vista no modifica entregas ni estándares.';
- const opMap=new Map();
+ const skaters=Object.entries(users||{}).filter(([key,u])=>u&&u.role==='Patinador');
+ if(!skaters.some(([key])=>key===selectedSupervisorSkater))selectedSupervisorSkater=skaters[0]?.[0]||'';
+ const activeMap=new Map();
  const fechaOperacion=t=>{
   const raw=String(t.fechaCreacion||t.createdAt||'').trim();
   if(raw){const parsed=Date.parse(raw);if(Number.isFinite(parsed))return parsed;
-   const m=raw.replace(/\//g,'-').match(/(\d{1,2})-(\d{1,2})-(\d{4})(?:[^0-9]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
+   const m=raw.replace(/\\//g,'-').match(/(\\d{1,2})-(\\d{1,2})-(\\d{4})(?:[^0-9]+(\\d{1,2}):(\\d{2})(?::(\\d{2}))?)?/);
    if(m)return new Date(Number(m[3]),Number(m[2])-1,Number(m[1]),Number(m[4]||0),Number(m[5]||0),Number(m[6]||0)).getTime();
   }
   const id=Number(t.id);return Number.isFinite(id)?id:0;
  };
- // El seguimiento diario solo incluye tareas creadas/programadas en la fecha local de hoy.
- // Las tareas de jornadas anteriores permanecen intactas y se consultan en el historial.
  const hoy=new Date();
- const esTareaDeHoy=t=>{
-  const ts=fechaOperacion(t);
-  if(!ts)return false;
-  const d=new Date(ts);
-  return d.getFullYear()===hoy.getFullYear()&&d.getMonth()===hoy.getMonth()&&d.getDate()===hoy.getDate();
- };
+ const esTareaDeHoy=t=>{const ts=fechaOperacion(t);if(!ts)return false;const d=new Date(ts);return d.getFullYear()===hoy.getFullYear()&&d.getMonth()===hoy.getMonth()&&d.getDate()===hoy.getDate();};
  tasks.filter(x=>(x.standardNKD||esContinuidadXRS180(x))&&esTareaDeHoy(x)).forEach(x=>{
   const modelo=modeloDeTareaEstandar(x),codigo=String(x.codigoLoteOperacion||'').trim(),key=modelo+'|||'+codigo;
-  if(!opMap.has(key))opMap.set(key,{key,modelo,codigo,tasks:[],latestAt:0,total:0,delivered:0,pending:0});
-  const op=opMap.get(key),objetivo=Math.max(0,Number(unidadesObjetivoEstandar(x))||0),entregado=Math.min(objetivo,Math.max(0,Number(x.entregado)||0));
+  if(!activeMap.has(key))activeMap.set(key,{modelo,codigo,tasks:[],latestAt:0,total:0,delivered:0,pending:0});
+  const op=activeMap.get(key),objetivo=Math.max(0,Number(unidadesObjetivoEstandar(x))||0),entregado=Math.min(objetivo,Math.max(0,Number(x.entregado)||0));
   op.tasks.push(x);op.latestAt=Math.max(op.latestAt,fechaOperacion(x));op.total+=objetivo;op.delivered+=entregado;op.pending+=Math.max(0,objetivo-entregado);
  });
- // Solo se muestran operaciones que aún tienen unidades pendientes; las completadas
- // salen de la vista activa sin borrar tareas, entregas ni correcciones del historial.
- const ops=[...opMap.values()].filter(x=>x.pending>0).sort((a,b)=>b.latestAt-a.latestAt);
- const recentOps=ops.slice(0,3);
- if(!recentOps.some(x=>x.key===selectedTrackingOperation))selectedTrackingOperation=recentOps[0]?.key||'';
- const selected=recentOps.find(x=>x.key===selectedTrackingOperation)||null;
- const options=recentOps.map(x=>'<option value="'+esc(x.key)+'" '+(selected&&x.key===selected.key?'selected':'')+'>'+esc(x.modelo)+' · OPR/lote '+esc(x.codigo||'Sin código')+'</option>').join('');
- if(!selected){
-  box.innerHTML='<h4>📦 Operaciones activas</h4><p class="muted">No hay operaciones pendientes. El avance activo está en 0%.</p><div class="notice"><b>Avance / entregado (+)</b><h2>0%</h2><p>0 unidades activas por entregar</p></div><p class="muted">Las operaciones terminadas y sus entregas permanecen conservadas en el historial.</p>';
-  return;
- }
- const total=selected.total;
- const delivered=selected.delivered;
- const pending=Math.max(0,total-delivered),deliveredPct=total?pct(delivered/total*100):0,pendingPct=total?Math.max(0,100-deliveredPct):0;
- const individual=Object.entries(users||{}).filter(([key,u])=>u&&u.role==='Patinador').map(([key,u])=>{
-  const assignedTasks=selected.tasks.filter(x=>tareasAsignadasAUsuarioEstandar(x,u,key));
-  const r=resumenEntregaPatinador(selected.tasks,u,key),done=pct(r.pct),left=Math.max(0,100-done);
-  const estibas=new Set(assignedTasks.map(x=>String(x.lpn||x.estiba||'').trim()).filter(Boolean)).size;
-  return {done,row:'<tr><td>'+esc(u.name||u.nombre||key)+'</td><td>'+estibas+'</td><td>'+r.assigned+'</td><td>'+r.delivered.toLocaleString('es-CO')+' / '+r.total.toLocaleString('es-CO')+'</td><td><div style="display:flex;width:100%;height:22px;background:#e5e7eb;border-radius:8px;overflow:hidden;margin-top:5px;font-size:10px;font-weight:700;line-height:22px;text-align:center;white-space:nowrap"><div style="height:22px;width:'+done+'%;min-width:0;background:#16a34a;color:white;overflow:visible">+'+fmt(done)+'%</div><div style="height:22px;width:'+left+'%;min-width:0;background:#e5e7eb;color:#374151;overflow:visible">−'+fmt(left)+'%</div></div></td></tr>'};
- }).sort((a,b)=>b.done-a.done).map(x=>x.row).join('');
- box.innerHTML='<h4>📦 Últimas 3 operaciones pendientes o en proceso</h4><label style="display:block;max-width:520px">Seleccionar operación<select id="seguimientoOperacionSelect" onchange="cambiarOperacionSeguimiento(this.value)" style="width:100%;padding:10px;margin-top:5px">'+options+'</select></label><p class="muted">Las operaciones completadas salen automáticamente de esta lista; el historial se conserva.</p><h4>📦 '+esc(selected.modelo)+' · OPR/lote '+esc(selected.codigo||'Sin código')+'</h4><div class="grid"><div class="notice"><b>Avance / entregado (+)</b><h2>'+fmt(deliveredPct)+'%</h2><p>'+delivered.toLocaleString('es-CO')+' de '+total.toLocaleString('es-CO')+' unidades</p></div><div class="notice"><b>Falta / pendiente (−)</b><h2>'+fmt(pendingPct)+'%</h2><p>'+pending.toLocaleString('es-CO')+' unidades por entregar</p></div></div><h4>Seguimiento por patinador en esta operación</h4><div class="scroll"><table><thead><tr><th>Patinador</th><th>Estibas asignadas</th><th>Referencias asignadas</th><th>Entregadas / total</th><th>Avance y pendiente</th></tr></thead><tbody>'+(individual||'<tr><td colspan="5">No hay patinadores asignados a esta operación.</td></tr>')+'</tbody></table></div><p class="muted">Vista de consulta. Las entregas anteriores se conservan en el historial.</p>'+(current.role==='Admin'&&selected.codigo?'<button type="button" class="danger" onclick="retirarLoteCompletado()">🗑️ Retirar este lote de tareas activas</button><p class="muted">Puedes retirar lotes terminados o lotes que finalmente no se trabajaron.</p>':'');
+ const active=[...activeMap.values()].filter(x=>x.pending>0).sort((a,b)=>b.latestAt-a.latestAt)[0]||null;
+ const next=Array.isArray(queuedStandardBatches)?queuedStandardBatches.find(x=>Array.isArray(x.tasks)&&x.tasks.length>0)||null:null;
+ const selected=skaters.find(([key])=>key===selectedSupervisorSkater)||null;
+ const buttons=skaters.map(([key,u])=>'<button type="button" class="'+(key===selectedSupervisorSkater?'':'secondary')+'" data-skater="'+esc(key)+'" onclick="seleccionarPatinadorSupervisor(this.dataset.skater)" style="margin:4px 6px 4px 0">'+esc(u.name||u.nombre||key)+'</button>').join('');
+ const progressCard=(label,op,u,key,isNext)=>{
+  if(!op)return '<div class="notice"><b>'+label+'</b><p class="muted">'+(isNext?'No hay un lote siguiente preparado.':'No se detecta un lote actual con tareas pendientes hoy.')+'</p></div>';
+  const r=resumenEntregaPatinador(op.tasks,u,key),done=pct(r.pct),left=Math.max(0,100-done),hasTasks=r.assigned>0&&r.total>0;
+  const color=isNext?'#64748b':'#16a34a';
+  return '<div class="notice" style="margin:10px 0"><b>'+(isNext?'🕒 ':'🟢 ')+label+'</b><h3>'+esc(op.modelo)+' · Lote '+esc(op.codigo||'Sin código')+'</h3>'+(hasTasks?'<div class="grid"><div><b>Avance (+)</b><h2>'+fmt(done)+'%</h2><small>'+fmt(r.delivered)+' de '+fmt(r.total)+' unidades</small></div><div><b>Pendiente (−)</b><h2>'+fmt(left)+'%</h2><small>'+fmt(Math.max(0,r.total-r.delivered))+' unidades por entregar</small></div></div><div style="display:flex;height:12px;background:#e5e7eb;border-radius:8px;overflow:hidden;margin:8px 0"><div style="width:'+done+'%;background:'+color+'"></div><div style="width:'+left+'%;background:#cbd5e1"></div></div><p class="muted">Referencias asignadas: '+r.assigned+'</p>':'<p class="muted">Este patinador no tiene tareas asignadas en este lote.</p>')+'</div>';
+ };
+ box.innerHTML='<h4>📦 Seguimiento por patinador</h4><p class="muted">Selecciona un patinador para consultar por separado su lote actual y el siguiente. Los porcentajes se calculan con sus propias entregas; el lote siguiente comienza en 0%.</p><div style="display:flex;flex-wrap:wrap;gap:4px">'+(buttons||'<p class="muted">No hay patinadores registrados.</p>')+'</div>'+(selected?'<h4>Patinador: '+esc(selected[1].name||selected[1].nombre||selected[0])+'</h4>'+progressCard('Lote actual',active,selected[1],selected[0],false)+progressCard('Lote siguiente',next,selected[1],selected[0],true):'');
 }
 async function retirarLoteCompletado(){
  if(!isAdmin())return;
