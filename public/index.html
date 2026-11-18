@@ -298,9 +298,23 @@ function renderProgresoPatinadores(){
  const esc=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
  const pct=v=>Math.max(0,Math.min(100,Number(v)||0));
  const fmt=v=>Number(v||0).toLocaleString('es-CO',{maximumFractionDigits:1});
+ const hoyLocal=new Date();
+ const fechaDeTarea=t=>{
+  const raw=String(t.fechaCreacion||t.createdAt||'').trim();
+  if(raw){const parsed=Date.parse(raw);if(Number.isFinite(parsed))return parsed;
+   const m=raw.replace(/\\//g,'-').match(/(\\d{1,2})-(\\d{1,2})-(\\d{4})(?:[^0-9]+(\\d{1,2}):(\\d{2})(?::(\\d{2}))?)?/);
+   if(m)return new Date(Number(m[3]),Number(m[2])-1,Number(m[1]),Number(m[4]||0),Number(m[5]||0),Number(m[6]||0)).getTime();
+  }
+  const id=Number(t.id);return Number.isFinite(id)?id:0;
+ };
+ const esDeHoy=t=>{const ts=fechaDeTarea(t);if(!ts)return false;const d=new Date(ts);return d.getFullYear()===hoyLocal.getFullYear()&&d.getMonth()===hoyLocal.getMonth()&&d.getDate()===hoyLocal.getDate();};
  if(current.role==='Patinador'){
   panel.classList.remove('hidden');
-  const modelo=String($('modeloEstandarPatinador')?.value||localStorage.getItem('cc_modelo_moto')||'NKD'),ownModel=tasks.filter(x=>(x.standardNKD||esContinuidadXRS180(x))&&modeloDeTareaEstandar(x)===modelo),own=resumenEntregaPatinador(ownModel,current,current.username),r=ownModel.reduce((acc,x)=>{acc.entregado+=Math.min(Math.max(0,Number(x.entregado)||0),Math.max(0,Number(unidadesObjetivoEstandar(x))||0));acc.total+=Math.max(0,Number(unidadesObjetivoEstandar(x))||0);return acc;},{entregado:0,total:0});
+  const modelo=String($('modeloEstandarPatinador')?.value||localStorage.getItem('cc_modelo_moto')||'NKD');
+  const modelTasks=tasks.filter(x=>(x.standardNKD||esContinuidadXRS180(x))&&modeloDeTareaEstandar(x)===modelo&&esDeHoy(x));
+  const activos=modelTasks.filter(x=>Math.max(0,Number(unidadesObjetivoEstandar(x))||0)-Math.max(0,Number(x.entregado)||0)>0);
+  const codigoActivo=activos.sort((a,b)=>fechaDeTarea(b)-fechaDeTarea(a))[0]?.codigoLoteOperacion;
+  const ownModel=(codigoActivo?modelTasks.filter(x=>String(x.codigoLoteOperacion||'').trim()===String(codigoActivo).trim()):modelTasks.filter(x=>Math.max(0,Number(unidadesObjetivoEstandar(x))||0)-Math.max(0,Number(x.entregado)||0)>0)),own=resumenEntregaPatinador(ownModel,current,current.username),r=ownModel.reduce((acc,x)=>{acc.entregado+=Math.min(Math.max(0,Number(x.entregado)||0),Math.max(0,Number(unidadesObjetivoEstandar(x))||0));acc.total+=Math.max(0,Number(unidadesObjetivoEstandar(x))||0);return acc;},{entregado:0,total:0});
   const codigo=[...new Set(ownModel.map(x=>String(x.codigoLoteOperacion||'').trim()).filter(Boolean))].join(', ');
   const siguiente=queuedStandardBatches.find(q=>normalizarModeloContinuidad(q.modeloActual||q.modelo)===normalizarModeloContinuidad(modelo));
   avisarAvanceLote85(modelo,codigo,own.pct);
@@ -1053,7 +1067,7 @@ function prepararEstandarNKD(input){
      // Algunas hojas repiten sus encabezados entre los datos; no convertirlos en tareas.
      if(['nombre','producto','descripcion'].includes(productoHeader)||['puesto','ubicacion','posicion','linea'].includes(puestoHeader)||['ean','ean / codigo','codigo'].includes(eanHeader))return;
      if(!ean||!producto||!puesto||!Number.isFinite(cantidad)||cantidad<0)return;
-     parsed.push({numeroReferencia:get('numeroReferencia'),id:'std-'+modelo.replace(/[^a-z0-9]/gi,'').toLowerCase()+'-'+Date.now()+'-'+parsed.length,lpn:'ESTANDAR-'+modelo,estiba:sheetName,ean,producto,cantidad,cantidadUnidad,lote:lote>0?lote:cantidad,cantidadCanastaRaw:cantidadCanastaRaw,cantidadCanasta,canasta,numCanastasRaw,numCanastas,area:/^PRE /i.test(puesto)?'PRE':/^Derecho /i.test(puesto)?'Derecho':/^Izquierdo /i.test(puesto)?'Izquierdo':'Final de línea',puesto,turno:'Todos',estado:'Pendiente',entregado:0,entregas:[],canastasEntregadas:0,confirmacionesCanastas:[],standardNKD:true,standardMoto:modelo,hojaEstandar:sheetName,grupoEstandar:get('grupo'),patinadorEstandar:patinadorDeHojaEstandar(sheetName),creadoPor:current?.name||'Administrador'});
+     parsed.push({numeroReferencia:get('numeroReferencia'),id:'std-'+modelo.replace(/[^a-z0-9]/gi,'').toLowerCase()+'-'+Date.now()+'-'+parsed.length,lpn:'ESTANDAR-'+modelo,estiba:sheetName,ean,producto,cantidad,cantidadUnidad,lote:lote>0?lote:cantidad,cantidadCanastaRaw:cantidadCanastaRaw,cantidadCanasta,canasta,numCanastasRaw,numCanastas,area:/^PRE /i.test(puesto)?'PRE':/^Derecho /i.test(puesto)?'Derecho':/^Izquierdo /i.test(puesto)?'Izquierdo':'Final de línea',puesto,turno:'Todos',estado:'Pendiente',entregado:0,entregas:[],canastasEntregadas:0,confirmacionesCanastas:[],standardNKD:true,standardMoto:modelo,hojaEstandar:sheetName,grupoEstandar:get('grupo'),patinadorEstandar:patinadorDeHojaEstandar(sheetName),creadoPor:current?.name||'Administrador',fechaCreacion:new Date().toLocaleString('es-CO')});
     });
    });
    if(!parsed.length){msg.className='error';msg.textContent='No pude identificar referencias válidas. El Excel debe tener columnas equivalentes a código EAN/referencia, nombre o descripción de pieza y puesto/ubicación. No se cambió el estándar guardado.';return;}
