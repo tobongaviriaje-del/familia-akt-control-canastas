@@ -145,6 +145,7 @@ async function cloudLoad(){
 }
 let patinadorWorkLot=null;
 let cloudSaveQueue=Promise.resolve(true);
+let cloudSaveLastError='';
 function cloudSave(){
   const snapshot=JSON.stringify({users,tasks:cloudTasks,lpnCatalog,queuedStandardBatches,freeDeliveries,estibasRecibidas,tareasArchivadas});
   cloudSaveQueue=cloudSaveQueue.catch(()=>false).then(async()=>{
@@ -155,8 +156,9 @@ function cloudSave(){
         method:'PUT',headers:{'Content-Type':'application/json'},
         body:isSkater?JSON.stringify({username:current.username,model:patinadorWorkLot.model,lotId:patinadorWorkLot.id,version:patinadorWorkLot.updatedAt,tasks:cloudTasks}):snapshot
       });
-      if(!r.ok)throw new Error('El servidor rechazó el guardado');
-      const saved=await r.json().catch(()=>null);
+      const responseData=await r.json().catch(()=>null);
+      if(!r.ok)throw new Error(responseData&&responseData.error?responseData.error:'El servidor rechazó el guardado ('+r.status+').');
+      const saved=responseData;
       if(isSkater&&saved){cloudTasks=Array.isArray(saved.tasks)?saved.tasks:cloudTasks;if(saved.lot)patinadorWorkLot={...patinadorWorkLot,...saved.lot};}
       if(saved&&Array.isArray(saved.tasks)){
         cloudTasks=saved.tasks;
@@ -165,9 +167,11 @@ function cloudSave(){
         localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
         try{localStorage.setItem('cc_tareas_archivadas',JSON.stringify(tareasArchivadas));}catch(_){}
       }
+      cloudSaveLastError='';
       cloudReady=true;
       return true;
     }catch(e){
+      cloudSaveLastError=String(e&&e.message||'Error desconocido al guardar.');
       cloudReady=false;
       return false;
     }
@@ -279,7 +283,7 @@ function guardarCodigoOperacionCompartido(){
  if(existentes.length&&!existentes.includes(codigo)&&!confirm('Este modelo ya tiene el código '+existentes.join(', ')+'. ¿Deseas actualizarlo a '+codigo+' para todos?'))return;
  grupo.forEach(x=>{x.codigoLoteOperacion=codigo;x.codigoOperacionActualizadoPor=current.name||current.username||'Patinador';x.codigoOperacionActualizadoEn=new Date().toLocaleString('es-CO');});
  cloudTasks=tasks;localStorage.setItem('cc_tasks',JSON.stringify(tasks));
- cloudSave().then(ok=>{if(!ok){alert('No se pudo confirmar el guardado en la nube. Revisa la conexión e intenta de nuevo.');return;}render();alert('Código '+codigo+' guardado para '+modelo+'. Todos los turnos podrán verlo.');});
+ cloudSave().then(ok=>{if(!ok){alert('No se pudo guardar el código de operación: '+(cloudSaveLastError||'revisa la conexión e intenta de nuevo.')+' No repitas el cambio hasta verificar el lote.');return;}render();alert('Código '+codigo+' guardado para '+modelo+'. Todos los turnos podrán verlo.');});
 }
 let selectedTrackingOperation='';
 let ccAlertAudio=null,ccAlertAudioEnabled=localStorage.getItem('cc_alertas_lote_audio')==='1';
