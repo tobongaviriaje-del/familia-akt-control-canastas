@@ -303,12 +303,12 @@ function renderProgresoPatinadores(){
  function parseFechaAKT(valor){
   const raw=String(valor||'').trim();if(!raw)return NaN;
   // Las fechas nuevas en ISO se interpretan como instante absoluto.
-  if(/^\\d{4}-\\d{2}-\\d{2}T/.test(raw)){const iso=Date.parse(raw);if(Number.isFinite(iso))return iso;}
+  if(/^\d{4}-\d{2}-\d{2}T/.test(raw)){const iso=Date.parse(raw);if(Number.isFinite(iso))return iso;}
   // Los datos históricos es-CO son D/M/YYYY; no pasarlos primero por Date.parse,
   // que en algunos navegadores los interpreta como M/D/YYYY.
-  const m=raw.match(/^(\\d{1,2})[\\/-](\\d{1,2})[\\/-](\\d{4})(?:[, T]+(\\d{1,2}):(\\d{2})(?::(\\d{2}))?\\s*(a\\.?\\s*m\\.?|p\\.?\\s*m\\.?)?)?/i);
+  const m=raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})(?:[, T]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(a\.?\s*m\.?|p\.?\s*m\.?)?)?/i);
   if(m){
-   let h=Number(m[4]||0);const ampm=String(m[7]||'').toLowerCase().replace(/\\s/g,'');
+   let h=Number(m[4]||0);const ampm=String(m[7]||'').toLowerCase().replace(/\s/g,'');
    if(ampm.startsWith('p')&&h<12)h+=12;if(ampm.startsWith('a')&&h===12)h=0;
    const d=Number(m[1]),mo=Number(m[2]),y=Number(m[3]),mi=Number(m[5]||0),sec=Number(m[6]||0);
    const date=new Date(y,mo-1,d,h,mi,sec);
