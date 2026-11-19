@@ -84,7 +84,7 @@ function readZipEntries(buffer){
  }
  return out;
 }
-function safePhotoModel(value){return value==='xrs180'?'XRS-180':value==='cr4125'?'CR4 125':value==='cr4150'?'CR4-150':value==='nkd'?'NKD':value==='chr'?'CHR':null;}
+function safePhotoModel(value){return value==='xrs180'?'XRS-180':value==='cr4125'?'CR4 125':value==='cr4150'?'CR4-150':value==='nkd'?'NKD':value==='chr'?'CHR':value==='voge180'?'VOGE 180':null;}
 
 const WORK_LOTS_FILE=path.join(DATA_DIR,'work-lots.json');
 const WORK_LOT_DELIVERY_FIELDS=['entregado','estado','entregas','entrega','canastasEntregadas','confirmacionesCanastas','correcciones'];
@@ -93,7 +93,7 @@ const WORK_LOT_OPERATION_FIELDS=['codigoLoteOperacion','codigoOperacionActualiza
 function stableWorkValue(v){if(Array.isArray(v))return v.map(stableWorkValue);if(v&&typeof v==='object')return Object.keys(v).sort().reduce((o,k)=>(o[k]=stableWorkValue(v[k]),o),{});return v;}
 function stableWorkString(v){return JSON.stringify(stableWorkValue(v));}
 function workLotNumber(v){const n=Number(v);return Number.isFinite(n)?n:0;}
-function workLotModel(v){return String(v||'').trim().toUpperCase().replace(/VOGUE 180/g,'VOGE 180').replace(/VOGI 180/g,'VOGE 180').replace(/^CH$/,'CHR').replace(/^CR4[-_ ]?150$/,'CR4 150').replace(/^CR4[-_ ]?125$/,'CR4 125').replace(/^XRS[ _]?180$/,'XRS-180');}
+function workLotModel(v){return String(v||'').trim().toUpperCase().replace(/VOGUE 180/g,'VOGE 180').replace(/VOGI 180/g,'VOGE 180').replace(/VOGE 180BES/g,'VOGE 180').replace(/^CH$/,'CHR').replace(/^CR4[-_ ]?150$/,'CR4 150').replace(/^CR4[-_ ]?125$/,'CR4 125').replace(/^XRS[ _]?180$/,'XRS-180');}
 function workLotTarget(t){const lot=workLotNumber(t.lote),qty=workLotNumber(t.cantidad),cap=workLotNumber(t.cantidadCanasta),baskets=workLotNumber(t.numCanastas),unit=workLotNumber(t.cantidadUnidad);if(lot>1)return lot;if(qty>1)return qty;if(cap>0&&baskets>0)return cap*baskets;return unit>0?unit:(lot>0?lot:(cap>0?cap:qty));}
 function readWorkLots(){try{if(!fs.existsSync(WORK_LOTS_FILE))return [];const data=JSON.parse(fs.readFileSync(WORK_LOTS_FILE,'utf8'));return Array.isArray(data)?data:[];}catch(e){console.error('No se pudieron leer los lotes de trabajo:',e.message);throw new Error('No se pudieron leer los lotes de trabajo.');}}
 function writeWorkLots(rows){fs.mkdirSync(DATA_DIR,{recursive:true});const tmp=WORK_LOTS_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(rows,null,2),{mode:0o600});fs.renameSync(tmp,WORK_LOTS_FILE);}
@@ -475,7 +475,7 @@ if(p==='/api/admin/archive-completed-lot'&&req.method==='POST'){
 if(p==='/api/admin/reference-photos/diagnostic'&&req.method==='GET'){
  const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),state=readState();
  if(!session||session.username!=='admin'||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede consultar este diagnóstico.'});
- const models=[{key:'nkd',name:'NKD',match:t=>!!t.standardNKD&&String(t.standardMoto||t.modelo||'NKD').trim().toUpperCase()==='NKD'},{key:'cr4125',name:'CR4 125',match:t=>String(t.standardMoto||t.modelo||t.modeloMoto||'').trim().toUpperCase().replace(/[-_]/g,' ')==='CR4 125'},{key:'cr4150',name:'CR4-150',match:t=>['CR4 150','CR4-150'].includes(String(t.standardMoto||t.modelo||t.modeloMoto||'').trim().toUpperCase())},{key:'xrs180',name:'XRS-180',match:t=>String(t.standardMoto||t.modelo||t.modeloMoto||'').trim().toUpperCase().replace(/[-_ ]/g,'')==='XRS180'},{key:'chr',name:'CHR',match:t=>String(t.standardMoto||t.modelo||t.modeloMoto||'').trim().toUpperCase()==='CHR'}];
+ const models=[{key:'nkd',name:'NKD',match:t=>!!t.standardNKD&&String(t.standardMoto||t.modelo||'NKD').trim().toUpperCase()==='NKD'},{key:'cr4125',name:'CR4 125',match:t=>String(t.standardMoto||t.modelo||t.modeloMoto||'').trim().toUpperCase().replace(/[-_]/g,' ')==='CR4 125'},{key:'cr4150',name:'CR4-150',match:t=>['CR4 150','CR4-150'].includes(String(t.standardMoto||t.modelo||t.modeloMoto||'').trim().toUpperCase())},{key:'xrs180',name:'XRS-180',match:t=>String(t.standardMoto||t.modelo||t.modeloMoto||'').trim().toUpperCase().replace(/[-_ ]/g,'')==='XRS180'},{key:'chr',name:'CHR',match:t=>String(t.standardMoto||t.modelo||t.modeloMoto||'').trim().toUpperCase()==='CHR'},{key:'voge180',name:'VOGE 180',match:t=>['VOGE 180','VOGUE 180','VOGE 180BES','VOGUE 180BES'].includes(String(t.standardMoto||t.modelo||t.modeloMoto||'').trim().toUpperCase())}];
  const normPos=v=>{const x=String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');let m=x.match(/^pre\s*0*(\d+)$/);if(m)return 'pre '+Number(m[1]);m=x.match(/^0*(\d+)\s*(derecho|izquierdo)$/);if(m)return m[2]+' '+Number(m[1]);m=x.match(/^(derecho|izquierdo|final(?: de linea)?)\s*0*(\d+)$/);if(m)return (m[1].startsWith('final')?'final':m[1])+' '+Number(m[2]);return x;};
  const out=models.map(model=>{
   const dir=path.join(DATA_DIR,'reference-photos',model.key),manifestPath=path.join(dir,'manifest.json');let manifest=null,manifestError=null;
