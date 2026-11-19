@@ -1431,9 +1431,12 @@ function renderPatinadorChecklist(){
  const left=assigned.length?Math.min(...assigned.map(x=>{const saldo=resumenCantidadLote(x,assigned);return saldo.aplica?saldo.restante:Math.max(0,unidadesObjetivoEstandar(x)-(Number(x.entregado)||0));})):0;
  progress.innerHTML='<b>Modelo:</b> '+modelo+' · <b>Referencias:</b> '+done+' de '+total+' completadas · <b>Unidades:</b> '+units+' entregadas · '+left+' pendientes';
  if(!total){wrap.innerHTML='<p class="muted">Todavía no hay referencias cargadas para '+modelo+' en tus puestos. El mesanín o administrador debe seleccionar '+modelo+' y subir su Excel.</p>';return;}
+ const safeText=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
  const rows=assigned.map(x=>{
   const qty=unidadesObjetivoEstandar(x),del=Number(x.entregado)||0,rest=Math.max(0,qty-del),complete=qty>0&&rest===0;
-  const registro=complete?'<span class="pill">✓ Lote agotado</span>':'<input aria-label="Unidades entregadas ahora" id="stdQty'+x.id+'" type="number" min="1" '+(rest>0?'max="'+rest+'"':'')+' value="1" style="width:90px;margin:2px 0"><button type="button" class="small" onclick="registrarEntregaEstandar(\''+x.id+'\')">✓ Registrar unidades</button>';
+  const movimientos=Array.isArray(x.entregas)?x.entregas:[];
+  const historial=movimientos.length?'<details style="margin-top:6px"><summary>Historial de entregas ('+movimientos.length+')</summary>'+movimientos.slice().reverse().map(e=>'<div style="padding:4px 0;border-bottom:1px solid #e2e8f0"><small><b>'+safeText(e.fechaHora||'Fecha no disponible')+'</b><br>'+safeText(e.cantidad||0)+' unidades · '+safeText(e.patinador||'Patinador')+'</small></div>').join('')+'</details>':'';
+  const registro=(complete?'<span class="pill">✓ Lote agotado</span>':'<input aria-label="Unidades entregadas ahora" id="stdQty'+x.id+'" type="number" min="1" '+(rest>0?'max="'+rest+'"':'')+' value="1" style="width:90px;margin:2px 0"><button type="button" class="small" onclick="registrarEntregaEstandar(\''+x.id+'\')">✓ Registrar unidades</button>')+historial;
   const corregir=del>0?'<button type="button" class="small secondary" onclick="corregirEntrega(\''+x.id+'\')">↩ Corregir saldo</button>':'<span class="muted">Sin entregas</span>';
   const estadoColor=complete?'#e8f5e9':(del>0?'#fff3cd':'#fdecea');
   const estadoTexto=complete?'COMPLETA':(del>0?'PARCIAL':'PENDIENTE');
