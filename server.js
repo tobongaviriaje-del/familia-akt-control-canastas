@@ -93,6 +93,11 @@ const WORK_LOT_OPERATION_FIELDS=['codigoLoteOperacion','codigoOperacionActualiza
 function stableWorkValue(v){if(Array.isArray(v))return v.map(stableWorkValue);if(v&&typeof v==='object')return Object.keys(v).sort().reduce((o,k)=>(o[k]=stableWorkValue(v[k]),o),{});return v;}
 function stableWorkString(v){return JSON.stringify(stableWorkValue(v));}
 function workLotNumber(v){const n=Number(v);return Number.isFinite(n)?n:0;}
+function workLotTimestamp(date=new Date()){
+ const fechaHoraISO=date.toISOString();
+ const fechaHora=new Intl.DateTimeFormat('es-CO',{timeZone:'America/Bogota',day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).format(date);
+ return {fechaHora,fechaHoraISO};
+}
 function workLotModel(v){return String(v||'').trim().toUpperCase().replace(/VOGUE 180/g,'VOGE 180').replace(/VOGI 180/g,'VOGE 180').replace(/^CH$/,'CHR').replace(/^CR4[-_ ]?150$/,'CR4 150').replace(/^CR4[-_ ]?125$/,'CR4 125').replace(/^XRS[ _]?180$/,'XRS-180');}
 function workLotTarget(t){const lot=workLotNumber(t.lote),qty=workLotNumber(t.cantidad),cap=workLotNumber(t.cantidadCanasta),baskets=workLotNumber(t.numCanastas),unit=workLotNumber(t.cantidadUnidad);if(lot>1)return lot;if(qty>1)return qty;if(cap>0&&baskets>0)return cap*baskets;return unit>0?unit:(lot>0?lot:(cap>0?cap:qty));}
 function readWorkLots(){try{if(!fs.existsSync(WORK_LOTS_FILE))return [];const data=JSON.parse(fs.readFileSync(WORK_LOTS_FILE,'utf8'));return Array.isArray(data)?data:[];}catch(e){console.error('No se pudieron leer los lotes de trabajo:',e.message);throw new Error('No se pudieron leer los lotes de trabajo.');}}
@@ -140,14 +145,16 @@ function validateWorkLot(saved,incoming,user,username){
    if(workLotNumber(movement&&movement.cantidad)!==newDelivered-oldDelivered)throw new Error('La cantidad del movimiento no coincide.');
    const expected=newDelivered>=target?'Entregada':'Parcial';
    if(candidate.estado!==expected||stableWorkString(candidate.entrega||null)!==stableWorkString(movement))throw new Error('El estado de entrega no coincide.');
+   Object.assign(movement,workLotTimestamp());
+   candidate.entrega=movement;
    if(newConf.length!==oldConf.length+(physical>0?1:0)||!oldConf.every((e,i)=>stableWorkString(e)===stableWorkString(newConf[i])))throw new Error('La confirmación de canastas no coincide.');
-   if(physical>0){const last=newConf[newConf.length-1];if(workLotNumber(last&&last.cantidad)!==physical||workLotNumber(last&&last.unidades)!==newDelivered-oldDelivered||workLotNumber(candidate.canastasEntregadas)!==workLotNumber(old.canastasEntregadas)+physical)throw new Error('Las canastas físicas no coinciden con las unidades.');}
+   if(physical>0){const last=newConf[newConf.length-1];if(workLotNumber(last&&last.cantidad)!==physical||workLotNumber(last&&last.unidades)!==newDelivered-oldDelivered||workLotNumber(candidate.canastasEntregadas)!==workLotNumber(old.canastasEntregadas)+physical)throw new Error('Las canastas físicas no coinciden con las unidades.');Object.assign(last,workLotTimestamp());}
    else if(stableWorkString(newConf)!==stableWorkString(oldConf)||workLotNumber(candidate.canastasEntregadas)!==workLotNumber(old.canastasEntregadas))throw new Error('No se permiten cambios en las canastas físicas.');
   }else{
    if(stableWorkString(newEvents)!==stableWorkString(oldEvents)||stableWorkString(newCorrections)!==stableWorkString(oldCorrections)||candidate.estado!==old.estado||stableWorkString(candidate.entrega||null)!==stableWorkString(old.entrega||null))throw new Error('No se permiten cambios en el historial de entregas.');
    if(!capacityChanged){
     const added=newConf.length===oldConf.length+1&&oldConf.every((e,i)=>stableWorkString(e)===stableWorkString(newConf[i]));
-    if(added){const last=newConf[newConf.length-1],n=workLotNumber(last&&last.cantidad);if(last.soloConteo!==true||n<1||!Number.isInteger(n)||workLotNumber(last.unidades)!==0||workLotNumber(candidate.canastasEntregadas)!==workLotNumber(old.canastasEntregadas)+n)throw new Error('El conteo de canastas no es válido.');}
+    if(added){const last=newConf[newConf.length-1],n=workLotNumber(last&&last.cantidad);if(last.soloConteo!==true||n<1||!Number.isInteger(n)||workLotNumber(last.unidades)!==0||workLotNumber(candidate.canastasEntregadas)!==workLotNumber(old.canastasEntregadas)+n)throw new Error('El conteo de canastas no es válido.');Object.assign(last,workLotTimestamp());}
     else if(stableWorkString(newConf)!==stableWorkString(oldConf)||workLotNumber(candidate.canastasEntregadas)!==workLotNumber(old.canastasEntregadas))throw new Error('No se permiten cambios en las canastas físicas.');
    }
   }
