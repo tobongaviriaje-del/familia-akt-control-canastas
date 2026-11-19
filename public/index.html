@@ -347,9 +347,9 @@ function renderProgresoPatinadores(){
   const parsed=parseFechaAKT(t.fechaCreacion||t.createdAt);if(Number.isFinite(parsed))return parsed;
   const id=Number(t.id);return Number.isFinite(id)?id:0;
  };
- const hoy=new Date();
- const esTareaDeHoy=t=>{const ts=fechaOperacion(t);if(!ts)return false;const d=new Date(ts);return d.getFullYear()===hoy.getFullYear()&&d.getMonth()===hoy.getMonth()&&d.getDate()===hoy.getDate();};
- tasks.filter(x=>(x.standardNKD||esContinuidadXRS180(x))&&esTareaDeHoy(x)).forEach(x=>{
+ // No filtrar por fecha de creación: los estándares pueden haberse cargado antes
+ // de iniciar la jornada. El lote activo se determina por las unidades pendientes.
+ tasks.filter(x=>(x.standardNKD||esContinuidadXRS180(x))).forEach(x=>{
   const modelo=modeloDeTareaEstandar(x),codigo=String(x.codigoLoteOperacion||'').trim(),key=modelo+'|||'+codigo;
   if(!activeMap.has(key))activeMap.set(key,{modelo,codigo,tasks:[],latestAt:0,total:0,delivered:0,pending:0});
   const op=activeMap.get(key),objetivo=Math.max(0,Number(unidadesObjetivoEstandar(x))||0),entregado=Math.min(objetivo,Math.max(0,Number(x.entregado)||0));
