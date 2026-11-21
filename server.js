@@ -35,23 +35,24 @@ function loadSessions(){
 function sendJson(res,status,data){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(data));}
 function authorized(req){const h=String(req.headers.authorization||'');const token=h.startsWith('Bearer ')?h.slice(7):'';const session=sessions.get(token);if(!session)return false;if(session.expires<Date.now()){sessions.delete(token);return false;}session.expires=Date.now()+SESSION_TTL;return true;}
 
-// Cuentas base: solo administración. Las cuentas de patinadores retiradas
-// no deben recrearse automáticamente al iniciar ni al leer el estado.
-const defaultUsers={
-admin:{pass:'admin',role:'Admin',name:'Administrador'}
-};
+// Las cuentas se crean explícitamente. Nunca se restaura una contraseña
+// administrativa conocida ni se recrean usuarios borrados al leer el estado.
 const retiredPatinadores=['juanesteban','jorge','hamilton'];
 
 function ensureState(){
 fs.mkdirSync(DATA_DIR,{recursive:true});
-if(!fs.existsSync(STATE_FILE))fs.writeFileSync(STATE_FILE,JSON.stringify({users:defaultUsers,tasks:[]},null,2));
+if(!fs.existsSync(STATE_FILE)){
+ const initialAdminPassword=String(process.env.ADMIN_INITIAL_PASSWORD||'');
+ if(initialAdminPassword.length<12)throw new Error('Instalación nueva bloqueada: configura ADMIN_INITIAL_PASSWORD con al menos 12 caracteres antes de iniciar el servidor.');
+ const initialState={users:{admin:{pass:initialAdminPassword,role:'Admin',name:'Administrador'}},tasks:[]};
+ fs.writeFileSync(STATE_FILE,JSON.stringify(initialState,null,2),{mode:0o600});
+}
 }
 function readState(){
 ensureState();
 try{
 const s=JSON.parse(fs.readFileSync(STATE_FILE,'utf8'));
-if(!s.users)s.users={...defaultUsers};
-for(const [key,user] of Object.entries(defaultUsers)){if(!s.users[key])s.users[key]=user;}
+if(!s.users||typeof s.users!=='object'||Array.isArray(s.users))s.users={};
 let usersChanged=false;
 for(const key of [...retiredPatinadores,'mesanin']){if(Object.prototype.hasOwnProperty.call(s.users,key)){delete s.users[key];usersChanged=true;}}
 if(usersChanged)writeState(s);
