@@ -227,6 +227,7 @@ test('no recrea admin/admin y exige una clave inicial explícita en instalacione
   // Una instalación nueva falla de forma segura si no se configura una clave inicial.
   const freshWithoutPassword = path.join(temp, 'fresh-without-password');
   fs.mkdirSync(path.join(freshWithoutPassword, 'public'), { recursive: true });
+  fs.copyFileSync(path.join(repoRoot, 'server.js'), path.join(freshWithoutPassword, 'server.js'));
   const missingPasswordEnv = { ...env, PORT: String(await freePort()) };
   const blocked = spawnSync(process.execPath, ['server.js'], {
     cwd: freshWithoutPassword,
@@ -241,6 +242,7 @@ test('no recrea admin/admin y exige una clave inicial explícita en instalacione
   // Con una clave explícita, el primer administrador sí puede iniciar sesión.
   const freshConfigured = path.join(temp, 'fresh-configured');
   fs.mkdirSync(path.join(freshConfigured, 'public'), { recursive: true });
+  fs.copyFileSync(path.join(repoRoot, 'server.js'), path.join(freshConfigured, 'server.js'));
   const configuredPort = await freePort();
   const configuredEnv = { ...process.env, PORT: String(configuredPort), ADMIN_INITIAL_PASSWORD: 'InitialAdminTest123!' };
   delete configuredEnv.ADMIN_RECOVERY_PASSWORD;
