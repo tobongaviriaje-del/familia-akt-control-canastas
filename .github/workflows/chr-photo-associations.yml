@@ -1,0 +1,18 @@
+name: CHR photo association regression
+on:
+  push:
+    branches: [fix/patinador-codigo-por-lote]
+  pull_request:
+    branches: [main]
+jobs:
+  chr-photo-associations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check server syntax
+        run: node --check server.js
+      - name: Verify CHR photo associations
+        run: node --test tests/chr-photos.test.js
