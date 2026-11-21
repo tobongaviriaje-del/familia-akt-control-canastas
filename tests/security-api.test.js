@@ -136,6 +136,14 @@ test('protege credenciales, cambios administrativos y cierre de jornada', async 
   assert.equal(patinadorProtectedWrite.data.users.admin.role, 'Admin');
   assert.equal(patinadorProtectedWrite.data.users.intruso, undefined);
 
+  const patinadorTaskWrite = await request(baseUrl, '/api/state', {
+    token: patinadorToken, method: 'PUT',
+    body: { tasks: [{ id: 'T-1', standardNKD: true, standardMoto: 'NKD', lote: 10, cantidad: 10, entregado: 10, estado: 'Entregada', puesto: 'PRE 1' }] }
+  });
+  assert.equal(patinadorTaskWrite.status, 403, 'un Patinador no debe alterar tareas desde el estado global');
+  const stateAfterPatinadorTaskWrite = await request(baseUrl, '/api/state', { token: adminToken });
+  assert.equal(stateAfterPatinadorTaskWrite.data.tasks[0].entregado, 2, 'la tarea original debe permanecer intacta');
+
   const protectedWrite = await request(baseUrl, '/api/state', {
     token: supervisorToken,
     method: 'PUT',
