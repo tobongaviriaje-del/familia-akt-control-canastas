@@ -645,10 +645,15 @@ function tareasSinDuplicadosEstandar(tasks){
   const modelo=String(modeloDeTareaEstandar(x)||'NKD').trim().toUpperCase();
   const ean=String(x.ean||'').replace(/\s+/g,'').toUpperCase();
   const puesto=clean(normalizarPuestoEstandar(x.puesto));
+  // EAN vacío o 0 no identifica una pieza: conservar la referencia CHR
+  // por su número y las demás por nombre, sin fusionar piezas del mismo puesto.
+  const identificador=(!ean||ean==='0')
+   ?(String(x.numeroReferencia||'').trim()||clean(x.producto)||'SIN-IDENTIFICADOR')
+   :ean;
   // Evitar duplicados entre patinadores dentro del mismo lote físico,
   // pero nunca fusionar lotes distintos (p. ej. KK766 y KK767B).
   const lote=clean(x.codigoLoteOperacion||x.loteCodigo||x.codigoLote||x.loteId||x.lpn||'');
-  return [modelo,lote,ean,puesto].join('|');
+  return [modelo,lote,identificador,puesto].join('|');
  };
  const chosen=new Map(),other=[];
  for(const x of (Array.isArray(tasks)?tasks:[])){
