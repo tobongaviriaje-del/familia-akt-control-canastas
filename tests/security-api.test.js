@@ -71,7 +71,7 @@ test('protege credenciales, cambios administrativos y cierre de jornada', async 
   });
   t.after(async () => {
     child.kill('SIGTERM');
-    await new Promise(resolve => child.once('exit', resolve).catch?.(()=>{}));
+    await new Promise(resolve => { if (child.exitCode !== null) return resolve(); child.once('exit', resolve); setTimeout(resolve, 1500).unref(); });
     fs.rmSync(temp, { recursive: true, force: true });
   });
   await waitForHealth(baseUrl, child);
