@@ -65,7 +65,7 @@ window.addEventListener('online',checkHealth);window.addEventListener('offline',
 /* Load the optional operations intelligence panel without coupling it to core UI. */
 (function(){
  const s=document.createElement('script');
- s.src='/operaciones-inteligentes.js?v=1';
+ s.src='/operaciones-inteligentes.js?v=2';
  s.defer=true;
  document.head.appendChild(s);
 })();
