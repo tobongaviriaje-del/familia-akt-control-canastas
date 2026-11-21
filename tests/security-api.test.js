@@ -265,3 +265,26 @@ test('no recrea admin/admin y exige una clave inicial explícita en instalacione
   assert.equal(rejectedDefault.status, 401);
 });
 
+
+test('permite rotar la contraseña Admin después de una recuperación de un solo uso', async t => {
+ const temp=fs.mkdtempSync(path.join(os.tmpdir(),'akt-admin-rotation-')),dataDir=path.join(temp,'data');
+ fs.mkdirSync(dataDir,{recursive:true});fs.mkdirSync(path.join(temp,'public'));fs.copyFileSync(path.join(repoRoot,'server.js'),path.join(temp,'server.js'));
+ fs.writeFileSync(path.join(dataDir,'state.json'),JSON.stringify({users:{admin:{pass:'legacy-test-password',role:'Admin'},supervisor:{pass:'supervisor-test',role:'Supervisor'}},tasks:[]}));
+ const port=await freePort(),recovery='recovery-test-only',next='rotated-test-password-2026';
+ const child=spawn(process.execPath,['server.js'],{cwd:temp,env:{...process.env,PORT:String(port),ADMIN_RECOVERY_PASSWORD:recovery},stdio:'ignore'});
+ t.after(async()=>{child.kill('SIGTERM');await new Promise(resolve=>{if(child.exitCode!==null)return resolve();child.once('exit',resolve);setTimeout(resolve,1500).unref();});fs.rmSync(temp,{recursive:true,force:true});});
+ const base='http://127.0.0.1:'+port;await waitForHealth(base,child);
+ const login=await request(base,'/api/login',{method:'POST',body:{username:'admin',password:recovery}});
+ assert.equal(login.status,200);
+ let saved=JSON.parse(fs.readFileSync(path.join(dataDir,'state.json'),'utf8'));
+ assert.equal(saved.users.admin.pass,'legacy-test-password');assert.equal(saved.adminRecoveryUsed,true);
+ const rotate=await request(base,'/api/admin/change-password',{token:login.data.token,method:'POST',body:{newPassword:next}});
+ assert.equal(rotate.status,200);
+ saved=JSON.parse(fs.readFileSync(path.join(dataDir,'state.json'),'utf8'));
+ assert.equal(saved.users.admin.pass,next);assert.equal(saved.adminRecoveryUsed,true);
+ assert.equal((await request(base,'/api/login',{method:'POST',body:{username:'admin',password:'legacy-test-password'}})).status,401);
+ assert.equal((await request(base,'/api/login',{method:'POST',body:{username:'admin',password:recovery}})).status,401);
+ assert.equal((await request(base,'/api/login',{method:'POST',body:{username:'admin',password:next}})).status,200);
+ const supervisor=await request(base,'/api/login',{method:'POST',body:{username:'supervisor',password:'supervisor-test'}});
+ assert.equal((await request(base,'/api/admin/change-password',{token:supervisor.data.token,method:'POST',body:{newPassword:next}})).status,403);
+});
