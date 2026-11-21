@@ -499,8 +499,10 @@ if(p.startsWith('/api/reference-photos/')&&req.method==='GET'){
  fs.readFile(path.join(dir,file),(err,data)=>{if(err)return sendJson(res,404,{ok:false,error:'Foto no encontrada.'});res.writeHead(200,{'Content-Type':'image/webp','Cache-Control':'private, max-age=86400'});res.end(data);});return;
 }
 
-if(p==='/api/state'&&req.method==='GET'){const safe=readState();delete safe.patinadoresAuth;return sendJson(res,200,safe);}
+if(p==='/api/state'&&req.method==='GET'){const safe=JSON.parse(JSON.stringify(readState()));delete safe.patinadoresAuth;for(const user of Object.values(safe.users||{})){if(!user||typeof user!=='object')continue;delete user.pass;delete user.passDia;delete user.passNoche;}return sendJson(res,200,safe);}
 if(p==='/api/jornada/cerrar'&&req.method==='POST'){
+const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),authState=readState();
+if(!session||!authState.users[session.username]||authState.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede cerrar la jornada.'});
 let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{
 const incoming=JSON.parse(body||'{}');const state=readState();
 if(!Array.isArray(state.tasks))state.tasks=[];
@@ -649,8 +651,12 @@ return sendJson(res,200,{ok:true,resumen,archivo:archivo.file,tareasNuevas:pendi
 });return;
 }
 if(p==='/api/state'&&req.method==='PUT'){
+const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),actor=session&&readState().users[session.username];
+if(!session||!actor)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
 let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{
-const incoming=JSON.parse(body||'{}'),current=readState(),nextUsers=incoming.users||current.users;delete nextUsers.mesanin;
+const incoming=JSON.parse(body||'{}'),current=readState(),isAdmin=actor.role==='Admin';
+const nextUsers=isAdmin&&incoming.users&&typeof incoming.users==='object'?incoming.users:current.users;delete nextUsers.mesanin;
+if(isAdmin){for(const [key,user] of Object.entries(nextUsers)){const previous=current.users&&current.users[key];if(!user||typeof user!=='object')continue;for(const field of ['pass','passDia','passNoche'])if(!Object.prototype.hasOwnProperty.call(user,field)&&previous&&Object.prototype.hasOwnProperty.call(previous,field))user[field]=previous[field];}}
 const state={...current,users:nextUsers,tasks:Array.isArray(incoming.tasks)?incoming.tasks:current.tasks,lpnCatalog:Array.isArray(incoming.lpnCatalog)?incoming.lpnCatalog:current.lpnCatalog,freeDeliveries:Array.isArray(incoming.freeDeliveries)?incoming.freeDeliveries:(current.freeDeliveries||[]),estibasRecibidas:Array.isArray(incoming.estibasRecibidas)?incoming.estibasRecibidas:(current.estibasRecibidas||[]),queuedStandardBatches:Array.isArray(incoming.queuedStandardBatches)?incoming.queuedStandardBatches:(current.queuedStandardBatches||[]),tareasArchivadas:Array.isArray(incoming.tareasArchivadas)?incoming.tareasArchivadas:(current.tareasArchivadas||[])};
 const queued=state.queuedStandardBatches[0];
 if(queued&&queued.modeloActual&&Array.isArray(queued.tasks)&&queued.tasks.length){
