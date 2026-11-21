@@ -13,6 +13,17 @@
    #patinadorQuickTools .pu-controls{display:grid;grid-template-columns:minmax(0,2fr) minmax(140px,1fr);gap:8px}
    #patinadorQuickTools input,#patinadorQuickTools select{margin:0;min-height:44px}
    #patinadorQuickTools .pu-count{font-size:13px;color:#475569;margin-top:8px}
+   #puJourney{border:1px solid #bfdbfe;border-radius:16px;padding:14px;margin:10px 0 14px;background:linear-gradient(135deg,#eff6ff,#fff)}
+   #puJourney .puj-head{display:flex;justify-content:space-between;align-items:center;gap:10px;font-weight:800}
+   #puJourney .puj-pct{font-size:25px;font-weight:900;color:#075985;white-space:nowrap}
+   #puJourney .puj-track{height:10px;background:#dbeafe;border-radius:99px;overflow:hidden;margin:10px 0}
+   #puJourney .puj-fill{height:100%;background:#0f766e;border-radius:99px;transition:width .2s}
+   #puJourney .puj-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:10px 0}
+   #puJourney .puj-stat{background:#ffffffd9;border:1px solid #dbeafe;border-radius:10px;padding:8px;text-align:center}
+   #puJourney .puj-stat b{display:block;font-size:18px}
+   #puJourney .puj-stat small{font-size:11px;color:#475569}
+   #puJourney .puj-next{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:10px}
+   #puJourney button{width:auto;min-height:40px;margin:0;padding:8px 12px}
    #standardItems .pu-qty-shortcuts{display:flex;gap:5px;flex-wrap:wrap;margin:5px 0 8px}
    #standardItems .pu-qty-shortcuts button{width:auto;min-width:48px;min-height:36px;padding:6px 10px;margin:0;font-size:13px}
    #standardItems .pu-qty-shortcuts button:last-child{background:#0f766e}
@@ -40,10 +51,42 @@
   const tools=document.createElement('section');tools.id='patinadorQuickTools';tools.setAttribute('aria-label','Buscar y filtrar mis referencias');
   tools.innerHTML='<div class="pu-title">🔎 Encuentra tu referencia rápido</div><div class="pu-controls"><input id="puSearch" type="search" autocomplete="off" placeholder="Buscar producto, EAN o puesto…"><select id="puFilter" aria-label="Filtrar referencias"><option value="pending">Solo pendientes</option><option value="all">Todas las referencias</option><option value="done">Completadas</option></select></div><div id="puCount" class="pu-count" aria-live="polite"></div>';
   list.parentNode.insertBefore(tools,list);
+  installJourneyCard(list);
   $('puSearch').value=searchText;
   $('puFilter').value=filterMode;
   $('puSearch').addEventListener('input',()=>{searchText=$('puSearch').value.trim().toLocaleLowerCase('es');applyFilters();});
   $('puFilter').addEventListener('change',()=>{filterMode=$('puFilter').value;applyFilters();});
+ }
+ function installJourneyCard(list){
+  if($('puJourney'))return;
+  const card=document.createElement('section');card.id='puJourney';card.setAttribute('aria-label','Mi avance de trabajo');
+  card.innerHTML='<div class="puj-head"><span>⚡ Mi jornada</span><span class="puj-pct" id="pujPct">0%</span></div><div class="puj-track" role="progressbar" aria-label="Avance de referencias" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="puj-fill" id="pujFill" style="width:0%"></div></div><div class="puj-stats"><div class="puj-stat"><b id="pujDone">0</b><small>Completadas</small></div><div class="puj-stat"><b id="pujPending">0</b><small>Pendientes</small></div><div class="puj-stat"><b id="pujUnits">0</b><small>Unidades faltantes</small></div></div><div class="puj-next"><span id="pujNextText">Cargando tu siguiente referencia…</span><button type="button" id="pujNextBtn">▶ Ir a la siguiente</button></div>';
+  const toolbar=$('patinadorQuickTools');if(toolbar)toolbar.insertAdjacentElement('afterend',card);else list.parentNode.insertBefore(card,list);
+  $('pujNextBtn').addEventListener('click',()=>{
+   const rows=[...list.querySelectorAll('tbody tr[id^="stdRow"]')],next=rows.find(row=>!isCompletedRow(row));
+   if(!next)return;
+   searchText='';filterMode='pending';
+   if($('puSearch'))$('puSearch').value='';
+   if($('puFilter'))$('puFilter').value='pending';
+   applyFilters();
+   next.scrollIntoView({behavior:'smooth',block:'center'});
+   const qty=next.querySelector('input[id^="stdQty"]');if(qty){qty.focus({preventScroll:true});qty.select?.();}
+  });
+ }
+ function isCompletedRow(row){
+  const text=(row.cells[0]?.textContent||'').toLocaleUpperCase('es');
+  return text.includes('COMPLETA')||text.includes('LOTE AGOTADO');
+ }
+ function renderJourney(rows){
+  const card=$('puJourney');if(!card)return;
+  const total=rows.length,done=rows.filter(isCompletedRow).length,pending=total-done,pct=total?Math.round(done*100/total):0;
+  const units=rows.reduce((sum,row)=>sum+Math.max(0,Number((row.cells[6]?.textContent||'').replace(/[^0-9.,-]/g,'').replace(',','.'))||0),0);
+  $('pujPct').textContent=pct+'%';$('pujDone').textContent=done.toLocaleString('es-CO');$('pujPending').textContent=pending.toLocaleString('es-CO');$('pujUnits').textContent=units.toLocaleString('es-CO');
+  $('pujFill').style.width=pct+'%';card.querySelector('[role="progressbar"]').setAttribute('aria-valuenow',String(pct));
+  const next=rows.find(row=>!isCompletedRow(row)),text=$('pujNextText'),button=$('pujNextBtn');
+  if(!total){text.textContent='Todavía no tienes referencias asignadas para este modelo.';button.disabled=true;button.textContent='Sin referencias';}
+  else if(!next){text.textContent='🎉 ¡Terminaste todas tus referencias!';button.disabled=true;button.textContent='Jornada completada';}
+  else{const product=(next.cells[0]?.querySelector('b')?.textContent||'Siguiente referencia').trim(),station=(next.cells[1]?.textContent||'').trim();text.textContent='Siguiente: '+product+(station?' · '+station:'');button.disabled=false;button.textContent='▶ Ir a la siguiente';}
  }
  function addRowShortcuts(row){
   if(row.dataset.puEnhanced==='1')return;
@@ -55,8 +98,8 @@
   const wrap=document.createElement('div');wrap.className='pu-qty-shortcuts';wrap.setAttribute('aria-label','Cantidades rápidas');
   const values=[{label:'+1',value:1},{label:'+5',value:Math.min(5,max)},{label:'Todo',value:max}];
   values.forEach(item=>{
-   const b=document.createElement('button');b.type='button';b.className=item.label==='Todo'?'':'secondary';b.textContent=item.label;b.title='Preparar '+item.value+' unidad(es); después confirma Registrar unidades';
-   b.addEventListener('click',()=>{input.value=String(item.value);input.focus({preventScroll:true});});
+   const b=document.createElement('button');b.type='button';b.className=item.label==='Todo'?'':'secondary';b.textContent=item.label;b.title=item.label==='Todo'?'Preparar todo el saldo pendiente ('+max+' unidades)':'Sumar hasta '+item.value+' unidad(es); después confirma Registrar unidades';
+   b.addEventListener('click',()=>{const current=Math.max(0,Number(input.value)||0);const next=item.label==='Todo'?max:Math.min(max,current+item.value);input.value=String(next);input.focus({preventScroll:true});});
    wrap.appendChild(b);
   });
   input.insertAdjacentElement('afterend',wrap);
@@ -69,8 +112,7 @@
   let shown=0,pending=0,done=0;
   rows.forEach(row=>{
    addRowShortcuts(row);
-   const first=(row.cells[0]?.textContent||'').toLocaleUpperCase('es');
-   const isDone=first.includes('COMPLETA')||first.includes('LOTE AGOTADO');
+   const isDone=isCompletedRow(row);
    if(isDone)done++;else pending++;
    const matchesText=!searchText||row.textContent.toLocaleLowerCase('es').includes(searchText);
    const matchesStatus=filterMode==='all'||(filterMode==='done'?isDone:!isDone);
@@ -80,6 +122,7 @@
   });
   const count=$('puCount');
   if(count)count.textContent=shown+' de '+rows.length+' referencias visibles · '+pending+' pendientes · '+done+' completadas';
+  renderJourney(rows);
   let empty=$('puNoResults');
   if(!empty){empty=document.createElement('p');empty.id='puNoResults';empty.className='notice';list.appendChild(empty);}
   const emptyMessage=rows.length&&shown===0?'No encontramos referencias con esa búsqueda. Prueba otro EAN, nombre o puesto.':'';
