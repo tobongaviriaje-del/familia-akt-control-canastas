@@ -482,7 +482,7 @@ if(p.startsWith('/api/admin/reference-photos/')&&req.method==='POST'){
     manifest.items=normalized;
    }
    if(modelKey==='chr'){
-    const normalizePosition=value=>{const x=String(value||'').trim().toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/\\s+/g,' ');let m=x.match(/^pre\\s*0*(\\d+)$/);if(m)return 'pre '+Number(m[1]);m=x.match(/^0*(\\d+)\\s*(derecho|izquierdo)$/);if(m)return m[2]+' '+Number(m[1]);m=x.match(/^(derecho|izquierdo|final(?: de linea)?)\\s*0*(\\d+)$/);if(m)return (m[1].startsWith('final')?'final':m[1])+' '+Number(m[2]);return x;};
+    const normalizePosition=value=>{const x=String(value||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');let m=x.match(/^pre\s*0*(\d+)$/);if(m)return 'pre '+Number(m[1]);m=x.match(/^0*(\d+)\s*(derecho|izquierdo)$/);if(m)return m[2]+' '+Number(m[1]);m=x.match(/^(derecho|izquierdo|final(?: de linea)?)\s*0*(\d+)$/);if(m)return (m[1].startsWith('final')?'final':m[1])+' '+Number(m[2]);return x;};
     const canonical=new Map();
     for(const [oldKey,item] of Object.entries(manifest.items)){
      const number=String(item&&item.numeroReferencia||'').trim(),position=normalizePosition(item&&item.puesto),key=number&&position?number+'|'+position:'incomplete|'+oldKey,prior=canonical.get(key);
