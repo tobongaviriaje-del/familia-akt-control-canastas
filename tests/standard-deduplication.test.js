@@ -18,7 +18,7 @@ test('conserva referencias distintas sin EAN en el mismo puesto',()=>{
   {id:'a',standardNKD:true,standardMoto:'CR4 150',ean:'0',producto:'Tornillo batería M5',puesto:'18 Derecho',lpn:'lote1'},
   {id:'b',standardNKD:true,standardMoto:'CR4 150',ean:'0',producto:'Tuerca batería M5',puesto:'18 Derecho',lpn:'lote1'}
  ];
- assert.deepEqual(context.dedupe(tasks).map(x=>x.id).sort(),['a','b']);
+ assert.deepEqual(Array.from(context.dedupe(tasks),x=>x.id).sort(),['a','b']);
 });
 test('consolida la misma referencia sin EAN repetida entre patinadores',()=>{
  const tasks=[
@@ -32,7 +32,7 @@ test('CHR usa número de referencia para distinguir referencias con EAN 0',()=>{
   {id:'a',standardNKD:true,standardMoto:'CHR',ean:'0',numeroReferencia:'12',producto:'Tornillo',puesto:'PRE 1',lpn:'lote1'},
   {id:'b',standardNKD:true,standardMoto:'CHR',ean:'0',numeroReferencia:'13',producto:'Tornillo',puesto:'PRE 1',lpn:'lote1'}
  ];
- assert.deepEqual(context.dedupe(tasks).map(x=>x.id).sort(),['a','b']);
+ assert.deepEqual(Array.from(context.dedupe(tasks),x=>x.id).sort(),['a','b']);
 });
 test('no fusiona el mismo EAN cuando pertenece a lotes distintos',()=>{
  const tasks=[
