@@ -101,7 +101,11 @@ function writeWorkLots(rows){fs.mkdirSync(DATA_DIR,{recursive:true});const tmp=W
 function workLotNorm(v){return String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');}
 function workLotPosition(v){let x=workLotNorm(v),m=x.match(/^pre\s*0*(\d+)$/);if(m)return 'pre '+Number(m[1]);m=x.match(/^0*(\d+)\s*(derecho|izquierdo)$/);if(m)return m[2]+' '+Number(m[1]);m=x.match(/^(derecho|izquierdo|final(?: de linea)?)\s*0*(\d+)$/);if(m)return (m[1].startsWith('final')?'final':m[1])+' '+Number(m[2]);return x;}
 function workLotUserCanTask(user,username,task){const positions=new Set(Array.isArray(user.puestos)?user.puestos.map(workLotPosition).filter(Boolean):[]);const position=workLotPosition(task.puesto);if(position&&positions.has(position))return true;const responsible=workLotNorm(task.patinadorEstandar),identities=[user.name,username].map(workLotNorm).filter(Boolean);return !!responsible&&identities.some(v=>v===responsible||v.startsWith(responsible+' ')||v.endsWith(' '+responsible));}
-function workLotResponse(row,user,username,rows){return {ok:true,lot:{id:row.id,model:row.model,number:row.number,codigoLoteOperacion:String(row.codigoLoteOperacion||'').trim().toUpperCase(),createdAt:row.createdAt,updatedAt:row.updatedAt,sourceBatchId:row.sourceBatchId||null},lots:rows.filter(x=>x.model===row.model).sort((a,b)=>a.number-b.number).map(x=>({id:x.id,number:x.number})),tasks:(row.tasks||[]).filter(t=>workLotUserCanTask(user,username,t))};}
+function workLotResponse(row,user,username,rows){
+ const legacyCodes=[...new Set((row.tasks||[]).map(t=>String(t&&t.codigoLoteOperacion||'').trim().toUpperCase()).filter(Boolean))];
+ const lotCode=String(row.codigoLoteOperacion||'').trim().toUpperCase()||(legacyCodes.length===1?legacyCodes[0]:'');
+ return {ok:true,lot:{id:row.id,model:row.model,number:row.number,codigoLoteOperacion:lotCode,createdAt:row.createdAt,updatedAt:row.updatedAt,sourceBatchId:row.sourceBatchId||null},lots:rows.filter(x=>x.model===row.model).sort((a,b)=>a.number-b.number).map(x=>({id:x.id,number:x.number})),tasks:(row.tasks||[]).filter(t=>workLotUserCanTask(user,username,t))};
+}
 function validateWorkLot(saved,incoming,user,username){
  if(!Array.isArray(incoming))throw new Error('La lista de referencias no es válida.');
  const byId=new Map(incoming.map(x=>[String(x&&x.id),x]));
