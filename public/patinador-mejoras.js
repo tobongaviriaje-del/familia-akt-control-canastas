@@ -47,10 +47,11 @@
  }
  function addRowShortcuts(row){
   if(row.dataset.puEnhanced==='1')return;
+  row.querySelectorAll('td').forEach((td,i)=>{td.dataset.label=labels[i]||'Dato';});
   const input=row.querySelector('input[id^="stdQty"]');
-  if(!input)return;
+  if(!input){row.dataset.puEnhanced='1';return;}
   const max=Math.max(0,Number(input.max)||0);
-  if(max<1)return;
+  if(max<1){row.dataset.puEnhanced='1';return;}
   const wrap=document.createElement('div');wrap.className='pu-qty-shortcuts';wrap.setAttribute('aria-label','Cantidades rápidas');
   const values=[{label:'+1',value:1},{label:'+5',value:Math.min(5,max)},{label:'Todo',value:max}];
   values.forEach(item=>{
