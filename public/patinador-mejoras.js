@@ -82,7 +82,8 @@
   if(count)count.textContent=shown+' de '+rows.length+' referencias visibles · '+pending+' pendientes · '+done+' completadas';
   let empty=$('puNoResults');
   if(!empty){empty=document.createElement('p');empty.id='puNoResults';empty.className='notice';list.appendChild(empty);}
-  empty.textContent=rows.length&&shown===0?'No encontramos referencias con esa búsqueda. Prueba otro EAN, nombre o puesto.':'';
+  const emptyMessage=rows.length&&shown===0?'No encontramos referencias con esa búsqueda. Prueba otro EAN, nombre o puesto.':'';
+  if(empty.textContent!==emptyMessage)empty.textContent=emptyMessage;
   empty.style.display=rows.length&&shown===0?'block':'none';
  }
  function scheduleRefresh(){
