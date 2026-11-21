@@ -101,7 +101,11 @@ function writeWorkLots(rows){fs.mkdirSync(DATA_DIR,{recursive:true});const tmp=W
 function workLotNorm(v){return String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');}
 function workLotPosition(v){let x=workLotNorm(v),m=x.match(/^pre\s*0*(\d+)$/);if(m)return 'pre '+Number(m[1]);m=x.match(/^0*(\d+)\s*(derecho|izquierdo)$/);if(m)return m[2]+' '+Number(m[1]);m=x.match(/^(derecho|izquierdo|final(?: de linea)?)\s*0*(\d+)$/);if(m)return (m[1].startsWith('final')?'final':m[1])+' '+Number(m[2]);return x;}
 function workLotUserCanTask(user,username,task){const positions=new Set(Array.isArray(user.puestos)?user.puestos.map(workLotPosition).filter(Boolean):[]);const position=workLotPosition(task.puesto);if(position&&positions.has(position))return true;const responsible=workLotNorm(task.patinadorEstandar),identities=[user.name,username].map(workLotNorm).filter(Boolean);return !!responsible&&identities.some(v=>v===responsible||v.startsWith(responsible+' ')||v.endsWith(' '+responsible));}
-function workLotResponse(row,user,username,rows){return {ok:true,lot:{id:row.id,model:row.model,number:row.number,createdAt:row.createdAt,updatedAt:row.updatedAt,sourceBatchId:row.sourceBatchId||null},lots:rows.filter(x=>x.model===row.model).sort((a,b)=>a.number-b.number).map(x=>({id:x.id,number:x.number})),tasks:(row.tasks||[]).filter(t=>workLotUserCanTask(user,username,t))};}
+function workLotResponse(row,user,username,rows){
+ const legacyCodes=[...new Set((row.tasks||[]).map(t=>String(t&&t.codigoLoteOperacion||'').trim().toUpperCase()).filter(Boolean))];
+ const lotCode=String(row.codigoLoteOperacion||'').trim().toUpperCase()||(legacyCodes.length===1?legacyCodes[0]:'');
+ return {ok:true,lot:{id:row.id,model:row.model,number:row.number,codigoLoteOperacion:lotCode,createdAt:row.createdAt,updatedAt:row.updatedAt,sourceBatchId:row.sourceBatchId||null},lots:rows.filter(x=>x.model===row.model).sort((a,b)=>a.number-b.number).map(x=>({id:x.id,number:x.number})),tasks:(row.tasks||[]).filter(t=>workLotUserCanTask(user,username,t))};
+}
 function validateWorkLot(saved,incoming,user,username){
  if(!Array.isArray(incoming))throw new Error('La lista de referencias no es válida.');
  const byId=new Map(incoming.map(x=>[String(x&&x.id),x]));
@@ -313,10 +317,18 @@ if(p==='/api/work-lots'&&['GET','POST','PUT'].includes(req.method)){
   try{row=ensureWorkLot(rows,state,model,actor);}catch(e){return sendJson(res,404,{ok:false,error:e.message||'No hay estándar disponible.'});}
   if(action==='GET')return sendJson(res,200,workLotResponse(row,user,actor,rows));
   if(action==='POST'){
+   if(body.action==='set-code'){
+    const selected=rows.find(x=>x.model===model&&x.id===String(body.lotId||''));if(!selected)return sendJson(res,404,{ok:false,error:'No se encontró el lote seleccionado.'});
+    if(selected.updatedAt!==body.version)return sendJson(res,409,{ok:false,error:'Otro usuario cambió este lote. Actualiza la pantalla antes de guardar el código.'});
+    const code=String(body.code||'').trim().toUpperCase();if(!/^[A-Z0-9-]{2,40}$/.test(code))return sendJson(res,400,{ok:false,error:'El número de lote debe tener entre 2 y 40 caracteres: letras, números o guion.'});
+    if(!(selected.tasks||[]).some(task=>workLotUserCanTask(user,actor,task)))return sendJson(res,403,{ok:false,error:'No tienes puestos asignados en este lote.'});
+    selected.codigoLoteOperacion=code;selected.codigoOperacionActualizadoPor=user.name||actor;selected.codigoOperacionActualizadoEn=new Date().toLocaleString('es-CO');selected.updatedAt=new Date().toISOString()+'#'+require('crypto').randomUUID();writeWorkLots(rows);
+    return sendJson(res,200,workLotResponse(selected,user,actor,rows));
+   }
    if(body.action==='select'){const selected=rows.find(x=>x.model===model&&x.id===String(body.lotId||''));if(!selected)return sendJson(res,404,{ok:false,error:'No se encontró el lote guardado.'});return sendJson(res,200,workLotResponse(selected,user,actor,rows));}
    if(body.action!=='next')return sendJson(res,400,{ok:false,error:'Acción de lote no válida.'});
    if(!body.lotId)return sendJson(res,400,{ok:false,error:'Falta identificar el lote actual.'});const source=rows.find(x=>x.model===model&&x.id===String(body.lotId));if(!source)return sendJson(res,404,{ok:false,error:'El lote actual ya no existe. Actualiza la pantalla.'});const nextNo=source.number+1;let selected=rows.find(x=>x.model===model&&x.number===nextNo);
-   if(!selected){const cloned=(row.tasks||[]).map(t=>({...t,entregado:0,estado:'Pendiente',entregas:[],entrega:null,canastasEntregadas:0,confirmacionesCanastas:[]}));const now=new Date().toISOString();selected={id:require('crypto').randomUUID(),model,number:nextNo,tasks:cloned,createdBy:actor,createdAt:now,updatedAt:now};rows.push(selected);writeWorkLots(rows);}
+   if(!selected){const cloned=(row.tasks||[]).map(t=>{const copy={...t,entregado:0,estado:'Pendiente',entregas:[],entrega:null,canastasEntregadas:0,confirmacionesCanastas:[]};for(const field of WORK_LOT_OPERATION_FIELDS)delete copy[field];return copy;});const now=new Date().toISOString();selected={id:require('crypto').randomUUID(),model,number:nextNo,tasks:cloned,createdBy:actor,createdAt:now,updatedAt:now};rows.push(selected);writeWorkLots(rows);}
    return sendJson(res,200,workLotResponse(selected,user,actor,rows));
   }
   if(action==='PUT'){
@@ -436,7 +448,11 @@ if(p.startsWith('/api/admin/reference-photos/')&&req.method==='POST'){
      const replaceAssociations=manifest.reemplazar_asociaciones===true;
      for(const [itemKey,existingItem] of Object.entries(existingManifest.items)){
       const incomingItem=manifest.items[itemKey];
-      if(!incomingItem){manifest.items[itemKey]=existingItem;}
+      if(!incomingItem){
+       // CHR: al reemplazar asociaciones, no reincorporar fichas antiguas con claves
+       // históricas distintas (EAN|puesto vs numeroReferencia|puesto).
+       if(!(modelKey==='chr'&&manifest.reemplazar_asociaciones===true))manifest.items[itemKey]=existingItem;
+      }
       else{
        const combined=new Map();
        if(!replaceAssociations)for(const photo of (Array.isArray(existingItem.photos)?existingItem.photos:[]))if(photo&&/^[a-f0-9]{40}\.webp$/i.test(String(photo.file||'')))combined.set(photo.file,photo);
@@ -444,7 +460,7 @@ if(p.startsWith('/api/admin/reference-photos/')&&req.method==='POST'){
        manifest.items[itemKey]={...existingItem,...incomingItem,photos:[...combined.values()]};
       }
       const mergedItem=manifest.items[itemKey];
-      for(const photo of Array.isArray(mergedItem.photos)?mergedItem.photos:[]){const file=String(photo&&photo.file||'');if(/^[a-f0-9]{40}\.webp$/i.test(file)){const source=path.join(target,file);if(fs.existsSync(source)&&!fs.existsSync(path.join(temp,file)))fs.copyFileSync(source,path.join(temp,file));}}
+      for(const photo of Array.isArray(mergedItem&&mergedItem.photos)?mergedItem.photos:[]){const file=String(photo&&photo.file||'');if(/^[a-f0-9]{40}\.webp$/i.test(file)){const source=path.join(target,file);if(fs.existsSync(source)&&!fs.existsSync(path.join(temp,file)))fs.copyFileSync(source,path.join(temp,file));}}
      }
     }
     for(const name of fs.readdirSync(target)){if(/^[a-f0-9]{40}\.webp$/i.test(name)){const source=path.join(target,name),dest=path.join(temp,name);if(fs.statSync(source).isFile()&&!fs.existsSync(dest))fs.copyFileSync(source,dest);}}
@@ -468,6 +484,18 @@ if(p.startsWith('/api/admin/reference-photos/')&&req.method==='POST'){
     // Mantener referencias incompletas para no perder metadatos ni reportes de pendientes.
     for(const [key,item] of Object.entries(manifest.items))if(!String(item&&item.ean||'').trim()||!String(item&&item.puesto||'').trim())normalized[key]=item;
     manifest.items=normalized;
+   }
+   if(modelKey==='chr'){
+    const normalizePosition=value=>{const x=String(value||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');let m=x.match(/^pre\s*0*(\d+)$/);if(m)return 'pre '+Number(m[1]);m=x.match(/^0*(\d+)\s*(derecho|izquierdo)$/);if(m)return m[2]+' '+Number(m[1]);m=x.match(/^(derecho|izquierdo|final(?: de linea)?)\s*0*(\d+)$/);if(m)return (m[1].startsWith('final')?'final':m[1])+' '+Number(m[2]);return x;};
+    const canonical=new Map();
+    for(const [oldKey,item] of Object.entries(manifest.items)){
+     const number=String(item&&item.numeroReferencia||'').trim(),position=normalizePosition(item&&item.puesto),key=number&&position?number+'|'+position:'incomplete|'+oldKey,prior=canonical.get(key);
+     if(!prior)canonical.set(key,{key:oldKey,item:{...item,photos:[]}});
+     const targetItem=canonical.get(key).item,photos=new Map((targetItem.photos||[]).filter(photo=>photo&&photo.file).map(photo=>[String(photo.file),photo]));
+     for(const photo of Array.isArray(item.photos)?item.photos:[])if(photo&&photo.file)photos.set(String(photo.file),photo);
+     targetItem.photos=[...photos.values()];
+    }
+    const normalized={};for(const {key,item} of canonical.values())normalized[key]=item;manifest.items=normalized;
    }
    const mergedItems=Object.values(manifest.items),withPhotos=mergedItems.filter(item=>item&&Array.isArray(item.photos)&&item.photos.some(photo=>photo&&photo.file)).length;
    manifest.referencias_confirmadas=withPhotos;manifest.referencias_pendientes=mergedItems.length-withPhotos;manifest.asociaciones_foto=mergedItems.reduce((n,item)=>n+(Array.isArray(item&&item.photos)?item.photos.filter(photo=>photo&&photo.file).length:0),0);
@@ -517,7 +545,7 @@ if(p==='/api/admin/reference-photos/diagnostic'&&req.method==='GET'){
   const items=manifest&&manifest.items&&typeof manifest.items==='object'?Object.values(manifest.items):[],byKey=new Map(),byNumber=new Map(),byEan=new Map(),missingFiles=[],referenceCounts=new Map(),photoAssociationCounts=new Map();
   for(const item of items){const ean=String(item&&item.ean||'').trim().replace(/\s+/g,'').toUpperCase(),pos=normPos(item&&item.puesto),photos=Array.isArray(item&&item.photos)?item.photos:[],key=ean+'|'+pos;if(ean&&pos){referenceCounts.set(key,(referenceCounts.get(key)||0)+1);if(!byKey.has(key))byKey.set(key,item);}const numero=String(item&&item.numeroReferencia||'').trim();if(numero)byNumber.set(numero+'|'+pos,item);if(ean){if(!byEan.has(ean))byEan.set(ean,[]);byEan.get(ean).push(item);}for(const photo of photos){const file=String(photo&&photo.file||'');if(file)photoAssociationCounts.set(file,(photoAssociationCounts.get(file)||0)+1);if(!/^[a-f0-9]{40}\.webp$/i.test(file)||!fs.existsSync(path.join(dir,file)))missingFiles.push({ean:item.ean||'',puesto:item.puesto||'',archivo:file||'sin nombre'});}}
   const refsConFoto=items.filter(x=>Array.isArray(x.photos)&&x.photos.some(ph=>ph&&ph.file)).length,refsSinFoto=items.length-refsConFoto;
-  const taskRows=(Array.isArray(state.tasks)?state.tasks:[]).filter(model.match).map(t=>{const ean=String(t.ean||'').trim().replace(/\s+/g,''),pos=normPos(t.puesto),numero=String(t.numeroReferencia||'').trim(),exact=(model.key==='chr'&&numero?byNumber.get(numero+'|'+pos):null)||byKey.get(ean+'|'+pos);let has=!!(exact&&Array.isArray(exact.photos)&&exact.photos.some(ph=>ph&&ph.file));if(!has){const candidates=(byEan.get(ean)||[]).filter(x=>Array.isArray(x.photos)&&x.photos.some(ph=>ph&&ph.file));if(candidates.length===1)has=true;}return {numeroReferencia:numero||exact&&exact.numeroReferencia||'',ean:t.ean||'',producto:t.producto||'',puesto:t.puesto||'',foto:has};});
+  const taskRows=(Array.isArray(state.tasks)?state.tasks:[]).filter(model.match).map(t=>{const ean=String(t.ean||'').trim().replace(/\s+/g,''),pos=normPos(t.puesto),numero=String(t.numeroReferencia||'').trim(),exact=model.key==='chr'?(numero?byNumber.get(numero+'|'+pos):byKey.get(ean+'|'+pos)):byKey.get(ean+'|'+pos);let has=!!(exact&&Array.isArray(exact.photos)&&exact.photos.some(ph=>ph&&ph.file));if(!has&&model.key!=='chr'){const candidates=(byEan.get(ean)||[]).filter(x=>Array.isArray(x.photos)&&x.photos.some(ph=>ph&&ph.file));if(candidates.length===1)has=true;}return {numeroReferencia:numero||exact&&exact.numeroReferencia||'',ean:t.ean||'',producto:t.producto||'',puesto:t.puesto||'',foto:has};});
   const tasksSinFoto=taskRows.filter(x=>!x.foto);
   const estructuraTareas=model.key==='chr'?(()=>{const sample=(Array.isArray(state.tasks)?state.tasks:[]).find(model.match);if(!sample)return {camposDisponibles:[],valoresCandidatos:[]};const campos=Object.keys(sample);const relevantes=campos.filter(k=>/(numero|refer|ean|puesto|ubic|producto|nombre|codigo|posic|linea|estacion|modelo|moto)/i.test(k));return {camposDisponibles:campos,valoresCandidatos:relevantes.filter(k=>['string','number','boolean'].includes(typeof sample[k])).slice(0,35).map(k=>({campo:k,valor:String(sample[k]).slice(0,120)}))};})():undefined;
   const referenciasDuplicadas=[...referenceCounts.values()].reduce((n,count)=>n+Math.max(0,count-1),0),asociacionesFotoDuplicadas=[...photoAssociationCounts.values()].reduce((n,count)=>n+Math.max(0,count-1),0);
