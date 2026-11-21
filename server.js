@@ -460,7 +460,7 @@ if(p.startsWith('/api/admin/reference-photos/')&&req.method==='POST'){
        manifest.items[itemKey]={...existingItem,...incomingItem,photos:[...combined.values()]};
       }
       const mergedItem=manifest.items[itemKey];
-      for(const photo of Array.isArray(mergedItem.photos)?mergedItem.photos:[]){const file=String(photo&&photo.file||'');if(/^[a-f0-9]{40}\.webp$/i.test(file)){const source=path.join(target,file);if(fs.existsSync(source)&&!fs.existsSync(path.join(temp,file)))fs.copyFileSync(source,path.join(temp,file));}}
+      for(const photo of Array.isArray(mergedItem&&mergedItem.photos)?mergedItem.photos:[]){const file=String(photo&&photo.file||'');if(/^[a-f0-9]{40}\.webp$/i.test(file)){const source=path.join(target,file);if(fs.existsSync(source)&&!fs.existsSync(path.join(temp,file)))fs.copyFileSync(source,path.join(temp,file));}}
      }
     }
     for(const name of fs.readdirSync(target)){if(/^[a-f0-9]{40}\.webp$/i.test(name)){const source=path.join(target,name),dest=path.join(temp,name);if(fs.statSync(source).isFile()&&!fs.existsSync(dest))fs.copyFileSync(source,dest);}}
