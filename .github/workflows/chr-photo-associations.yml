@@ -31,4 +31,4 @@ jobs:
           console.log('Parsed ' + checked + ' inline script(s).');
           NODE
       - name: Verify CHR photo associations
-        run: node --test tests/chr-photos.test.js
+        run: node --test tests/chr-photos.test.js tests/standard-deduplication.test.js tests/work-lots.test.js
