@@ -98,7 +98,7 @@
   const wrap=document.createElement('div');wrap.className='pu-qty-shortcuts';wrap.setAttribute('aria-label','Cantidades rápidas');
   const values=[{label:'+1',value:1},{label:'+5',value:Math.min(5,max)},{label:'Todo',value:max}];
   values.forEach(item=>{
-   const b=document.createElement('button');b.type='button';b.className=item.label==='Todo'?'':'secondary';b.textContent=item.label;b.title='Preparar '+item.value+' unidad(es); después confirma Registrar unidades';
+   const b=document.createElement('button');b.type='button';b.className=item.label==='Todo'?'':'secondary';b.textContent=item.label;b.title=item.label==='Todo'?'Preparar todo el saldo pendiente ('+max+' unidades)':'Sumar hasta '+item.value+' unidad(es); después confirma Registrar unidades';
    b.addEventListener('click',()=>{const current=Math.max(0,Number(input.value)||0);const next=item.label==='Todo'?max:Math.min(max,current+item.value);input.value=String(next);input.focus({preventScroll:true});});
    wrap.appendChild(b);
   });
@@ -112,7 +112,6 @@
   let shown=0,pending=0,done=0;
   rows.forEach(row=>{
    addRowShortcuts(row);
-   const first=(row.cells[0]?.textContent||'').toLocaleUpperCase('es');
    const isDone=isCompletedRow(row);
    if(isDone)done++;else pending++;
    const matchesText=!searchText||row.textContent.toLocaleLowerCase('es').includes(searchText);
