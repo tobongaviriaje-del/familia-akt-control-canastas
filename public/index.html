@@ -1090,9 +1090,14 @@ function prepararEstandarNKD(input){
    const cleanKey=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
    const keyTask=x=>{
     const ean=String(x.ean||'').trim().replace(/\s+/g,'').toUpperCase(),puestoKey=cleanKey(normalizarPuestoEstandar(x.puesto));
-    // En CHR hay dos piezas distintas con EAN 0 en el mismo puesto; usar su número
-    // de referencia evita que la deduplicación fusione tareas o pierda su foto correcta.
-    if(modelo==='CHR'&&(!ean||ean==='0')){const numero=String(x.numeroReferencia||'').trim();return 'CHR-REF:'+(numero||cleanKey(x.producto))+'|'+puestoKey;}
+    // Un EAN vacío o 0 no identifica una referencia. En CHR se conserva el número
+    // de referencia; en los demás modelos se usa el nombre de pieza para no fusionar
+    // piezas distintas del mismo puesto (por ejemplo, varias referencias sin EAN en CR4 150).
+    if(!ean||ean==='0'){
+     const numero=modelo==='CHR'?String(x.numeroReferencia||'').trim():'';
+     const identificador=numero||cleanKey(x.producto);
+     return modelo+'-SIN-EAN:'+(identificador||'SIN-IDENTIFICADOR')+'|'+puestoKey;
+    }
     return ean+'|'+puestoKey;
    };
    const uniqueMap=new Map();
