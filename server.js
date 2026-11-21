@@ -675,7 +675,7 @@ if(queued&&queued.modeloActual&&Array.isArray(queued.tasks)&&queued.tasks.length
   state.ultimoLoteActivadoAutomaticamente={modelo:queued.modelo,codigo:queued.codigo,fechaHora:new Date().toISOString(),loteAnterior:activeModel};
  }
 }
-writeState(state);res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(state));
+writeState(state);const responseState=JSON.parse(JSON.stringify(state));delete responseState.patinadoresAuth;for(const user of Object.values(responseState.users||{})){if(!user||typeof user!=='object')continue;delete user.pass;delete user.passDia;delete user.passNoche;}res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(responseState));
 }catch(e){console.error('Error guardando estado:',e);res.writeHead(400);res.end(JSON.stringify({error:'JSON invalido'}));}});return;
 }
 let filePath=p==='/'?'/index.html':p;const file=path.normalize(path.join(ROOT,filePath));
