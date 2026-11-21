@@ -453,13 +453,13 @@ if(p.startsWith('/api/admin/reference-photos/')&&req.method==='POST'){
    // Consolidar claves duplicadas por EAN + puesto normalizado. Se conserva la primera
    // ficha como base y se unen todas las fotos por nombre de archivo, sin descartar imágenes.
    if(modelKey==='cr4150'){
-    const normalizePosition=value=>{const x=String(value||'').trim().toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/\\s+/g,' ');let m=x.match(/^pre\\s*0*(\\d+)$/);if(m)return 'pre '+Number(m[1]);m=x.match(/^0*(\\d+)\\s*(derecho|izquierdo)$/);if(m)return m[2]+' '+Number(m[1]);m=x.match(/^(derecho|izquierdo|final(?: de linea)?)\\s*0*(\\d+)$/);if(m)return (m[1].startsWith('final')?'final':m[1])+' '+Number(m[2]);return x;};
+    const normalizePosition=value=>{const x=String(value||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');let m=x.match(/^pre\s*0*(\d+)$/);if(m)return 'pre '+Number(m[1]);m=x.match(/^0*(\d+)\s*(derecho|izquierdo)$/);if(m)return m[2]+' '+Number(m[1]);m=x.match(/^(derecho|izquierdo|final(?: de linea)?)\s*0*(\d+)$/);if(m)return (m[1].startsWith('final')?'final':m[1])+' '+Number(m[2]);return x;};
     const canonical=new Map();
     for(const [oldKey,item] of Object.entries(manifest.items)){
-     const ean=String(item&&item.ean||'').trim().replace(/\\s+/g,'').toUpperCase(),position=normalizePosition(item&&item.puesto);
+     const ean=String(item&&item.ean||'').trim().replace(/\s+/g,'').toUpperCase(),position=normalizePosition(item&&item.puesto);
      if(!ean||!position)continue;
      const key=ean+'|'+position,prior=canonical.get(key);
-     if(!prior){canonical.set(key,{key:oldKey,item:{...item,photos:[]}});}
+     if(!prior)canonical.set(key,{key:oldKey,item:{...item,photos:[]}});
      const targetItem=canonical.get(key).item,photos=new Map((targetItem.photos||[]).filter(p=>p&&p.file).map(p=>[String(p.file),p]));
      for(const photo of Array.isArray(item.photos)?item.photos:[])if(photo&&photo.file)photos.set(String(photo.file),photo);
      targetItem.photos=[...photos.values()];
@@ -515,7 +515,7 @@ if(p==='/api/admin/reference-photos/diagnostic'&&req.method==='GET'){
   const dir=path.join(DATA_DIR,'reference-photos',model.key),manifestPath=path.join(dir,'manifest.json');let manifest=null,manifestError=null;
   try{manifest=JSON.parse(fs.readFileSync(manifestPath,'utf8'));}catch(e){manifestError='No hay manifiesto legible para este modelo.';}
   const items=manifest&&manifest.items&&typeof manifest.items==='object'?Object.values(manifest.items):[],byKey=new Map(),byNumber=new Map(),byEan=new Map(),missingFiles=[],referenceCounts=new Map(),photoAssociationCounts=new Map();
-  for(const item of items){const ean=String(item&&item.ean||'').trim().replace(/\s+/g,''),pos=normPos(item&&item.puesto),photos=Array.isArray(item&&item.photos)?item.photos:[],key=ean+'|'+pos;referenceCounts.set(key,(referenceCounts.get(key)||0)+1);if(!byKey.has(key))byKey.set(key,item);const numero=String(item&&item.numeroReferencia||'').trim();if(numero)byNumber.set(numero+'|'+pos,item);if(ean){if(!byEan.has(ean))byEan.set(ean,[]);byEan.get(ean).push(item);}for(const photo of photos){const file=String(photo&&photo.file||'');if(!/^[a-f0-9]{40}\.webp$/i.test(file)||!fs.existsSync(path.join(dir,file)))missingFiles.push({ean:item.ean||'',puesto:item.puesto||'',archivo:file||'sin nombre'});}}
+  for(const item of items){const ean=String(item&&item.ean||'').trim().replace(/\s+/g,'').toUpperCase(),pos=normPos(item&&item.puesto),photos=Array.isArray(item&&item.photos)?item.photos:[],key=ean+'|'+pos;if(ean&&pos){referenceCounts.set(key,(referenceCounts.get(key)||0)+1);if(!byKey.has(key))byKey.set(key,item);}const numero=String(item&&item.numeroReferencia||'').trim();if(numero)byNumber.set(numero+'|'+pos,item);if(ean){if(!byEan.has(ean))byEan.set(ean,[]);byEan.get(ean).push(item);}for(const photo of photos){const file=String(photo&&photo.file||'');if(file)photoAssociationCounts.set(file,(photoAssociationCounts.get(file)||0)+1);if(!/^[a-f0-9]{40}\.webp$/i.test(file)||!fs.existsSync(path.join(dir,file)))missingFiles.push({ean:item.ean||'',puesto:item.puesto||'',archivo:file||'sin nombre'});}}
   const refsConFoto=items.filter(x=>Array.isArray(x.photos)&&x.photos.some(ph=>ph&&ph.file)).length,refsSinFoto=items.length-refsConFoto;
   const taskRows=(Array.isArray(state.tasks)?state.tasks:[]).filter(model.match).map(t=>{const ean=String(t.ean||'').trim().replace(/\s+/g,''),pos=normPos(t.puesto),numero=String(t.numeroReferencia||'').trim(),exact=(model.key==='chr'&&numero?byNumber.get(numero+'|'+pos):null)||byKey.get(ean+'|'+pos);let has=!!(exact&&Array.isArray(exact.photos)&&exact.photos.some(ph=>ph&&ph.file));if(!has){const candidates=(byEan.get(ean)||[]).filter(x=>Array.isArray(x.photos)&&x.photos.some(ph=>ph&&ph.file));if(candidates.length===1)has=true;}return {numeroReferencia:numero||exact&&exact.numeroReferencia||'',ean:t.ean||'',producto:t.producto||'',puesto:t.puesto||'',foto:has};});
   const tasksSinFoto=taskRows.filter(x=>!x.foto);
