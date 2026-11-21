@@ -59,7 +59,7 @@ test('protege credenciales, cambios administrativos y cierre de jornada', async 
     },
     patinadoresAuth: { passDia: 'DiaTest123', passNoche: 'NocheTest123' },
     lpnCatalog: [{ id: 'LPN-ORIGINAL' }],
-    tasks: [{ id: 'T-1', cantidad: 10, entregado: 2, estado: 'Parcial', puesto: 'PRE 1' }]
+    tasks: [{ id: 'T-1', standardNKD: true, standardMoto: 'NKD', lote: 10, cantidad: 10, entregado: 2, estado: 'Parcial', puesto: 'PRE 1', entregas: [], entrega: null, canastasEntregadas: 0, confirmacionesCanastas: [], correcciones: [] }]
   }, null, 2));
 
   const port = await freePort();
@@ -86,6 +86,28 @@ test('protege credenciales, cambios administrativos y cierre de jornada', async 
   const patinadorToken = await login('patinador', 'PatinadorTest123');
   const adminToken = await login('admin', 'AdminTest123');
 
+  const sharedLogin = await request(baseUrl, '/api/login', {
+    method: 'POST', body: { username: 'patinadores', password: 'DiaTest123' }
+  });
+  assert.equal(sharedLogin.status, 200, 'el ingreso compartido de Patinadores debe funcionar');
+  const sharedToken = sharedLogin.data.token;
+  const sharedLot = await request(baseUrl, '/api/work-lots?model=NKD&username=patinador', { token: sharedToken });
+  assert.equal(sharedLot.status, 200, 'el token compartido debe abrir el lote del perfil seleccionado');
+  assert.equal(sharedLot.data.tasks.length, 1);
+  const previousTask = sharedLot.data.tasks[0];
+  const movement = { cantidad: 1, canastasFisicas: 0 };
+  const sharedSave = await request(baseUrl, '/api/work-lots', {
+    token: sharedToken,
+    method: 'PUT',
+    body: {
+      username: 'patinador', model: 'NKD', lotId: sharedLot.data.lot.id,
+      version: sharedLot.data.lot.updatedAt,
+      tasks: [{ ...previousTask, entregado: 3, estado: 'Parcial', entregas: [movement], entrega: movement }]
+    }
+  });
+  assert.equal(sharedSave.status, 200, 'el Patinador compartido debe poder guardar una entrega asignada');
+  assert.equal(sharedSave.data.tasks[0].entregado, 3);
+
   const safeState = await request(baseUrl, '/api/state', { token: supervisorToken });
   assert.equal(safeState.status, 200);
   assert.equal(safeState.data.patinadoresAuth, undefined);
@@ -104,6 +126,15 @@ test('protege credenciales, cambios administrativos y cierre de jornada', async 
     token: patinadorToken, method: 'POST', body: { confirmacion: 'CERRAR JORNADA' }
   });
   assert.equal(forbiddenClosePatinador.status, 403);
+
+
+  const patinadorProtectedWrite = await request(baseUrl, '/api/state', {
+    token: patinadorToken, method: 'PUT',
+    body: { users: { admin: { role: 'Patinador', pass: 'ROBBED' }, intruso: { role: 'Admin', pass: 'x' } } }
+  });
+  assert.equal(patinadorProtectedWrite.status, 200);
+  assert.equal(patinadorProtectedWrite.data.users.admin.role, 'Admin');
+  assert.equal(patinadorProtectedWrite.data.users.intruso, undefined);
 
   const protectedWrite = await request(baseUrl, '/api/state', {
     token: supervisorToken,
