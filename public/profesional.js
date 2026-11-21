@@ -61,3 +61,11 @@ function start(){addStyle();mount();if(typeof render==='function'&&!render.__pro
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(start,0));else setTimeout(start,0);
 window.addEventListener('online',checkHealth);window.addEventListener('offline',()=>{const e=$('proHealth');if(e){e.className='pro-status bad';e.textContent='Dispositivo sin internet';}});
 })();
+
+/* Load the optional operations intelligence panel without coupling it to core UI. */
+(function(){
+ const s=document.createElement('script');
+ s.src='/operaciones-inteligentes.js?v=1';
+ s.defer=true;
+ document.head.appendChild(s);
+})();
