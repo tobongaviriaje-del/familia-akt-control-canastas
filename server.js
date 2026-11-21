@@ -450,6 +450,25 @@ if(p.startsWith('/api/admin/reference-photos/')&&req.method==='POST'){
     for(const name of fs.readdirSync(target)){if(/^[a-f0-9]{40}\.webp$/i.test(name)){const source=path.join(target,name),dest=path.join(temp,name);if(fs.statSync(source).isFile()&&!fs.existsSync(dest))fs.copyFileSync(source,dest);}}
    }
    for(const [name,data] of files)fs.writeFileSync(path.join(temp,name),data);
+   // Consolidar claves duplicadas por EAN + puesto normalizado. Se conserva la primera
+   // ficha como base y se unen todas las fotos por nombre de archivo, sin descartar imágenes.
+   if(modelKey==='cr4150'){
+    const normalizePosition=value=>{const x=String(value||'').trim().toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/\\s+/g,' ');let m=x.match(/^pre\\s*0*(\\d+)$/);if(m)return 'pre '+Number(m[1]);m=x.match(/^0*(\\d+)\\s*(derecho|izquierdo)$/);if(m)return m[2]+' '+Number(m[1]);m=x.match(/^(derecho|izquierdo|final(?: de linea)?)\\s*0*(\\d+)$/);if(m)return (m[1].startsWith('final')?'final':m[1])+' '+Number(m[2]);return x;};
+    const canonical=new Map();
+    for(const [oldKey,item] of Object.entries(manifest.items)){
+     const ean=String(item&&item.ean||'').trim().replace(/\\s+/g,'').toUpperCase(),position=normalizePosition(item&&item.puesto);
+     if(!ean||!position)continue;
+     const key=ean+'|'+position,prior=canonical.get(key);
+     if(!prior){canonical.set(key,{key:oldKey,item:{...item,photos:[]}});}
+     const targetItem=canonical.get(key).item,photos=new Map((targetItem.photos||[]).filter(p=>p&&p.file).map(p=>[String(p.file),p]));
+     for(const photo of Array.isArray(item.photos)?item.photos:[])if(photo&&photo.file)photos.set(String(photo.file),photo);
+     targetItem.photos=[...photos.values()];
+    }
+    const normalized={};for(const {key,item} of canonical.values())normalized[key]=item;
+    // Mantener referencias incompletas para no perder metadatos ni reportes de pendientes.
+    for(const [key,item] of Object.entries(manifest.items))if(!String(item&&item.ean||'').trim()||!String(item&&item.puesto||'').trim())normalized[key]=item;
+    manifest.items=normalized;
+   }
    const mergedItems=Object.values(manifest.items),withPhotos=mergedItems.filter(item=>item&&Array.isArray(item.photos)&&item.photos.some(photo=>photo&&photo.file)).length;
    manifest.referencias_confirmadas=withPhotos;manifest.referencias_pendientes=mergedItems.length-withPhotos;manifest.asociaciones_foto=mergedItems.reduce((n,item)=>n+(Array.isArray(item&&item.photos)?item.photos.filter(photo=>photo&&photo.file).length:0),0);
    fs.writeFileSync(path.join(temp,'manifest.json'),JSON.stringify(manifest));
