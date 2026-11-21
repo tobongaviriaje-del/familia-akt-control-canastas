@@ -448,7 +448,11 @@ if(p.startsWith('/api/admin/reference-photos/')&&req.method==='POST'){
      const replaceAssociations=manifest.reemplazar_asociaciones===true;
      for(const [itemKey,existingItem] of Object.entries(existingManifest.items)){
       const incomingItem=manifest.items[itemKey];
-      if(!incomingItem){manifest.items[itemKey]=existingItem;}
+      if(!incomingItem){
+       // CHR: al reemplazar asociaciones, no reincorporar fichas antiguas con claves
+       // históricas distintas (EAN|puesto vs numeroReferencia|puesto).
+       if(!(modelKey==='chr'&&manifest.reemplazar_asociaciones===true))manifest.items[itemKey]=existingItem;
+      }
       else{
        const combined=new Map();
        if(!replaceAssociations)for(const photo of (Array.isArray(existingItem.photos)?existingItem.photos:[]))if(photo&&/^[a-f0-9]{40}\.webp$/i.test(String(photo.file||'')))combined.set(photo.file,photo);
