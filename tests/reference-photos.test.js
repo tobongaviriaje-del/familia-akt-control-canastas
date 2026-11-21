@@ -55,7 +55,7 @@ function zipStore(entries) {
     central.writeUInt16LE(nameBytes.length, 28);
     central.writeUInt16LE(0, 30);
     central.writeUInt16LE(0, 32);
-    central.writeUInt32LE(0, 42);
+    central.writeUInt32LE(offset, 42);
     centrals.push(central, nameBytes);
     offset += local.length + nameBytes.length + data.length;
   }
