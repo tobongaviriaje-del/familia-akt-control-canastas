@@ -237,7 +237,7 @@ if(p==='/api/admin/change-password'&&req.method==='POST'){
   const incoming=JSON.parse(body||'{}'),newPassword=String(incoming.newPassword||'');
   if(newPassword.length<12)return sendJson(res,400,{ok:false,error:'La nueva contraseña debe tener al menos 12 caracteres.'});
   if(newPassword===String(process.env.ADMIN_RECOVERY_PASSWORD||''))return sendJson(res,400,{ok:false,error:'La nueva contraseña no puede ser la clave de recuperación.'});
-  admin.pass=newPassword;delete state.adminRecoveryUsed;writeState(state);
+  admin.pass=newPassword;writeState(state);
   return sendJson(res,200,{ok:true,message:'Contraseña administrativa actualizada.'});
  }catch{return sendJson(res,400,{ok:false,error:'Solicitud inválida.'});}});
  return;
