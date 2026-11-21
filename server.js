@@ -35,23 +35,24 @@ function loadSessions(){
 function sendJson(res,status,data){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(data));}
 function authorized(req){const h=String(req.headers.authorization||'');const token=h.startsWith('Bearer ')?h.slice(7):'';const session=sessions.get(token);if(!session)return false;if(session.expires<Date.now()){sessions.delete(token);return false;}session.expires=Date.now()+SESSION_TTL;return true;}
 
-// Cuentas base: solo administración. Las cuentas de patinadores retiradas
-// no deben recrearse automáticamente al iniciar ni al leer el estado.
-const defaultUsers={
-admin:{pass:'admin',role:'Admin',name:'Administrador'}
-};
+// Las cuentas se crean explícitamente. Nunca se restaura una contraseña
+// administrativa conocida ni se recrean usuarios borrados al leer el estado.
 const retiredPatinadores=['juanesteban','jorge','hamilton'];
 
 function ensureState(){
 fs.mkdirSync(DATA_DIR,{recursive:true});
-if(!fs.existsSync(STATE_FILE))fs.writeFileSync(STATE_FILE,JSON.stringify({users:defaultUsers,tasks:[]},null,2));
+if(!fs.existsSync(STATE_FILE)){
+ const initialAdminPassword=String(process.env.ADMIN_INITIAL_PASSWORD||'');
+ if(initialAdminPassword.length<12)throw new Error('Instalación nueva bloqueada: configura ADMIN_INITIAL_PASSWORD con al menos 12 caracteres antes de iniciar el servidor.');
+ const initialState={users:{admin:{pass:initialAdminPassword,role:'Admin',name:'Administrador'}},tasks:[]};
+ fs.writeFileSync(STATE_FILE,JSON.stringify(initialState,null,2),{mode:0o600});
+}
 }
 function readState(){
 ensureState();
 try{
 const s=JSON.parse(fs.readFileSync(STATE_FILE,'utf8'));
-if(!s.users)s.users={...defaultUsers};
-for(const [key,user] of Object.entries(defaultUsers)){if(!s.users[key])s.users[key]=user;}
+if(!s.users||typeof s.users!=='object'||Array.isArray(s.users))s.users={};
 let usersChanged=false;
 for(const key of [...retiredPatinadores,'mesanin']){if(Object.prototype.hasOwnProperty.call(s.users,key)){delete s.users[key];usersChanged=true;}}
 if(usersChanged)writeState(s);
@@ -221,11 +222,25 @@ let body='';req.on('data',chunk=>{body+=chunk;if(body.length>10000)req.destroy()
   if(typeof user.passDia==='string'&&user.passDia===password){passwordValid=true;turnoLogin='Día';}
   else if(typeof user.passNoche==='string'&&user.passNoche===password){passwordValid=true;turnoLogin='Noche';}
  }else if(user&&typeof user.pass==='string'&&user.pass===password){passwordValid=true;turnoLogin=user.turno||'Todos';}
- if(!passwordValid&&username==='admin'&&process.env.ADMIN_RECOVERY_PASSWORD&&password===process.env.ADMIN_RECOVERY_PASSWORD&&!state.adminRecoveryUsed&&user&&user.role==='Admin'){user.pass=password;state.adminRecoveryUsed=true;writeState(state);passwordValid=true;}
+ if(!passwordValid&&username==='admin'&&process.env.ADMIN_RECOVERY_PASSWORD&&password===process.env.ADMIN_RECOVERY_PASSWORD&&!state.adminRecoveryUsed&&user&&user.role==='Admin'){state.adminRecoveryUsed=true;writeState(state);passwordValid=true;}
  if(!user||!passwordValid)return sendJson(res,401,{ok:false,error:'Usuario o contraseña incorrectos'});
  const token=require('crypto').randomBytes(32).toString('hex');sessions.set(token,{username,expires:Date.now()+SESSION_TTL});persistSessions();
  return sendJson(res,200,{ok:true,token,user:{username,name:user.name,role:user.role,turno:turnoLogin,areas:user.areas||[],puestos:user.puestos||[]}});
  }catch{return sendJson(res,400,{ok:false,error:'Solicitud inválida'});}});return;
+}
+if(p==='/api/admin/change-password'&&req.method==='POST'){
+ const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token);
+ if(!authorized(req)||!session||session.username!=='admin')return sendJson(res,403,{ok:false,error:'Solo el administrador autenticado puede cambiar esta contraseña.'});
+ const state=readState(),admin=state.users&&state.users.admin;
+ if(!admin||admin.role!=='Admin')return sendJson(res,403,{ok:false,error:'La cuenta administradora no está disponible.'});
+ let body='';req.on('data',c=>{body+=c;if(body.length>10000)req.destroy();});req.on('end',()=>{try{
+  const incoming=JSON.parse(body||'{}'),newPassword=String(incoming.newPassword||'');
+  if(newPassword.length<12)return sendJson(res,400,{ok:false,error:'La nueva contraseña debe tener al menos 12 caracteres.'});
+  if(newPassword===String(process.env.ADMIN_RECOVERY_PASSWORD||''))return sendJson(res,400,{ok:false,error:'La nueva contraseña no puede ser la clave de recuperación.'});
+  admin.pass=newPassword;writeState(state);
+  return sendJson(res,200,{ok:true,message:'Contraseña administrativa actualizada.'});
+ }catch{return sendJson(res,400,{ok:false,error:'Solicitud inválida.'});}});
+ return;
 }
 if(p==='/api/admin/patinadores-credentials'&&req.method==='POST'){
  const token=String(req.headers.authorization||'').slice(7),session=sessions.get(token),state=readState();
@@ -499,8 +514,10 @@ if(p.startsWith('/api/reference-photos/')&&req.method==='GET'){
  fs.readFile(path.join(dir,file),(err,data)=>{if(err)return sendJson(res,404,{ok:false,error:'Foto no encontrada.'});res.writeHead(200,{'Content-Type':'image/webp','Cache-Control':'private, max-age=86400'});res.end(data);});return;
 }
 
-if(p==='/api/state'&&req.method==='GET'){const safe=readState();delete safe.patinadoresAuth;return sendJson(res,200,safe);}
+if(p==='/api/state'&&req.method==='GET'){const safe=JSON.parse(JSON.stringify(readState()));delete safe.patinadoresAuth;for(const user of Object.values(safe.users||{})){if(!user||typeof user!=='object')continue;delete user.pass;delete user.passDia;delete user.passNoche;}return sendJson(res,200,safe);}
 if(p==='/api/jornada/cerrar'&&req.method==='POST'){
+const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),authState=readState();
+if(!session||!authState.users[session.username]||authState.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede cerrar la jornada.'});
 let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{
 const incoming=JSON.parse(body||'{}');const state=readState();
 if(!Array.isArray(state.tasks))state.tasks=[];
@@ -649,9 +666,14 @@ return sendJson(res,200,{ok:true,resumen,archivo:archivo.file,tareasNuevas:pendi
 });return;
 }
 if(p==='/api/state'&&req.method==='PUT'){
+const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),actor=session&&readState().users[session.username];
+if(!session||!actor)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
 let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{
-const incoming=JSON.parse(body||'{}'),current=readState(),nextUsers=incoming.users||current.users;delete nextUsers.mesanin;
-const state={...current,users:nextUsers,tasks:Array.isArray(incoming.tasks)?incoming.tasks:current.tasks,lpnCatalog:Array.isArray(incoming.lpnCatalog)?incoming.lpnCatalog:current.lpnCatalog,freeDeliveries:Array.isArray(incoming.freeDeliveries)?incoming.freeDeliveries:(current.freeDeliveries||[]),estibasRecibidas:Array.isArray(incoming.estibasRecibidas)?incoming.estibasRecibidas:(current.estibasRecibidas||[]),queuedStandardBatches:Array.isArray(incoming.queuedStandardBatches)?incoming.queuedStandardBatches:(current.queuedStandardBatches||[]),tareasArchivadas:Array.isArray(incoming.tareasArchivadas)?incoming.tareasArchivadas:(current.tareasArchivadas||[])};
+const incoming=JSON.parse(body||'{}'),current=readState(),isAdmin=actor.role==='Admin';
+if(actor.role==='Patinador'&&Array.isArray(incoming.tasks)&&stableWorkString(incoming.tasks)!==stableWorkString(current.tasks))return sendJson(res,403,{ok:false,error:'Los Patinadores deben registrar sus entregas desde los lotes de trabajo.'});
+const nextUsers=isAdmin&&incoming.users&&typeof incoming.users==='object'?incoming.users:current.users;delete nextUsers.mesanin;
+if(isAdmin){for(const [key,user] of Object.entries(nextUsers)){const previous=current.users&&current.users[key];if(!user||typeof user!=='object')continue;for(const field of ['pass','passDia','passNoche'])if(!Object.prototype.hasOwnProperty.call(user,field)&&previous&&Object.prototype.hasOwnProperty.call(previous,field))user[field]=previous[field];}}
+const state={...current,users:nextUsers,tasks:Array.isArray(incoming.tasks)?incoming.tasks:current.tasks,lpnCatalog:isAdmin&&Array.isArray(incoming.lpnCatalog)?incoming.lpnCatalog:current.lpnCatalog,freeDeliveries:isAdmin&&Array.isArray(incoming.freeDeliveries)?incoming.freeDeliveries:(current.freeDeliveries||[]),estibasRecibidas:isAdmin&&Array.isArray(incoming.estibasRecibidas)?incoming.estibasRecibidas:(current.estibasRecibidas||[]),queuedStandardBatches:isAdmin&&Array.isArray(incoming.queuedStandardBatches)?incoming.queuedStandardBatches:(current.queuedStandardBatches||[]),tareasArchivadas:isAdmin&&Array.isArray(incoming.tareasArchivadas)?incoming.tareasArchivadas:(current.tareasArchivadas||[])};
 const queued=state.queuedStandardBatches[0];
 if(queued&&queued.modeloActual&&Array.isArray(queued.tasks)&&queued.tasks.length){
  const activeModel=String(queued.modeloActual),modelOf=t=>String(t&& (t.standardMoto||(t.standardNKD?'NKD':''))||'');
@@ -669,7 +691,7 @@ if(queued&&queued.modeloActual&&Array.isArray(queued.tasks)&&queued.tasks.length
   state.ultimoLoteActivadoAutomaticamente={modelo:queued.modelo,codigo:queued.codigo,fechaHora:new Date().toISOString(),loteAnterior:activeModel};
  }
 }
-writeState(state);res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(state));
+writeState(state);const responseState=JSON.parse(JSON.stringify(state));delete responseState.patinadoresAuth;for(const user of Object.values(responseState.users||{})){if(!user||typeof user!=='object')continue;delete user.pass;delete user.passDia;delete user.passNoche;}res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(responseState));
 }catch(e){console.error('Error guardando estado:',e);res.writeHead(400);res.end(JSON.stringify({error:'JSON invalido'}));}});return;
 }
 let filePath=p==='/'?'/index.html':p;const file=path.normalize(path.join(ROOT,filePath));
