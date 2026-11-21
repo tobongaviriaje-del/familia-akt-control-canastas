@@ -101,7 +101,7 @@ function writeWorkLots(rows){fs.mkdirSync(DATA_DIR,{recursive:true});const tmp=W
 function workLotNorm(v){return String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');}
 function workLotPosition(v){let x=workLotNorm(v),m=x.match(/^pre\s*0*(\d+)$/);if(m)return 'pre '+Number(m[1]);m=x.match(/^0*(\d+)\s*(derecho|izquierdo)$/);if(m)return m[2]+' '+Number(m[1]);m=x.match(/^(derecho|izquierdo|final(?: de linea)?)\s*0*(\d+)$/);if(m)return (m[1].startsWith('final')?'final':m[1])+' '+Number(m[2]);return x;}
 function workLotUserCanTask(user,username,task){const positions=new Set(Array.isArray(user.puestos)?user.puestos.map(workLotPosition).filter(Boolean):[]);const position=workLotPosition(task.puesto);if(position&&positions.has(position))return true;const responsible=workLotNorm(task.patinadorEstandar),identities=[user.name,username].map(workLotNorm).filter(Boolean);return !!responsible&&identities.some(v=>v===responsible||v.startsWith(responsible+' ')||v.endsWith(' '+responsible));}
-function workLotResponse(row,user,username,rows){return {ok:true,lot:{id:row.id,model:row.model,number:row.number,createdAt:row.createdAt,updatedAt:row.updatedAt,sourceBatchId:row.sourceBatchId||null},lots:rows.filter(x=>x.model===row.model).sort((a,b)=>a.number-b.number).map(x=>({id:x.id,number:x.number})),tasks:(row.tasks||[]).filter(t=>workLotUserCanTask(user,username,t))};}
+function workLotResponse(row,user,username,rows){return {ok:true,lot:{id:row.id,model:row.model,number:row.number,codigoLoteOperacion:String(row.codigoLoteOperacion||'').trim().toUpperCase(),createdAt:row.createdAt,updatedAt:row.updatedAt,sourceBatchId:row.sourceBatchId||null},lots:rows.filter(x=>x.model===row.model).sort((a,b)=>a.number-b.number).map(x=>({id:x.id,number:x.number})),tasks:(row.tasks||[]).filter(t=>workLotUserCanTask(user,username,t))};}
 function validateWorkLot(saved,incoming,user,username){
  if(!Array.isArray(incoming))throw new Error('La lista de referencias no es válida.');
  const byId=new Map(incoming.map(x=>[String(x&&x.id),x]));
@@ -313,10 +313,18 @@ if(p==='/api/work-lots'&&['GET','POST','PUT'].includes(req.method)){
   try{row=ensureWorkLot(rows,state,model,actor);}catch(e){return sendJson(res,404,{ok:false,error:e.message||'No hay estándar disponible.'});}
   if(action==='GET')return sendJson(res,200,workLotResponse(row,user,actor,rows));
   if(action==='POST'){
+   if(body.action==='set-code'){
+    const selected=rows.find(x=>x.model===model&&x.id===String(body.lotId||''));if(!selected)return sendJson(res,404,{ok:false,error:'No se encontró el lote seleccionado.'});
+    if(selected.updatedAt!==body.version)return sendJson(res,409,{ok:false,error:'Otro usuario cambió este lote. Actualiza la pantalla antes de guardar el código.'});
+    const code=String(body.code||'').trim().toUpperCase();if(!/^[A-Z0-9-]{2,40}$/.test(code))return sendJson(res,400,{ok:false,error:'El número de lote debe tener entre 2 y 40 caracteres: letras, números o guion.'});
+    if(!(selected.tasks||[]).some(task=>workLotUserCanTask(user,actor,task)))return sendJson(res,403,{ok:false,error:'No tienes puestos asignados en este lote.'});
+    selected.codigoLoteOperacion=code;selected.codigoOperacionActualizadoPor=user.name||actor;selected.codigoOperacionActualizadoEn=new Date().toLocaleString('es-CO');selected.updatedAt=new Date().toISOString()+'#'+require('crypto').randomUUID();writeWorkLots(rows);
+    return sendJson(res,200,workLotResponse(selected,user,actor,rows));
+   }
    if(body.action==='select'){const selected=rows.find(x=>x.model===model&&x.id===String(body.lotId||''));if(!selected)return sendJson(res,404,{ok:false,error:'No se encontró el lote guardado.'});return sendJson(res,200,workLotResponse(selected,user,actor,rows));}
    if(body.action!=='next')return sendJson(res,400,{ok:false,error:'Acción de lote no válida.'});
    if(!body.lotId)return sendJson(res,400,{ok:false,error:'Falta identificar el lote actual.'});const source=rows.find(x=>x.model===model&&x.id===String(body.lotId));if(!source)return sendJson(res,404,{ok:false,error:'El lote actual ya no existe. Actualiza la pantalla.'});const nextNo=source.number+1;let selected=rows.find(x=>x.model===model&&x.number===nextNo);
-   if(!selected){const cloned=(row.tasks||[]).map(t=>({...t,entregado:0,estado:'Pendiente',entregas:[],entrega:null,canastasEntregadas:0,confirmacionesCanastas:[]}));const now=new Date().toISOString();selected={id:require('crypto').randomUUID(),model,number:nextNo,tasks:cloned,createdBy:actor,createdAt:now,updatedAt:now};rows.push(selected);writeWorkLots(rows);}
+   if(!selected){const cloned=(row.tasks||[]).map(t=>{const copy={...t,entregado:0,estado:'Pendiente',entregas:[],entrega:null,canastasEntregadas:0,confirmacionesCanastas:[]};for(const field of WORK_LOT_OPERATION_FIELDS)delete copy[field];return copy;});const now=new Date().toISOString();selected={id:require('crypto').randomUUID(),model,number:nextNo,tasks:cloned,createdBy:actor,createdAt:now,updatedAt:now};rows.push(selected);writeWorkLots(rows);}
    return sendJson(res,200,workLotResponse(selected,user,actor,rows));
   }
   if(action==='PUT'){
