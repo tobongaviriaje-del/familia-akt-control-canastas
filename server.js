@@ -222,11 +222,25 @@ let body='';req.on('data',chunk=>{body+=chunk;if(body.length>10000)req.destroy()
   if(typeof user.passDia==='string'&&user.passDia===password){passwordValid=true;turnoLogin='Día';}
   else if(typeof user.passNoche==='string'&&user.passNoche===password){passwordValid=true;turnoLogin='Noche';}
  }else if(user&&typeof user.pass==='string'&&user.pass===password){passwordValid=true;turnoLogin=user.turno||'Todos';}
- if(!passwordValid&&username==='admin'&&process.env.ADMIN_RECOVERY_PASSWORD&&password===process.env.ADMIN_RECOVERY_PASSWORD&&!state.adminRecoveryUsed&&user&&user.role==='Admin'){user.pass=password;state.adminRecoveryUsed=true;writeState(state);passwordValid=true;}
+ if(!passwordValid&&username==='admin'&&process.env.ADMIN_RECOVERY_PASSWORD&&password===process.env.ADMIN_RECOVERY_PASSWORD&&!state.adminRecoveryUsed&&user&&user.role==='Admin'){state.adminRecoveryUsed=true;writeState(state);passwordValid=true;}
  if(!user||!passwordValid)return sendJson(res,401,{ok:false,error:'Usuario o contraseña incorrectos'});
  const token=require('crypto').randomBytes(32).toString('hex');sessions.set(token,{username,expires:Date.now()+SESSION_TTL});persistSessions();
  return sendJson(res,200,{ok:true,token,user:{username,name:user.name,role:user.role,turno:turnoLogin,areas:user.areas||[],puestos:user.puestos||[]}});
  }catch{return sendJson(res,400,{ok:false,error:'Solicitud inválida'});}});return;
+}
+if(p==='/api/admin/change-password'&&req.method==='POST'){
+ const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token);
+ if(!authorized(req)||!session||session.username!=='admin')return sendJson(res,403,{ok:false,error:'Solo el administrador autenticado puede cambiar esta contraseña.'});
+ const state=readState(),admin=state.users&&state.users.admin;
+ if(!admin||admin.role!=='Admin')return sendJson(res,403,{ok:false,error:'La cuenta administradora no está disponible.'});
+ let body='';req.on('data',c=>{body+=c;if(body.length>10000)req.destroy();});req.on('end',()=>{try{
+  const incoming=JSON.parse(body||'{}'),newPassword=String(incoming.newPassword||'');
+  if(newPassword.length<12)return sendJson(res,400,{ok:false,error:'La nueva contraseña debe tener al menos 12 caracteres.'});
+  if(newPassword===String(process.env.ADMIN_RECOVERY_PASSWORD||''))return sendJson(res,400,{ok:false,error:'La nueva contraseña no puede ser la clave de recuperación.'});
+  admin.pass=newPassword;delete state.adminRecoveryUsed;writeState(state);
+  return sendJson(res,200,{ok:true,message:'Contraseña administrativa actualizada.'});
+ }catch{return sendJson(res,400,{ok:false,error:'Solicitud inválida.'});}});
+ return;
 }
 if(p==='/api/admin/patinadores-credentials'&&req.method==='POST'){
  const token=String(req.headers.authorization||'').slice(7),session=sessions.get(token),state=readState();
