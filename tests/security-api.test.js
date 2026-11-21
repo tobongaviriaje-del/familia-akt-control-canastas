@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const net = require('node:net');
-const { spawn } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 
 const repoRoot = path.resolve(__dirname, '..');
 
@@ -191,3 +191,75 @@ test('protege credenciales, cambios administrativos y cierre de jornada', async 
   assert.equal(afterClose.tasks[0].estado, 'Pendiente');
   assert.equal(fs.existsSync(path.join(dataDir, 'history', adminClose.data.archived)), true);
 });
+
+test('no recrea admin/admin y exige una clave inicial explícita en instalaciones nuevas', async t => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'familia-akt-bootstrap-'));
+  const publicDir = path.join(temp, 'public');
+  const dataDir = path.join(temp, 'data');
+  fs.mkdirSync(publicDir, { recursive: true });
+  fs.mkdirSync(dataDir, { recursive: true });
+  fs.copyFileSync(path.join(repoRoot, 'server.js'), path.join(temp, 'server.js'));
+
+  // Un estado existente sin la cuenta admin no debe recibirla de nuevo.
+  fs.writeFileSync(path.join(dataDir, 'state.json'), JSON.stringify({
+    users: { supervisor: { pass: 'SupervisorOnly123', role: 'Supervisor', name: 'Supervisor' } },
+    tasks: []
+  }, null, 2));
+  const port = await freePort();
+  const env = { ...process.env, PORT: String(port) };
+  delete env.ADMIN_INITIAL_PASSWORD;
+  delete env.ADMIN_RECOVERY_PASSWORD;
+  const child = spawn(process.execPath, ['server.js'], { cwd: temp, env, stdio: 'ignore' });
+  t.after(async () => {
+    child.kill('SIGTERM');
+    await new Promise(resolve => { if (child.exitCode !== null) return resolve(); child.once('exit', resolve); setTimeout(resolve, 1500).unref(); });
+    fs.rmSync(temp, { recursive: true, force: true });
+  });
+  const baseUrl = 'http://127.0.0.1:' + port;
+  await waitForHealth(baseUrl, child);
+  const defaultLogin = await request(baseUrl, '/api/login', {
+    method: 'POST', body: { username: 'admin', password: 'admin' }
+  });
+  assert.equal(defaultLogin.status, 401, 'admin/admin no debe funcionar en un estado existente');
+  const existingState = JSON.parse(fs.readFileSync(path.join(dataDir, 'state.json'), 'utf8'));
+  assert.equal(existingState.users.admin, undefined, 'leer el estado no debe recrear la cuenta admin');
+
+  // Una instalación nueva falla de forma segura si no se configura una clave inicial.
+  const freshWithoutPassword = path.join(temp, 'fresh-without-password');
+  fs.mkdirSync(path.join(freshWithoutPassword, 'public'), { recursive: true });
+  const missingPasswordEnv = { ...env, PORT: String(await freePort()) };
+  const blocked = spawnSync(process.execPath, ['server.js'], {
+    cwd: freshWithoutPassword,
+    env: missingPasswordEnv,
+    encoding: 'utf8',
+    timeout: 5000
+  });
+  assert.notEqual(blocked.status, 0, 'la instalación nueva debe bloquearse sin clave inicial');
+  assert.match(String(blocked.stderr) + String(blocked.stdout), /ADMIN_INITIAL_PASSWORD/);
+  assert.equal(fs.existsSync(path.join(freshWithoutPassword, 'data', 'state.json')), false);
+
+  // Con una clave explícita, el primer administrador sí puede iniciar sesión.
+  const freshConfigured = path.join(temp, 'fresh-configured');
+  fs.mkdirSync(path.join(freshConfigured, 'public'), { recursive: true });
+  const configuredPort = await freePort();
+  const configuredEnv = { ...process.env, PORT: String(configuredPort), ADMIN_INITIAL_PASSWORD: 'InitialAdminTest123!' };
+  delete configuredEnv.ADMIN_RECOVERY_PASSWORD;
+  const configuredChild = spawn(process.execPath, ['server.js'], { cwd: freshConfigured, env: configuredEnv, stdio: 'ignore' });
+  t.after(async () => {
+    configuredChild.kill('SIGTERM');
+    await new Promise(resolve => { if (configuredChild.exitCode !== null) return resolve(); configuredChild.once('exit', resolve); setTimeout(resolve, 1500).unref(); });
+    fs.rmSync(freshConfigured, { recursive: true, force: true });
+    fs.rmSync(freshWithoutPassword, { recursive: true, force: true });
+  });
+  const configuredUrl = 'http://127.0.0.1:' + configuredPort;
+  await waitForHealth(configuredUrl, configuredChild);
+  const validLogin = await request(configuredUrl, '/api/login', {
+    method: 'POST', body: { username: 'admin', password: 'InitialAdminTest123!' }
+  });
+  assert.equal(validLogin.status, 200);
+  const rejectedDefault = await request(configuredUrl, '/api/login', {
+    method: 'POST', body: { username: 'admin', password: 'admin' }
+  });
+  assert.equal(rejectedDefault.status, 401);
+});
+
