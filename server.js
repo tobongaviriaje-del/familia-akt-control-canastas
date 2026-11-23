@@ -307,6 +307,26 @@ if(p==='/api/estibas-recibidas'&&req.method==='POST'){
  });
  return;
 }
+if(p==='/api/work-lots/overview'&&req.method==='GET'){
+ const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token);
+ if(!authorized(req)||!session)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
+ const state=readState(),viewer=state.users&&state.users[session.username],allowed=['Admin','Supervisor','Coordinador'];
+ if(!viewer||!allowed.includes(viewer.role))return sendJson(res,403,{ok:false,error:'No tienes permiso para consultar el detalle de lotes.'});
+ const model=workLotModel(url.searchParams.get('model')),code=String(url.searchParams.get('code')||'').trim().toUpperCase();
+ if(!model)return sendJson(res,400,{ok:false,error:'Selecciona un modelo válido.'});
+ try{
+  const rows=readWorkLots().filter(x=>x&&x.model===model).sort((a,b)=>workLotNumber(b.number)-workLotNumber(a.number));
+  const matches=rows.filter(row=>{
+   const rowCode=String(row.codigoLoteOperacion||'').trim().toUpperCase();
+   const taskCodes=[...new Set((Array.isArray(row.tasks)?row.tasks:[]).map(t=>String(t&&(t.codigoLoteOperacion||t.loteCodigo||t.codigoLote)||'').trim().toUpperCase()).filter(Boolean))];
+   return !code||rowCode===code||taskCodes.includes(code);
+  });
+  const row=matches[0];
+  if(!row)return sendJson(res,404,{ok:false,error:'No se encontró ese lote para el modelo seleccionado.'});
+  const tasks=Array.isArray(row.tasks)?row.tasks:[];
+  return sendJson(res,200,{ok:true,soloLectura:true,lot:{id:row.id,model:row.model,number:row.number,codigoLoteOperacion:String(row.codigoLoteOperacion||code||'').trim().toUpperCase(),createdAt:row.createdAt,updatedAt:row.updatedAt},tasks});
+ }catch(e){console.error('Error consultando lote en modo lectura:',e);return sendJson(res,500,{ok:false,error:'No se pudo consultar el lote.'});}
+}
 if(p==='/api/work-lots'&&['GET','POST','PUT'].includes(req.method)){
  const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token);
  if(!authorized(req)||!session)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
