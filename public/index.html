@@ -77,6 +77,7 @@ let users={};
 let cloudTasks=[];
 let lpnCatalog=[];
 let queuedStandardBatches=[];
+const continuidadWorkLotCache=new Map();
 let freeDeliveries=[];
 let estibasRecibidas=[];
 let tareasArchivadas=[];
@@ -1718,6 +1719,41 @@ function actualizarModelosPatinador(){
  if(Array.from(sel.options).some(o=>o.value===currentValue))sel.value=currentValue;
  else if(models.length){sel.value=models[0];localStorage.setItem('cc_modelo_moto',models[0]);}
 }
+const continuidadWorkLotCache=new Map();
+async function cargarLoteRegistradoContinuidad(modelo){
+ const host=$('continuidadWorkLotInfo');if(!host)return;
+ const key=String(modelo||'').trim().toUpperCase();if(!key)return;
+ const cached=continuidadWorkLotCache.get(key);
+ if(cached){
+  const data=await cached;
+  if($('modeloLoteActivo')?.value!==key||!$('continuidadWorkLotInfo'))return;
+  pintarLoteRegistradoContinuidad(data,key);return;
+ }
+ host.textContent='Consultando lotes registrados en el sistema nuevo…';
+ const request=(async()=>{
+  try{
+   const response=await fetch('/api/work-lots/overview?model='+encodeURIComponent(key),{cache:'no-store'});
+   const data=await response.json().catch(()=>({}));
+   if(response.status===404)return {notFound:true};
+   if(!response.ok||!data.ok)throw new Error(data.error||'No se pudo consultar el lote.');
+   return data;
+  }catch(error){return {error:error.message||'Error de consulta'};}
+ })();
+ continuidadWorkLotCache.set(key,request);
+ const data=await request;
+ if($('modeloLoteActivo')?.value!==key||!$('continuidadWorkLotInfo'))return;
+ pintarLoteRegistradoContinuidad(data,key);
+}
+function pintarLoteRegistradoContinuidad(data,modelo){
+ const host=$('continuidadWorkLotInfo');if(!host)return;
+ const esc=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+ if(data&&data.notFound){host.innerHTML='<b>Lotes del sistema nuevo:</b> No se encontró un lote registrado para '+esc(modelo)+'.';return;}
+ if(data&&data.error){host.innerHTML='<b>Lotes del sistema nuevo:</b> No fue posible consultar ('+esc(data.error)+').';return;}
+ const lot=data&&data.lot,tasks=Array.isArray(data&&data.tasks)?data.tasks:[];
+ if(!lot){host.textContent='No hay información de lotes del sistema nuevo.';return;}
+ const code=String(lot.codigoLoteOperacion||'').trim();
+ host.innerHTML='<b>Lote registrado en el sistema nuevo:</b> '+esc(modelo)+' · '+(code?'OPR '+esc(code):'Sin código de operación')+' · '+tasks.length+' referencias visibles. <small>Consulta de solo lectura. Este dato no confirma por sí solo que el lote esté activo ni reemplaza el cálculo de entregas del panel.</small>';
+}
 function renderSiguienteLoteAdmin(){
  const box=$('siguienteLoteAdmin');if(!box)return;
  if(!current||current.role!=='Admin'){box.innerHTML='';return;}
@@ -1729,7 +1765,8 @@ function renderSiguienteLoteAdmin(){
  const esc=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
  const pendientes=queuedStandardBatches.length?'<p><b>Lotes siguientes en espera:</b> '+queuedStandardBatches.map(x=>esc(x.modelo)+' · '+esc(x.codigo)).join(' | ')+'</p>':'';
  const qhtml=q?'<p><b>Siguiente lote preparado:</b> '+esc(q.modelo)+' · OPR '+esc(q.codigo)+' · '+q.tasks.length+' referencias.</p><p>Está guardado por separado. '+(r.total&&r.pct>=100?'<b>El lote actual está completo. Ya puedes continuar.</b>':'Se habilitará al completar el 100% del lote actual.')+'</p><button type="button" class="secondary" onclick="activarSiguienteLote()" '+(r.total&&r.pct>=100?'':'disabled')+' style="width:100%;font-weight:800;margin:8px 0">🔔 Activar siguiente lote</button>':'<p>No hay siguiente lote preparado para '+esc(modelo)+'.</p>';
- box.innerHTML='<b>🔁 Continuidad de lotes</b><p><b>Lote activo seleccionado ('+esc(modelo)+'):</b> '+progreso+'</p>'+pendientes+qhtml;
+ box.innerHTML='<b>🔁 Continuidad de lotes</b><p><b>Lote activo seleccionado ('+esc(modelo)+'):</b> '+progreso+'</p>'+pendientes+qhtml+'<div id="continuidadWorkLotInfo" class="muted" style="margin-top:10px">Consultando lotes registrados…</div>';
+ cargarLoteRegistradoContinuidad(modelo);
 }
 async function activarSiguienteLote(){
  if(!current||current.role!=='Admin'){alert('Solo administración puede activar el siguiente lote.');return;}
