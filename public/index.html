@@ -98,6 +98,7 @@ async function cloudLoad(){
     const r=await fetch('/api/state',{cache:'no-store'});
     if(!r.ok) throw new Error('No se pudo conectar con el servidor');
     const s=await r.json();
+    continuidadWorkLotCache.clear();
     users=s.users&&Object.keys(s.users).length?s.users:defaultUsers;
     let removedSupervisorAccounts=false;
     ['fredy','juandavid'].forEach(id=>{if(Object.prototype.hasOwnProperty.call(users,id)){delete users[id];removedSupervisorAccounts=true;}});
