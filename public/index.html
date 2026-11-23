@@ -1719,7 +1719,7 @@ function actualizarModelosPatinador(){
  if(Array.from(sel.options).some(o=>o.value===currentValue))sel.value=currentValue;
  else if(models.length){sel.value=models[0];localStorage.setItem('cc_modelo_moto',models[0]);}
 }
-const continuidadWorkLotCache=new Map();
+
 async function cargarLoteRegistradoContinuidad(modelo){
  const host=$('continuidadWorkLotInfo');if(!host)return;
  const key=String(modelo||'').trim().toUpperCase();if(!key)return;
