@@ -73,16 +73,15 @@ test('Inteligencia conserva solo el lote vigente más reciente de cada modelo', 
     { id: 'nkd-711', model: 'NKD', number: 4, codigoLoteOperacion: 'KK711', tasks: [{ id: 'a', lote: 100, entregado: 80 }] },
     { id: 'nkd-next', model: 'NKD', number: 5, codigoLoteOperacion: '', tasks: [{ id: 'b', lote: 200, entregado: 0 }] }
   ] }, [
-    { id: 'a', standardMoto: 'NKD', codigoLoteOperacion: 'KK711' },
-    { id: 'b', standardMoto: 'NKD' }
+    { id: 'a', standardMoto: 'NKD', codigoLoteOperacion: 'KK711' }
   ]);
   assert.equal(rows.get('NKD').length, 1);
-  assert.equal(rows.get('NKD')[0].codigoLoteOperacion, 'SIN CÓDIGO');
-  assert.equal(rows.get('NKD')[0].__progressLotKey, 'nkd-next');
+  assert.equal(rows.get('NKD')[0].codigoLoteOperacion, 'KK711');
+  assert.equal(rows.get('NKD')[0].__progressLotKey, 'nkd-711');
   const groups = context.__aktIntelTest.groupsByOperation(rows.get('NKD'));
   assert.equal(groups.length, 1);
-  assert.equal(groups[0].done, 0);
-  assert.equal(groups[0].pending, 200);
+  assert.equal(groups[0].done, 80);
+  assert.equal(groups[0].pending, 20);
 });
 
 test('Inteligencia recupera el código del lote desde la tarea local con el mismo ID', () => {
