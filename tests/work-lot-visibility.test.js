@@ -49,6 +49,9 @@ test('Patinadores solo reciben lotes trabajados hoy, el seleccionado y el siguie
  assert.equal(result.status,200,JSON.stringify(result.data));
  assert.equal(result.data.lot.id,'chr-today-3');
  assert.deepEqual(result.data.lots.map(x=>x.id),['chr-today-2','chr-today-3','chr-next-4']);
+ const favicon=await request(baseUrl,'/favicon.ico');
+ assert.equal(favicon.status,200,'el navegador debe recibir el icono y no un 404');
+ assert.match(favicon.data,/svg/i);
  assert.equal(fs.readFileSync(path.join(dataDir,'state.json'),'utf8'),beforeState,'consultar lotes visibles no debe cambiar el estado productivo');
  assert.equal(fs.readFileSync(path.join(dataDir,'work-lots.json'),'utf8'),beforeLots,'ocultar lotes antiguos no debe borrar ni reescribir históricos');
 });
