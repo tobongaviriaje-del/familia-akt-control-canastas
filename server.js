@@ -295,6 +295,7 @@ if(p==='/api/admin/work-lots/standardize-kk809'&&req.method==='POST'){
    };
    if(conflicts.length)return sendJson(res,409,{ok:false,summary,error:'Hay referencias con más de 270 unidades ya entregadas. Se bloqueó la corrección completa y no se modificó ningún dato.'});
    if(action==='preview')return sendJson(res,200,{ok:true,soloLectura:true,summary,mensaje:'Vista previa solamente. No se modificó ningún dato.'});
+   const beforeState=JSON.stringify(state),beforeRows=JSON.stringify(rows);
    const applyTask=task=>{
     task.lote=target;task.lotePiezas=target;task.cantidad=target;
     const capacity=workLotNumber(task.cantidadCanasta);
@@ -303,7 +304,6 @@ if(p==='/api/admin/work-lots/standardize-kk809'&&req.method==='POST'){
    matchingState.forEach(applyTask);
    matchingQueue.forEach(applyTask);
    matchingWork.forEach(applyTask);
-   const beforeState=JSON.stringify(state),beforeRows=JSON.stringify(rows);
    try{
     if(matchingState.length||matchingQueue.length)writeState(state);
     if(matchingRows.length)writeWorkLots(rows);
