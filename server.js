@@ -1121,6 +1121,13 @@ if(queued&&queued.modeloActual&&Array.isArray(queued.tasks)&&queued.tasks.length
 writeState(state);const responseState=JSON.parse(JSON.stringify(state));delete responseState.patinadoresAuth;for(const user of Object.values(responseState.users||{})){if(!user||typeof user!=='object')continue;delete user.pass;delete user.passDia;delete user.passNoche;}res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(responseState));
 }catch(e){console.error('Error guardando estado:',e);res.writeHead(400);res.end(JSON.stringify({error:'JSON invalido'}));}});return;
 }
+if(p==='/favicon.ico'&&req.method==='GET'){
+ return fs.readFile(path.join(ROOT,'icon.svg'),(err,data)=>{
+  if(err){res.writeHead(404);return res.end('Not found');}
+  res.writeHead(200,{'Content-Type':'image/svg+xml; charset=utf-8','Cache-Control':'public, max-age=86400'});
+  res.end(data);
+ });
+}
 let filePath=p==='/'?'/index.html':p;const file=path.normalize(path.join(ROOT,filePath));
 if(!file.startsWith(ROOT)){res.writeHead(403);return res.end('Forbidden');}
 fs.readFile(file,(err,data)=>{if(err){res.writeHead(404);return res.end('Not found');}let output=data;
