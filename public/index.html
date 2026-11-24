@@ -367,7 +367,22 @@ function renderProgresoPatinadores(){
   const color=isNext?'#64748b':'#16a34a';
   return '<div class="notice" style="margin:10px 0"><b>'+(isNext?'🕒 ':'🟢 ')+label+'</b><h3>'+esc(op.modelo)+' · Lote '+esc(op.codigo||'Sin código')+'</h3>'+(hasTasks?'<div class="grid"><div><b>Avance (+)</b><h2>'+fmt(done)+'%</h2><small>'+fmt(r.delivered)+' de '+fmt(r.total)+' unidades</small></div><div><b>Pendiente (−)</b><h2>'+fmt(left)+'%</h2><small>'+fmt(Math.max(0,r.total-r.delivered))+' unidades por entregar</small></div></div><div style="display:flex;height:12px;background:#e5e7eb;border-radius:8px;overflow:hidden;margin:8px 0"><div style="width:'+done+'%;background:'+color+'"></div><div style="width:'+left+'%;background:#cbd5e1"></div></div><p class="muted">Referencias asignadas: '+r.assigned+'</p>':'<p class="muted">Este patinador no tiene tareas asignadas en este lote.</p>')+'</div>';
  };
- box.innerHTML='<h4>📦 Seguimiento por patinador</h4><p class="muted">Selecciona un patinador para consultar por separado su lote actual y el siguiente. Los porcentajes se calculan con sus propias entregas; el lote siguiente comienza en 0%.</p><div style="display:flex;flex-wrap:wrap;gap:4px">'+(buttons||'<p class="muted">No hay patinadores registrados.</p>')+'</div>'+(selected?'<h4>Patinador: '+esc(selected[1].name||selected[1].nombre||selected[0])+'</h4>'+progressCard('Lote actual',active,selected[1],selected[0],false)+progressCard('Lote siguiente',next,selected[1],selected[0],true):'');
+ const allOperations=[...activeMap.values()].sort((a,b)=>a.modelo.localeCompare(b.modelo,'es')||a.codigo.localeCompare(b.codigo,'es'));
+ const comparisonRows=[];
+ skaters.forEach(([key,u])=>{
+  const name=u.name||u.nombre||key;
+  let found=false;
+  allOperations.forEach(op=>{
+   const r=resumenEntregaPatinador(op.tasks,u,key);
+   if(!r.assigned)return;
+   found=true;
+   const done=pct(r.pct),pending=Math.max(0,r.total-r.delivered);
+   comparisonRows.push('<tr><td>'+esc(name)+'</td><td>'+esc(op.modelo)+'</td><td>'+esc(op.codigo||'Sin código')+'</td><td style="text-align:right">'+fmt(r.assigned)+'</td><td style="text-align:right">'+fmt(r.delivered)+'</td><td style="text-align:right">'+fmt(pending)+'</td><td><b>'+fmt(done)+'%</b><div style="height:8px;min-width:90px;background:#e5e7eb;border-radius:8px;overflow:hidden;margin-top:4px"><div style="height:8px;width:'+done+'%;background:#16a34a"></div></div></td></tr>');
+  });
+  if(!found)comparisonRows.push('<tr><td>'+esc(name)+'</td><td colspan="6" class="muted">Sin tareas estándar asignadas</td></tr>');
+ });
+ const comparisonTable='<h4>📊 Avance de entregas de todos los patinadores</h4><p class="muted">Comparativo de todos los modelos y lotes disponibles. Cada cifra usa las entregas registradas a nombre del patinador y descuenta sus correcciones, sin duplicar referencias estándar.</p><div style="overflow-x:auto"><table class="data-table" style="width:100%;min-width:760px"><thead><tr><th>Patinador</th><th>Modelo</th><th>Lote</th><th>Refs.</th><th>Entregadas</th><th>Pendientes</th><th>Avance</th></tr></thead><tbody>'+(comparisonRows.join('')||'<tr><td colspan="7" class="muted">No hay patinadores registrados.</td></tr>')+'</tbody></table></div>';
+ box.innerHTML='<h4>📦 Seguimiento por patinador</h4><p class="muted">Consulta el avance individual y compara todos los patinadores, sin limitarse al lote actual.</p><div style="display:flex;flex-wrap:wrap;gap:4px">'+(buttons||'<p class="muted">No hay patinadores registrados.</p>')+'</div>'+comparisonTable+(selected?'<h4>Detalle de: '+esc(selected[1].name||selected[1].nombre||selected[0])+'</h4>'+progressCard('Lote actual',active,selected[1],selected[0],false)+progressCard('Lote siguiente',next,selected[1],selected[0],true):'');
 }
 async function retirarLoteCompletado(){
  if(!isAdmin())return;
