@@ -27,10 +27,19 @@ function loadProgressHelpers() {
 }
 
 
-test('Inteligencia de producción usa la misma clave normalizada CR4-150 que el comparador', () => {
-  const source = fs.readFileSync(path.join(repoRoot, 'public/operaciones-inteligentes.js'), 'utf8');
-  assert.match(source, /const STANDARD_LOT_MODELS=\['NKD','CR4-150','CR4 125','XRS-180','CHR'\]/);
-  assert.match(source, /replace\(\^CR4\[-_ \]\?150\$/);
+test('Inteligencia de producción incluye correctamente el modelo CR4-150 en su mapa de lotes', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../public/operaciones-inteligentes.js'), 'utf8');
+  const start = source.indexOf('const model=t=>');
+  const end = source.indexOf('\\nfunction loadStandardWorkLots', start);
+  assert.notEqual(start, -1);
+  assert.ok(end > start);
+  const context = {};
+  vm.runInNewContext(source.slice(start, end) + '\\nglobalThis.__flatten = flattenWorkLotProgress;', context);
+  const legacy = [{ id: 'cr4-task-1', standardMoto: 'CR4 150', cantidad: 100, entregado: 25 }];
+  const lots = [{ id: 'cr4-lot-1', model: 'CR4 150', number: 1, tasks: [{ id: 'cr4-task-1', cantidad: 100, entregado: 25 }] }];
+  const mapped = context.__flatten({ lots }, legacy);
+  assert.equal(mapped.get('CR4-150').length, 1);
+  assert.equal(mapped.get('CR4-150')[0].entregado, 25);
 });
 
 test('cuenta la entrega histórica en entrega aunque entregas exista vacío', () => {
