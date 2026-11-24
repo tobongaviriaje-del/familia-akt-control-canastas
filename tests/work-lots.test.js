@@ -25,3 +25,37 @@ test('el código de operación pertenece al lote seleccionado y es visible para 
  const next=await request(baseUrl,'/api/work-lots',{token:token1,method:'POST',body:{action:'next',username:'patinador1',model:'CHR',lotId:first.id}});assert.equal(next.status,200);assert.equal(next.data.lot.number,2);assert.equal(next.data.lot.codigoLoteOperacion,'');assert.equal(next.data.tasks[0].codigoLoteOperacion,undefined,'el código del lote anterior no debe copiarse a las tareas del siguiente lote');
  const back=await request(baseUrl,'/api/work-lots',{token:token1,method:'POST',body:{action:'select',username:'patinador1',model:'CHR',lotId:first.id}});assert.equal(back.status,200);assert.equal(back.data.lot.codigoLoteOperacion,'KK764A');
 });
+test('corrige exclusivamente CR4 125 / KK809 a 270 por referencia y conserva entregas',async t=>{
+ const temp=fs.mkdtempSync(path.join(os.tmpdir(),'akt-kk809-fix-'));const dataDir=path.join(temp,'data');fs.mkdirSync(dataDir,{recursive:true});fs.mkdirSync(path.join(temp,'public'));
+ fs.copyFileSync(path.join(repoRoot,'server.js'),path.join(temp,'server.js'));
+ const active={id:'active-1',standardNKD:true,standardMoto:'CR4 125',codigoLoteOperacion:'KK809',lote:110,cantidad:110,lotePiezas:110,cantidadCanasta:10,numCanastas:11,entregado:20,entregas:[{cantidad:20,patinador:'Patinador Uno'}],estado:'Parcial'};
+ const queued={id:'queued-1',standardNKD:true,standardMoto:'CR4 125',lote:100,cantidad:100,entregado:0,entregas:[],estado:'Pendiente'};
+ const work={id:'work-1',standardNKD:true,standardMoto:'CR4 125',lote:90,cantidad:90,lotePiezas:90,cantidadCanasta:10,numCanastas:9,entregado:5,entregas:[{cantidad:5,patinador:'Patinador Dos'}],estado:'Parcial'};
+ const state={users:{admin:{pass:'AdminTest123',role:'Admin',name:'Administrador'}},tasks:[active,{id:'other-1',standardNKD:true,standardMoto:'CR4 125',codigoLoteOperacion:'KK810',lote:100,cantidad:100,entregado:0},{id:'chr-1',standardNKD:true,standardMoto:'CHR',codigoLoteOperacion:'KK809',lote:300,cantidad:300,entregado:0}],queuedStandardBatches:[{id:'queue-kk809',modelo:'CR4 125',codigo:'KK809',tasks:[queued]},{id:'queue-other',modelo:'CR4 125',codigo:'KK810',tasks:[{id:'queued-other',standardNKD:true,standardMoto:'CR4 125',lote:80,cantidad:80}]}]};
+ fs.writeFileSync(path.join(dataDir,'state.json'),JSON.stringify(state));
+ fs.writeFileSync(path.join(dataDir,'work-lots.json'),JSON.stringify([{id:'worklot-kk809',model:'CR4 125',number:1,codigoLoteOperacion:'KK809',tasks:[work]},{id:'worklot-kk810',model:'CR4 125',number:2,codigoLoteOperacion:'KK810',tasks:[{id:'work-other',standardNKD:true,standardMoto:'CR4 125',lote:70,cantidad:70}]},{id:'worklot-chr',model:'CHR',number:1,codigoLoteOperacion:'KK809',tasks:[{id:'work-chr',standardNKD:true,standardMoto:'CHR',lote:300,cantidad:300}]}]));
+ const port=await freePort(),baseUrl='http://127.0.0.1:'+port;const child=spawn(process.execPath,['server.js'],{cwd:temp,env:{...process.env,PORT:String(port)},stdio:'ignore'});
+ t.after(async()=>{child.kill('SIGTERM');await new Promise(resolve=>{if(child.exitCode!==null)return resolve();child.once('exit',resolve);setTimeout(resolve,1500).unref();});fs.rmSync(temp,{recursive:true,force:true});});
+ await waitForHealth(baseUrl,child);
+ const login=await request(baseUrl,'/api/login',{method:'POST',body:{username:'admin',password:'AdminTest123'}});assert.equal(login.status,200);const token=login.data.token;
+ const preview=await request(baseUrl,'/api/admin/work-lots/standardize-kk809',{token,method:'POST',body:{action:'preview',model:'CR4 125',code:'KK809'}});
+ assert.equal(preview.status,200,JSON.stringify(preview.data));assert.equal(preview.data.summary.stateReferences,1);assert.equal(preview.data.summary.queuedReferences,1);assert.equal(preview.data.summary.workLotReferences,1);assert.equal(preview.data.summary.conflicts,0);
+ const beforePreview=JSON.parse(fs.readFileSync(path.join(dataDir,'state.json'),'utf8'));assert.equal(beforePreview.tasks[0].lote,110,'la vista previa no modifica datos');
+ const applied=await request(baseUrl,'/api/admin/work-lots/standardize-kk809',{token,method:'POST',body:{action:'apply',model:'CR4 125',code:'KK809'}});
+ assert.equal(applied.status,200,JSON.stringify(applied.data));
+ const after=JSON.parse(fs.readFileSync(path.join(dataDir,'state.json'),'utf8'));assert.equal(after.tasks[0].lote,270);assert.equal(after.tasks[0].cantidad,270);assert.equal(after.tasks[0].entregado,20);assert.deepEqual(after.tasks[0].entregas,[{cantidad:20,patinador:'Patinador Uno'}]);assert.equal(after.tasks[1].lote,100);assert.equal(after.tasks[2].lote,300);assert.equal(after.queuedStandardBatches[0].tasks[0].lote,270);assert.equal(after.queuedStandardBatches[1].tasks[0].lote,80);
+ const lots=JSON.parse(fs.readFileSync(path.join(dataDir,'work-lots.json'),'utf8'));assert.equal(lots[0].tasks[0].lote,270);assert.equal(lots[0].tasks[0].entregado,5);assert.equal(lots[1].tasks[0].lote,70);assert.equal(lots[2].tasks[0].lote,300);
+ const wrong=await request(baseUrl,'/api/admin/work-lots/standardize-kk809',{token,method:'POST',body:{action:'apply',model:'CHR',code:'KK809'}});assert.equal(wrong.status,400);
+});
+test('bloquea la corrección KK809 completa si alguna referencia supera 270 entregadas',async t=>{
+ const temp=fs.mkdtempSync(path.join(os.tmpdir(),'akt-kk809-conflict-'));const dataDir=path.join(temp,'data');fs.mkdirSync(dataDir,{recursive:true});fs.mkdirSync(path.join(temp,'public'));
+ fs.copyFileSync(path.join(repoRoot,'server.js'),path.join(temp,'server.js'));
+ fs.writeFileSync(path.join(dataDir,'state.json'),JSON.stringify({users:{admin:{pass:'AdminTest123',role:'Admin',name:'Administrador'}},tasks:[{id:'over',standardNKD:true,standardMoto:'CR4 125',codigoLoteOperacion:'KK809',lote:300,cantidad:300,entregado:275}],queuedStandardBatches:[]}));
+ const port=await freePort(),baseUrl='http://127.0.0.1:'+port;const child=spawn(process.execPath,['server.js'],{cwd:temp,env:{...process.env,PORT:String(port)},stdio:'ignore'});
+ t.after(async()=>{child.kill('SIGTERM');await new Promise(resolve=>{if(child.exitCode!==null)return resolve();child.once('exit',resolve);setTimeout(resolve,1500).unref();});fs.rmSync(temp,{recursive:true,force:true});});
+ await waitForHealth(baseUrl,child);
+ const login=await request(baseUrl,'/api/login',{method:'POST',body:{username:'admin',password:'AdminTest123'}});assert.equal(login.status,200);
+ const result=await request(baseUrl,'/api/admin/work-lots/standardize-kk809',{token:login.data.token,method:'POST',body:{action:'apply',model:'CR4 125',code:'KK809'}});
+ assert.equal(result.status,409);assert.equal(result.data.summary.conflicts,1);
+ const unchanged=JSON.parse(fs.readFileSync(path.join(dataDir,'state.json'),'utf8'));assert.equal(unchanged.tasks[0].lote,300);assert.equal(unchanged.tasks[0].entregado,275);
+});
