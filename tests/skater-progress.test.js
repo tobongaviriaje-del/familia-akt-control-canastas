@@ -27,6 +27,12 @@ function loadProgressHelpers() {
 }
 
 
+test('Inteligencia de producción usa la misma clave normalizada CR4-150 que el comparador', () => {
+  const source = fs.readFileSync(path.join(repoRoot, 'public/operaciones-inteligentes.js'), 'utf8');
+  assert.match(source, /const STANDARD_LOT_MODELS=\['NKD','CR4-150','CR4 125','XRS-180','CHR'\]/);
+  assert.match(source, /replace\(\^CR4\[-_ \]\?150\$/);
+});
+
 test('cuenta la entrega histórica en entrega aunque entregas exista vacío', () => {
   const context = loadProgressHelpers();
   const legacyMovement = { id: 'legacy-1', patinador: 'Ana', cantidad: 180, fechaHora: '20/11/2026 09:00' };
