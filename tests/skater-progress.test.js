@@ -22,7 +22,7 @@ function loadProgressHelpers() {
     unidadesObjetivoEstandar: task => task.objetivo ?? task.cantidad ?? 0,
     normalizarPuestoEstandar: value => String(value || '').trim(),
   };
-  vm.runInNewContext(source + '\nglobalThis.__combine = combinarTareasProgreso; globalThis.__summary = resumenEntregaPatinador; globalThis.__lots = tareasLotesParaProgreso; globalThis.tareasAsignadasAUsuarioEstandar = tareasAsignadasAUsuarioEstandar;', context);
+  vm.runInNewContext(source + '\nglobalThis.__combine = combinarTareasProgreso; globalThis.__summary = resumenEntregaPatinador; globalThis.__lots = tareasLotesParaProgreso; globalThis.tareasAsignadasAUsuarioEstandar = tareasAsignadasAUsuarioEstandar; globalThis.__operationKey = claveOperacionProgreso;', context);
   return context;
 }
 
@@ -116,6 +116,21 @@ test('mantiene separados dos lotes distintos aunque compartan código, EAN y pue
   const merged = context.__combine(mapped);
   assert.equal(merged.length, 2);
   assert.notEqual(merged[0].__progressLotKey, merged[1].__progressLotKey);
+});
+
+test('separa lotes reales distintos aunque compartan modelo y código de operación', () => {
+  const context = loadProgressHelpers();
+  const a = { standardNKD: true, standardMoto: 'NKD', codigoLoteOperacion: 'KK800', __progressLotKey: 'lote-1' };
+  const b = { ...a, __progressLotKey: 'lote-2' };
+  assert.notEqual(context.__operationKey(a), context.__operationKey(b));
+  assert.equal(context.__operationKey(a), context.__operationKey({ ...a }));
+});
+
+test('mantiene agrupadas las tareas locales sin identidad de lote por el mismo código', () => {
+  const context = loadProgressHelpers();
+  const a = { standardNKD: true, standardMoto: 'NKD', codigoLoteOperacion: 'KK800' };
+  const b = { ...a, ean: 'EAN-2' };
+  assert.equal(context.__operationKey(a), context.__operationKey(b));
 });
 
 test('la vista de Admin/Supervisor incluye todos los lotes y muestra error si la consulta real falla', () => {
