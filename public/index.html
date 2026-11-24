@@ -283,6 +283,16 @@ function tareasLotesParaProgreso(lots){
   }));
  });
 }
+function eventosEntregaTarea(task){
+ const events=Array.isArray(task&&task.entregas)?task.entregas:[];
+ const signature=e=>String(e&&e.id||'')||JSON.stringify([e&&e.patinador,e&&e.cantidad,e&&e.fechaHora,e&&e.metodo,e&&e.numeroOperacion,e&&e.observaciones,e&&e.canastasFisicas,e&&e.turno]);
+ const seen=new Set(),result=[];
+ [...events,...(task&&task.entrega&&typeof task.entrega==='object'?[task.entrega]:[])].forEach(event=>{
+  if(!event||typeof event!=='object')return;
+  const key=signature(event);if(seen.has(key))return;seen.add(key);result.push(event);
+ });
+ return result;
+}
 function combinarTareasProgreso(tasks){
  const clean=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
  const eventKey=e=>String(e&&e.id||'')||JSON.stringify([e&&e.patinador,e&&e.cantidad,e&&e.fechaHora,e&&e.metodo,e&&e.numeroOperacion,e&&e.observaciones,e&&e.canastasFisicas,e&&e.turno]);
@@ -318,7 +328,7 @@ function resumenEntregaPatinador(tasks,user,username){
  assigned.forEach(x=>{
   const objetivo=Math.max(0,Number(unidadesObjetivoEstandar(x))||0);
   total+=objetivo;
-  const eventos=Array.isArray(x.entregas)?x.entregas:(x.entrega?[x.entrega]:[]);
+  const eventos=eventosEntregaTarea(x);
   const propias=eventos.filter(e=>nombres.has(identidad(e&&e.patinador))).reduce((n,e)=>n+Math.max(0,Number(e&&e.cantidad)||0),0);
   // Las correcciones permanecen en el historial. El avance atribuido usa eventos
   // positivos del patinador y nunca resta correctionUnits del acumulado entregado.
