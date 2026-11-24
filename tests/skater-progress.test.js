@@ -19,7 +19,6 @@ function loadProgressHelpers() {
     modeloDeTareaEstandar: task => task.standardMoto || (task.standardNKD ? 'NKD' : ''),
     normalizarModeloContinuidad: value => String(value || '').trim().toUpperCase(),
     normalizarPuestoEstandar: value => String(value || '').trim(),
-    normalizarModeloContinuidad: value => String(value || '').trim().toUpperCase(),
     unidadesObjetivoEstandar: task => task.objetivo ?? task.cantidad ?? 0,
     tareasAsignadasAUsuarioEstandar: (task, user) =>
       user && user.role === 'Patinador' && (user.puestos || []).includes(task.puesto)
