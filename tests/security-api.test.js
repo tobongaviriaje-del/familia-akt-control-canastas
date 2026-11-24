@@ -310,6 +310,7 @@ test('AKT INTELIGENTE entrega solo indicadores permitidos por perfil y no modifi
       coordinador: { pass: 'CoordinadorTest123', role: 'Coordinador', name: 'Coordinador de prueba' },
       patinador: { pass: 'PatinadorTest123', role: 'Patinador', name: 'Patinador de prueba', puestos: ['PRE 1'] }
     },
+    patinadoresAuth: { passDia: 'DiaTest123', passNoche: 'NocheTest123' },
     tasks: [{ id: 'T-1', standardNKD: true, standardMoto: 'NKD', lote: 10, cantidad: 10, entregado: 2, estado: 'Parcial', puesto: 'PRE 1' }]
   };
   const workLots = [
@@ -382,7 +383,9 @@ test('AKT INTELIGENTE entrega solo indicadores permitidos por perfil y no modifi
   assert.equal(patinador.data.lots[0].lot, 'KK711 · lote 7');
 
   const sharedLogin = await request(baseUrl, '/api/login', { method: 'POST', body: { username: 'patinadores', password: 'DiaTest123' } });
-  assert.equal(sharedLogin.status, 401, 'sin credenciales compartidas configuradas, el login compartido no se crea en este fixture');
+  assert.equal(sharedLogin.status, 200);
+  const sharedAssistant = await request(baseUrl, '/api/assistant/production-summary', { token: sharedLogin.data.token });
+  assert.equal(sharedAssistant.status, 403, 'el acceso compartido no debe poder elegir la identidad de otro Patinador');
   assert.equal(fs.readFileSync(path.join(dataDir, 'state.json'), 'utf8'), originalState, 'la consulta no debe modificar state.json');
   assert.equal(fs.readFileSync(path.join(dataDir, 'work-lots.json'), 'utf8'), originalLots, 'la consulta no debe modificar work-lots.json');
 });
