@@ -259,15 +259,27 @@ function workLotReferenceKey(task){
  return ean&&position?[ean,position,operation].join('|'):'id|'+String(task&&task.id||'');
 }
 function ensureWorkLot(rows,state,model,username){
- let row=rows.filter(x=>x.model===model).sort((a,b)=>b.number-a.number)[0];
- const tasks=row&&row.sourceBatchId?[]:(Array.isArray(state.tasks)?state.tasks:[]).filter(t=>t&&t.standardNKD&&workLotModel(t.standardMoto||(t.standardNKD?'NKD':''))===model);
+ const tasks=(Array.isArray(state.tasks)?state.tasks:[]).filter(t=>t&&t.standardNKD&&workLotModel(t.standardMoto||(t.standardNKD?'NKD':''))===model);
+ const activeIds=new Set(tasks.map(t=>String(t&&t.id||'')).filter(Boolean));
+ // Identificar primero la ficha que contiene las referencias activas del modelo.
+ // Nunca reutilizar un lote histórico solo por tener el número más alto.
+ let row=null;
+ if(activeIds.size){
+  const matches=rows.filter(x=>x&&x.model===model).map(candidate=>({
+   candidate,
+   overlap:(Array.isArray(candidate.tasks)?candidate.tasks:[]).reduce((n,t)=>n+(activeIds.has(String(t&&t.id||''))?1:0),0)
+  })).filter(x=>x.overlap>0).sort((a,b)=>b.overlap-a.overlap||workLotNumber(b.candidate.number)-workLotNumber(a.candidate.number));
+  if(matches.length)row=matches[0].candidate;
+ }else{
+  row=rows.filter(x=>x&&x.model===model).sort((a,b)=>workLotNumber(b.number)-workLotNumber(a.number))[0]||null;
+ }
+ // Los lotes preparados conservan su instantánea y sus entregas.
+ const tasksToAdd=row&&row.sourceBatchId?[]:tasks;
  if(row){
-  // Los lotes guardados son una instantánea, pero deben incorporar referencias
-  // nuevas del estándar sin reemplazar entregas, correcciones ni cantidades ya registradas.
   if(!Array.isArray(row.tasks))row.tasks=[];
   const known=new Set(row.tasks.map(workLotReferenceKey));
   let added=0;
-  for(const task of tasks){
+  for(const task of tasksToAdd){
    const key=workLotReferenceKey(task);
    if(known.has(key))continue;
    row.tasks.push(JSON.parse(JSON.stringify(task)));
@@ -281,7 +293,8 @@ function ensureWorkLot(rows,state,model,username){
  }
  if(!tasks.length)throw new Error('No hay referencias originales cargadas para '+model+'.');
  const now=new Date().toISOString();
- row={id:require('crypto').randomUUID(),model,number:1,tasks:JSON.parse(JSON.stringify(tasks)),createdBy:username,createdAt:now,updatedAt:now};
+ const number=rows.filter(x=>x&&x.model===model).reduce((n,x)=>Math.max(n,workLotNumber(x.number)),0)+1;
+ row={id:require('crypto').randomUUID(),model,number,tasks:JSON.parse(JSON.stringify(tasks)),createdBy:username,createdAt:now,updatedAt:now};
  rows.push(row);writeWorkLots(rows);return row;
 }
 
@@ -574,11 +587,13 @@ if(p==='/api/work-lots'&&['GET','POST','PUT'].includes(req.method)){
   const rows=readWorkLots();let row;
   try{
    const selections=readWorkLotSelections(),remembered=selections[workLotSelectionKey(actor,model)];
-   row=remembered&&rows.find(x=>x&&x.model===model&&x.id===remembered.lotId);
-   if(!row){
-    row=ensureWorkLot(rows,state,model,actor);
-    rememberWorkLotSelection(actor,model,row);
-   }
+   const hasActiveModelTasks=(Array.isArray(state.tasks)?state.tasks:[]).some(t=>t&&t.standardNKD&&workLotModel(t.standardMoto||(t.standardNKD?'NKD':''))===model);
+   // Si hay referencias activas, su lote real prevalece sobre una selección antigua guardada.
+   // La selección recordada solo se usa cuando no existe actividad activa para ese modelo.
+   row=hasActiveModelTasks
+    ?ensureWorkLot(rows,state,model,actor)
+    :(remembered&&rows.find(x=>x&&x.model===model&&x.id===remembered.lotId))||ensureWorkLot(rows,state,model,actor);
+   if(!remembered||remembered.lotId!==String(row.id))rememberWorkLotSelection(actor,model,row);
   }catch(e){return sendJson(res,503,{ok:false,error:e.message||'No se pudo recuperar el lote de trabajo.'});}
   if(action==='GET')return sendJson(res,200,workLotResponse(row,user,actor,rows));
   if(action==='POST'){
