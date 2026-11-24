@@ -59,3 +59,44 @@ test('bloquea la corrección KK809 completa si alguna referencia supera 270 entr
  assert.equal(result.status,409);assert.equal(result.data.summary.conflicts,1);
  const unchanged=JSON.parse(fs.readFileSync(path.join(dataDir,'state.json'),'utf8'));assert.equal(unchanged.tasks[0].lote,300);assert.equal(unchanged.tasks[0].entregado,275);
 });
+
+
+test('el endpoint de avance entrega solo el lote vigente por modelo y no altera el estado al consultar',async t=>{
+ const temp=fs.mkdtempSync(path.join(os.tmpdir(),'akt-progress-current-lots-'));const dataDir=path.join(temp,'data');fs.mkdirSync(dataDir,{recursive:true});fs.mkdirSync(path.join(temp,'public'));
+ fs.copyFileSync(path.join(repoRoot,'server.js'),path.join(temp,'server.js'));
+ const state={users:{
+  admin:{pass:'AdminTest123',role:'Admin',name:'Administrador'},
+  supervisor:{pass:'Supervisor123',role:'Supervisor',name:'Supervisor'},
+  coordinator:{pass:'Coordinator123',role:'Coordinador',name:'Coordinador'},
+  fredy:{pass:'FredyTest123',role:'Admin',name:'Fredy'},
+  juanesteban:{pass:'RetiredTest123',role:'Patinador',name:'Usuario histórico'}
+ },tasks:[
+  {id:'nkd-active-1',standardNKD:true,standardMoto:'NKD',puesto:'PRE 1',cantidad:100,entregado:20},
+  {id:'nkd-active-2',standardNKD:true,standardMoto:'NKD',puesto:'PRE 2',cantidad:100,entregado:0},
+  {id:'chr-active-1',standardNKD:true,standardMoto:'CHR',puesto:'PRE 3',cantidad:80,entregado:10}
+ ]};
+ const workLots=[
+  {id:'nkd-old',model:'NKD',number:11,codigoLoteOperacion:'NKD-OLD',tasks:[{id:'nkd-historic-1',cantidad:500}]},
+  {id:'nkd-current',model:'NKD',number:12,codigoLoteOperacion:'NKD-CURRENT',tasks:[{id:'nkd-active-1',cantidad:100,entregado:20},{id:'nkd-active-2',cantidad:100,entregado:0}]},
+  {id:'nkd-future-empty',model:'NKD',number:13,codigoLoteOperacion:'NKD-FUTURE',tasks:[{id:'nkd-not-active',cantidad:700}]},
+  {id:'chr-current',model:'CHR',number:4,codigoLoteOperacion:'CHR-CURRENT',tasks:[{id:'chr-active-1',cantidad:80,entregado:10}]},
+  {id:'cr4-historic',model:'CR4 125',number:90,codigoLoteOperacion:'CR4-HIST',tasks:[{id:'cr4-historic-1',cantidad:900}]}
+ ];
+ fs.writeFileSync(path.join(dataDir,'state.json'),JSON.stringify(state));
+ fs.writeFileSync(path.join(dataDir,'work-lots.json'),JSON.stringify(workLots));
+ const before=fs.readFileSync(path.join(dataDir,'state.json'),'utf8');
+ const port=await freePort(),baseUrl='http://127.0.0.1:'+port;const child=spawn(process.execPath,['server.js'],{cwd:temp,env:{...process.env,PORT:String(port)},stdio:'ignore'});
+ t.after(async()=>{child.kill('SIGTERM');await new Promise(resolve=>{if(child.exitCode!==null)return resolve();child.once('exit',resolve);setTimeout(resolve,1500).unref();});fs.rmSync(temp,{recursive:true,force:true});});
+ await waitForHealth(baseUrl,child);
+ for(const username of ['admin','supervisor','coordinator']){
+  const password={admin:'AdminTest123',supervisor:'Supervisor123',coordinator:'Coordinator123'}[username];
+  const login=await request(baseUrl,'/api/login',{method:'POST',body:{username,password}});
+  assert.equal(login.status,200,JSON.stringify(login.data));
+  const response=await request(baseUrl,'/api/admin/work-lots/progress',{token:login.data.token});
+  assert.equal(response.status,200,JSON.stringify(response.data));
+  assert.deepEqual(response.data.lots.map(x=>x.id).sort(),['chr-current','nkd-current']);
+  assert.equal(response.data.lots.find(x=>x.model==='NKD').tasks.length,2);
+  assert.equal(response.data.lots.find(x=>x.model==='CHR').tasks[0].id,'chr-active-1');
+ }
+ assert.equal(fs.readFileSync(path.join(dataDir,'state.json'),'utf8'),before,'una consulta GET no debe borrar ni cambiar usuarios o datos');
+});
