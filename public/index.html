@@ -388,8 +388,13 @@ function renderProgresoPatinadores(){
   return (Array.isArray(lot.tasks)?lot.tasks:[]).map(task=>({...task,standardMoto:task.standardMoto||lot.model,codigoLoteOperacion:task.codigoLoteOperacion||code}));
  });
  const baseKey=task=>[normalizarModeloContinuidad(modeloDeTareaEstandar(task)||'NKD'),String(task.ean||'').replace(/\s+/g,'').toUpperCase()||String(task.numeroReferencia||task.producto||task.id||''),String(normalizarPuestoEstandar(task.puesto)||'').trim().toLowerCase()].join('|');
- const workLotReferences=new Set(lotTasks.map(baseKey));
- const legacyTasks=localTasks.filter(task=>(task.standardNKD||esContinuidadXRS180(task))&&!workLotReferences.has(baseKey(task)));
+ const operationKey=task=>baseKey(task)+'|'+String(task.codigoLoteOperacion||'').trim().toUpperCase();
+ const workLotReferences=new Set(lotTasks.map(baseKey)),workLotOperations=new Set(lotTasks.map(operationKey));
+ const legacyTasks=localTasks.filter(task=>{
+  if(!(task.standardNKD||esContinuidadXRS180(task)))return false;
+  const code=String(task.codigoLoteOperacion||'').trim().toUpperCase();
+  return code?!workLotOperations.has(operationKey(task)):!workLotReferences.has(baseKey(task));
+ });
  const reportTasks=combinarTareasProgreso([...legacyTasks,...lotTasks]);
  const skaters=Object.entries(users||{}).filter(([key,u])=>u&&u.role==='Patinador');
  if(!skaters.some(([key])=>key===selectedSupervisorSkater))selectedSupervisorSkater=skaters[0]?.[0]||'';
