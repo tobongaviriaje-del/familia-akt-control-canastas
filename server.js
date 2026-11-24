@@ -167,10 +167,24 @@ function writeWorkLots(rows){fs.mkdirSync(DATA_DIR,{recursive:true});const tmp=W
 function workLotNorm(v){return String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');}
 function workLotPosition(v){let x=workLotNorm(v),m=x.match(/^pre\s*0*(\d+)$/);if(m)return 'pre '+Number(m[1]);m=x.match(/^0*(\d+)\s*(derecho|izquierdo)$/);if(m)return m[2]+' '+Number(m[1]);m=x.match(/^(derecho|izquierdo|final(?: de linea)?)\s*0*(\d+)$/);if(m)return (m[1].startsWith('final')?'final':m[1])+' '+Number(m[2]);return x;}
 function workLotUserCanTask(user,username,task){const positions=new Set(Array.isArray(user.puestos)?user.puestos.map(workLotPosition).filter(Boolean):[]);const position=workLotPosition(task.puesto);if(position&&positions.has(position))return true;const responsible=workLotNorm(task.patinadorEstandar),identities=[user.name,username].map(workLotNorm).filter(Boolean);return !!responsible&&identities.some(v=>v===responsible||v.startsWith(responsible+' ')||v.endsWith(' '+responsible));}
+function workLotBogotaDate(value){
+ const raw=String(value||'').split('#')[0],timestamp=Date.parse(raw);
+ if(!Number.isFinite(timestamp))return '';
+ return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(timestamp));
+}
+function workLotVisibleRows(row,rows){
+ const sameModel=rows.filter(x=>x&&x.model===row.model);
+ const today=workLotBogotaDate(new Date().toISOString());
+ const workedToday=sameModel.filter(x=>workLotBogotaDate(x.updatedAt||x.createdAt)===today);
+ const lastWorkedNumber=Math.max(workLotNumber(row.number),...workedToday.map(x=>workLotNumber(x.number)));
+ const next=sameModel.find(x=>workLotNumber(x.number)===lastWorkedNumber+1);
+ const visible=new Map([...workedToday,row,next].filter(Boolean).map(x=>[String(x.id),x]));
+ return [...visible.values()].sort((a,b)=>workLotNumber(a.number)-workLotNumber(b.number)).map(x=>({id:x.id,number:x.number}));
+}
 function workLotResponse(row,user,username,rows){
  const legacyCodes=[...new Set((row.tasks||[]).map(t=>String(t&&t.codigoLoteOperacion||'').trim().toUpperCase()).filter(Boolean))];
  const lotCode=String(row.codigoLoteOperacion||'').trim().toUpperCase()||(legacyCodes.length===1?legacyCodes[0]:'');
- return {ok:true,lot:{id:row.id,model:row.model,number:row.number,codigoLoteOperacion:lotCode,createdAt:row.createdAt,updatedAt:row.updatedAt,sourceBatchId:row.sourceBatchId||null},lots:rows.filter(x=>x.model===row.model).sort((a,b)=>a.number-b.number).map(x=>({id:x.id,number:x.number})),tasks:(row.tasks||[]).filter(t=>workLotUserCanTask(user,username,t))};
+ return {ok:true,lot:{id:row.id,model:row.model,number:row.number,codigoLoteOperacion:lotCode,createdAt:row.createdAt,updatedAt:row.updatedAt,sourceBatchId:row.sourceBatchId||null},lots:workLotVisibleRows(row,rows),tasks:(row.tasks||[]).filter(t=>workLotUserCanTask(user,username,t))};
 }
 function validateWorkLot(saved,incoming,user,username){
  if(!Array.isArray(incoming))throw new Error('La lista de referencias no es válida.');
@@ -1107,11 +1121,18 @@ if(queued&&queued.modeloActual&&Array.isArray(queued.tasks)&&queued.tasks.length
 writeState(state);const responseState=JSON.parse(JSON.stringify(state));delete responseState.patinadoresAuth;for(const user of Object.values(responseState.users||{})){if(!user||typeof user!=='object')continue;delete user.pass;delete user.passDia;delete user.passNoche;}res.writeHead(200,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(responseState));
 }catch(e){console.error('Error guardando estado:',e);res.writeHead(400);res.end(JSON.stringify({error:'JSON invalido'}));}});return;
 }
+if(p==='/favicon.ico'&&req.method==='GET'){
+ return fs.readFile(path.join(ROOT,'icon.svg'),(err,data)=>{
+  if(err){res.writeHead(404);return res.end('Not found');}
+  res.writeHead(200,{'Content-Type':'image/svg+xml; charset=utf-8','Cache-Control':'public, max-age=86400'});
+  res.end(data);
+ });
+}
 let filePath=p==='/'?'/index.html':p;const file=path.normalize(path.join(ROOT,filePath));
 if(!file.startsWith(ROOT)){res.writeHead(403);return res.end('Forbidden');}
 fs.readFile(file,(err,data)=>{if(err){res.writeHead(404);return res.end('Not found');}let output=data;
 if(path.extname(file)==='.html'){
-  output=Buffer.from(data.toString('utf8').replace('</body>','<style>.estiba-destacada{background:#fff7ed;border:3px solid #f97316;color:#9a3412;border-radius:14px;padding:16px;margin:12px 0;font-size:24px;text-align:center}</style><script src="/patinador-estiba.js?v=44"></script><script src="/profesional.js?v=3"></script></body>'),'utf8');
+  output=Buffer.from(data.toString('utf8').replace('</body>','<style>.estiba-destacada{background:#fff7ed;border:3px solid #f97316;color:#9a3412;border-radius:14px;padding:16px;margin:12px 0;font-size:24px;text-align:center}</style><script src="/patinador-estiba.js?v=47" defer></script><script src="/profesional.js?v=4" defer></script></body>'),'utf8');
 }
 res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream'});res.end(output);});
 }catch(e){console.error('Error procesando solicitud:',e);if(!res.headersSent)sendJson(res,503,{ok:false,error:'No se pudo leer o procesar el estado persistente. No se guardaron cambios.'});else res.destroy();}
