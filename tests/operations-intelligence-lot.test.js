@@ -28,7 +28,7 @@ test('Inteligencia consulta dinámicamente los lotes vigentes de todos los model
   const groups = context.__aktIntelTest.groupsByOperation(sample);
   assert.equal(groups.length, 2);
   const nkd = groups.find(group => group.model === 'NKD');
-  const cr4 = groups.find(group => group.model === 'CR4 150');
+  const cr4 = groups.find(group => group.model === 'CR4-150');
   assert.ok(nkd);
   assert.ok(cr4);
   assert.equal(nkd.code, 'KK712');
