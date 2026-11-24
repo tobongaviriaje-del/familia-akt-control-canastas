@@ -84,8 +84,8 @@ function buildAnswer(query,data){
   });
   const models=[...groups.values()].map(g=>({...g,percentage:g.total?Math.min(100,g.delivered/g.total*100):g.percentSum/Math.max(1,g.count)})).sort((a,b)=>a.percentage-b.percentage);
   if(!models.length)return 'No hay indicadores de modelos disponibles para esta consulta.';
-  if(low||high){const chosen=high?models[models.length-1]:models[0];return (low?'Modelo con menor avance':'Modelo con mayor avance')+':\\n'+chosen.model+': '+pct(chosen.percentage)+'.';}
-  return 'Avance por modelo en los lotes activos:\\n'+models.map(x=>x.model+': '+pct(x.percentage)+'.').join('\\n');
+  if(low||high){const chosen=high?models[models.length-1]:models[0];return (low?'Modelo con menor avance':'Modelo con mayor avance')+':\n'+chosen.model+': '+pct(chosen.percentage)+'.';}
+  return 'Avance por modelo en los lotes activos:\n'+models.map(x=>x.model+': '+pct(x.percentage)+'.').join('\n');
  }
  if(low||high){
   const ranked=byPct(lots,'percentage',high);
