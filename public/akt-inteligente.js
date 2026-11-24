@@ -41,7 +41,7 @@ function buildAnswer(query,data){
  const lotCode=codeMatch?codeMatch[0].replace(/\s+/g,'').replace('-',''):'';
  let lots=(Array.isArray(data.lots)?data.lots:[]).filter(x=>(!model||x.model===model)&&(!lotCode||norm(x.lot).replace(/[\s-]/g,'').includes(norm(lotCode))));
  let skaters=(Array.isArray(data.skaters)?data.skaters:[]).filter(x=>(!model||x.model===model)&&(!lotCode||norm(x.lot).replace(/[\s-]/g,'').includes(norm(lotCode))));
- const low=q.includes('atras')||q.includes('mas bajo')||q.includes('menor')||q.includes('peor')||q.includes('pendiente');
+ const low=q.includes('atras')||q.includes('mas bajo')||q.includes('menor')||q.includes('peor');
  const asksModel=q.includes('modelo')&&!model;
  const high=q.includes('mejor')||q.includes('mayor avance')||q.includes('mas alto')||q.includes('mas avanzado');
  const byPct=(items,field='percentage',descending=false)=>[...items].sort((a,b)=>(Number(a[field]||0)-Number(b[field]||0))*(descending?-1:1));
