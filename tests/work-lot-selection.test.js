@@ -75,7 +75,9 @@ test('recuerda el lote seleccionado por patinador y modelo después de iniciar s
  const otherModel=await request(baseUrl,'/api/work-lots?model=CR4%20125&username=patinador1',{token:secondLogin.data.token});
  assert.equal(otherModel.status,200,JSON.stringify(otherModel.data));
  assert.equal(otherModel.data.lot.id,'cr4-lot-2','la selección de CHR no debe contaminar la selección de otro modelo');
- const otherSkater=await request(baseUrl,'/api/work-lots?model=CHR&username=patinador2',{token:secondLogin.data.token});
+ const loginOther=await request(baseUrl,'/api/login',{method:'POST',body:{username:'patinador2',password:'Patinador456'}});
+ assert.equal(loginOther.status,200);
+ const otherSkater=await request(baseUrl,'/api/work-lots?model=CHR&username=patinador2',{token:loginOther.data.token});
  assert.equal(otherSkater.status,200,JSON.stringify(otherSkater.data));
  assert.equal(otherSkater.data.lot.id,'chr-lot-2','cada patinador debe tener su propia selección');
  const persisted=JSON.parse(fs.readFileSync(path.join(dataDir,'work-lot-selections.json'),'utf8'));
