@@ -98,7 +98,7 @@ test('incluye modelos y lotes servidos por el backend y no mezcla operaciones co
 });
 
 test('la vista de Admin/Supervisor incluye todos los lotes y muestra error si la consulta real falla', () => {
-  assert.match(html, /skaterWorkLotProgress\.flatMap/);
+  assert.match(html, /tareasLotesParaProgreso\\(skaterWorkLotProgress\\)/);
   assert.match(html, /No se mostrarán totales incompletos/);
   assert.match(html, /\['Admin','Supervisor'\]/);
   assert.match(html, /<th>Modelo<\/th><th>Lote<\/th>/);
