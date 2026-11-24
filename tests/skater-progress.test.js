@@ -9,7 +9,7 @@ const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8
 const server = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
 
 function loadProgressHelpers() {
-  const start = html.indexOf('function combinarTareasProgreso(');
+  const start = html.indexOf('function tareasLotesParaProgreso(');
   const end = html.indexOf('\nfunction guardarCodigoOperacionCompartido()', start);
   assert.notEqual(start, -1);
   assert.ok(end > start);
@@ -19,6 +19,7 @@ function loadProgressHelpers() {
     modeloDeTareaEstandar: task => task.standardMoto || (task.standardNKD ? 'NKD' : ''),
     normalizarModeloContinuidad: value => String(value || '').trim().toUpperCase(),
     normalizarPuestoEstandar: value => String(value || '').trim(),
+    normalizarModeloContinuidad: value => String(value || '').trim().toUpperCase(),
     unidadesObjetivoEstandar: task => task.objetivo ?? task.cantidad ?? 0,
     tareasAsignadasAUsuarioEstandar: (task, user) =>
       user && user.role === 'Patinador' && (user.puestos || []).includes(task.puesto)
@@ -70,7 +71,7 @@ test('las tareas de los cuatro modelos se normalizan desde los lotes y conservan
   const context = loadProgressHelpers();
   const lots = [
     { id: 'a', number: 794, model: 'CR4 125', tasks: [{ id: '1', puesto: 'PRE 1', cantidad: 510, entregado: 200, entregas: [{ patinador: 'Ana', cantidad: 200 }] }] },
-    { id: 'b', number: 795, model: 'CR4-150', tasks: [{ id: '2', puesto: 'PRE 2', cantidad: 600 }] },
+    { id: 'b', number: 795, model: 'CR4 150', tasks: [{ id: '2', puesto: 'PRE 2', cantidad: 600 }] },
     { id: 'c', number: 796, model: 'NKD', tasks: [{ id: '3', puesto: 'PRE 3', cantidad: 600 }] },
     { id: 'd', number: 797, model: 'XRS-180', tasks: [{ id: '4', puesto: 'PRE 4', cantidad: 600 }] },
     { id: 'e', number: 1, model: 'CHR', tasks: [{ id: '5', puesto: 'PRE 5', cantidad: 600 }] }
