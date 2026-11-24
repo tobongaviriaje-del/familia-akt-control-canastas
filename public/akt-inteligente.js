@@ -42,6 +42,7 @@ function buildAnswer(query,data){
  let lots=(Array.isArray(data.lots)?data.lots:[]).filter(x=>(!model||x.model===model)&&(!lotCode||norm(x.lot).replace(/[\s-]/g,'').includes(norm(lotCode))));
  let skaters=(Array.isArray(data.skaters)?data.skaters:[]).filter(x=>(!model||x.model===model)&&(!lotCode||norm(x.lot).replace(/[\s-]/g,'').includes(norm(lotCode))));
  const low=q.includes('atras')||q.includes('mas bajo')||q.includes('menor')||q.includes('peor')||q.includes('pendiente');
+ const asksModel=q.includes('modelo')&&!model;
  const high=q.includes('mejor')||q.includes('mayor avance')||q.includes('mas alto')||q.includes('mas avanzado');
  const byPct=(items,field='percentage',descending=false)=>[...items].sort((a,b)=>(Number(a[field]||0)-Number(b[field]||0))*(descending?-1:1));
  const lotLabel=x=>x.model+' · '+x.lot;
@@ -73,6 +74,18 @@ function buildAnswer(query,data){
   if(!ranked.length)return 'No hay patinadores con asignaciones en los lotes activos.';
   if(low||high)return (low?'Patinador con menor porcentaje de entrega':'Patinador con mayor porcentaje de entrega')+':\n'+ranked.slice(0,1).map(x=>x.name+' · '+lotLabel(x)+': '+pct(x.percentage)+' ('+fmt(x.deliveredUnits)+' de '+fmt(x.totalUnits)+'; '+fmt(x.pendingUnits)+' pendientes).').join('\n');
   return 'Comparativo de entrega por patinador'+(model?' · '+model:'')+':\n'+ranked.map(x=>x.name+' · '+lotLabel(x)+': '+pct(x.percentage)+' ('+fmt(x.deliveredUnits)+' de '+fmt(x.totalUnits)+'; '+fmt(x.pendingUnits)+' pendientes).').join('\n');
+ }
+ if(asksModel){
+  const groups=new Map();
+  lots.forEach(x=>{
+   const key=x.model;if(!groups.has(key))groups.set(key,{model:key,total:0,delivered:0,pending:0,count:0,percentSum:0});
+   const g=groups.get(key);g.count++;g.percentSum+=Number(x.percentage||0);
+   g.total+=Number(x.totalUnits||0);g.delivered+=Number(x.deliveredUnits||0);g.pending+=Number(x.pendingUnits||0);
+  });
+  const models=[...groups.values()].map(g=>({...g,percentage:g.total?Math.min(100,g.delivered/g.total*100):g.percentSum/Math.max(1,g.count)})).sort((a,b)=>a.percentage-b.percentage);
+  if(!models.length)return 'No hay indicadores de modelos disponibles para esta consulta.';
+  if(low||high){const chosen=high?models[models.length-1]:models[0];return (low?'Modelo con menor avance':'Modelo con mayor avance')+':\\n'+chosen.model+': '+pct(chosen.percentage)+'.';}
+  return 'Avance por modelo en los lotes activos:\\n'+models.map(x=>x.model+': '+pct(x.percentage)+'.').join('\\n');
  }
  if(low||high){
   const ranked=byPct(lots,'percentage',high);
