@@ -7,7 +7,7 @@ const path = require('node:path');
 
 test('Inteligencia consulta dinámicamente los lotes vigentes de todos los modelos habilitados', () => {
   const source = fs.readFileSync(path.join(__dirname, '../public/operaciones-inteligentes.js'), 'utf8');
-  assert.match(source, /STANDARD_LOT_MODELS=\['NKD','CR4 150','CR4 125','XRS-180'\]/);
+  assert.match(source, /STANDARD_LOT_MODELS=\['NKD','CR4 150','CR4 125','XRS-180','CHR'\]/);
   assert.match(source, /overview\?model=\x27\+encodeURIComponent\(modelName\)/);
   assert.match(source, /standardMoto:modelName/);
   assert.doesNotMatch(source, /overview\?model=NKD&code=KK711/);
@@ -41,4 +41,23 @@ test('Inteligencia consulta dinámicamente los lotes vigentes de todos los model
   assert.equal(cr4.done, 1200);
   assert.equal(cr4.pending, 0);
   assert.equal(Math.round(cr4.done / cr4.total * 100), 100);
+});
+
+
+test('Inteligencia carga dinámicamente los lotes CHR y calcula su avance', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../public/operaciones-inteligentes.js'), 'utf8');
+  assert.match(source, /STANDARD_LOT_MODELS=\['NKD','CR4 150','CR4 125','XRS-180','CHR'\]/);
+  const bootstrap = source.indexOf("if(document.readyState==='loading')");
+  const isolated = source.slice(0, bootstrap) + 'globalThis.__aktIntelTest = { groupsByOperation };})();';
+  const context = { document: {}, console };
+  vm.runInNewContext(isolated, context);
+  const groups = context.__aktIntelTest.groupsByOperation([
+    { id: 'CHR-PRE5', puesto: 'PRE 5', lote: 300, entregado: 120, entregas: [{ cantidad: 120 }], standardMoto: 'CHR', codigoLoteOperacion: 'CHR-012' }
+  ]);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].model, 'CHR');
+  assert.equal(groups[0].total, 300);
+  assert.equal(groups[0].done, 120);
+  assert.equal(groups[0].pending, 180);
+  assert.equal(Math.round(groups[0].done / groups[0].total * 100), 40);
 });
