@@ -43,7 +43,7 @@ test('cuenta la entrega histórica en entrega aunque entregas exista vacío', ()
   assert.equal(merged[0].entregas[0].id, 'legacy-1');
 });
 
-test('no duplica un movimiento que aparece en entregas y también en entrega', () => {
+test('atribuye entregas históricas usando alias de identidad del patinador', () => {\n  const context = loadProgressHelpers();\n  const task = { standardNKD: true, puesto: 'PRE 26', objetivo: 600, entregas: [\n    { usuario: 'Ana', cantidad: 120 },\n    { username: 'ana', cantidad: 60 }\n  ] };\n  const ana = context.__summary([task], { role: 'Patinador', name: 'Ana', username: 'ana', puestos: ['PRE 26'] }, 'ana');\n  assert.equal(ana.total, 600);\n  assert.equal(ana.delivered, 180);\n  assert.equal(ana.pct, 30);\n});\n\ntest('no duplica un movimiento que aparece en entregas y también en entrega', () => {
   const context = loadProgressHelpers();
   const movement = { id: 'same-event', patinador: 'Ana', cantidad: 180, fechaHora: '20/11/2026 09:00' };
   const merged = context.__combine([{
