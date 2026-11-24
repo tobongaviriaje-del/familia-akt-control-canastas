@@ -1748,12 +1748,19 @@ async function cargarLoteRegistradoContinuidad(modelo){
 function pintarLoteRegistradoContinuidad(data,modelo){
  const host=$('continuidadWorkLotInfo');if(!host)return;
  const esc=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+ const status=$('continuidadEstadoLote');
  if(data&&data.notFound){host.innerHTML='<b>Lotes del sistema nuevo:</b> No se encontró un lote registrado para '+esc(modelo)+'.';return;}
  if(data&&data.error){host.innerHTML='<b>Lotes del sistema nuevo:</b> No fue posible consultar ('+esc(data.error)+').';return;}
  const lot=data&&data.lot,tasks=Array.isArray(data&&data.tasks)?data.tasks:[];
  if(!lot){host.textContent='No hay información de lotes del sistema nuevo.';return;}
  const code=String(lot.codigoLoteOperacion||'').trim();
- host.innerHTML='<b>Lote registrado en el sistema nuevo:</b> '+esc(modelo)+' · '+(code?'OPR '+esc(code):'Sin código de operación')+' · '+tasks.length+' referencias visibles. <small>Consulta de solo lectura. Este dato no confirma por sí solo que el lote esté activo ni reemplaza el cálculo de entregas del panel.</small>';
+ const total=tasks.reduce((n,t)=>n+Math.max(0,unidadesObjetivoEstandar(t)),0);
+ const entregado=tasks.reduce((n,t)=>n+Math.min(Math.max(0,Number(t.entregado)||0),Math.max(0,unidadesObjetivoEstandar(t))),0);
+ const restante=Math.max(0,total-entregado),pct=total?Math.min(100,Math.round(entregado/total*100)):0;
+ if(status&&code){
+  status.innerHTML='<b>Lote de trabajo encontrado:</b> OPR '+esc(code)+(total?' · '+pct+'% entregado ('+entregado+' / '+total+') · '+restante+' pendientes':' · '+tasks.length+' referencias');
+ }
+ host.innerHTML='<b>Lote registrado en el sistema nuevo:</b> '+esc(modelo)+' · '+(code?'OPR '+esc(code):'Sin código de operación')+' · '+tasks.length+' referencias'+(total?' · '+restante+' unidades pendientes':'')+'. <small>Datos de solo lectura del lote y sus entregas.</small>';
 }
 function renderSiguienteLoteAdmin(){
  const box=$('siguienteLoteAdmin');if(!box)return;
@@ -1766,7 +1773,7 @@ function renderSiguienteLoteAdmin(){
  const esc=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
  const pendientes=queuedStandardBatches.length?'<p><b>Lotes siguientes en espera:</b> '+queuedStandardBatches.map(x=>esc(x.modelo)+' · '+esc(x.codigo)).join(' | ')+'</p>':'';
  const qhtml=q?'<p><b>Siguiente lote preparado:</b> '+esc(q.modelo)+' · OPR '+esc(q.codigo)+' · '+q.tasks.length+' referencias.</p><p>Está guardado por separado. '+(r.total&&r.pct>=100?'<b>El lote actual está completo. Ya puedes continuar.</b>':'Se habilitará al completar el 100% del lote actual.')+'</p><button type="button" class="secondary" onclick="activarSiguienteLote()" '+(r.total&&r.pct>=100?'':'disabled')+' style="width:100%;font-weight:800;margin:8px 0">🔔 Activar siguiente lote</button>':'<p>No hay siguiente lote preparado para '+esc(modelo)+'.</p>';
- box.innerHTML='<b>🔁 Continuidad de lotes</b><p><b>Lote activo seleccionado ('+esc(modelo)+'):</b> '+progreso+'</p>'+pendientes+qhtml+'<div id="continuidadWorkLotInfo" class="muted" style="margin-top:10px">Consultando lotes registrados…</div>';
+ box.innerHTML='<b>🔁 Continuidad de lotes</b><p id="continuidadEstadoLote"><b>Lote seleccionado ('+esc(modelo)+'):</b> '+progreso+'</p>'+pendientes+qhtml+'<div id="continuidadWorkLotInfo" class="muted" style="margin-top:10px">Consultando lotes registrados…</div>';
  cargarLoteRegistradoContinuidad(modelo);
 }
 async function activarSiguienteLote(){
