@@ -767,7 +767,8 @@ if(p.startsWith('/api/reference-photos/')&&req.method==='GET'){
 }
 
 if(p==='/api/assistant/production-summary'&&req.method==='GET'){
- const question=new URL(req.url,'http://localhost').searchParams.get('question')||'';\n const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token);
+ const question=new URL(req.url,'http://localhost').searchParams.get('question')||'';
+ const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token);
  if(!authorized(req)||!session)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
  try{
   const state=readStateSnapshot(),viewer=state.users&&state.users[session.username],role=viewer&&viewer.role;
