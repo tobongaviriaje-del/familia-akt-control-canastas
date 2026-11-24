@@ -295,3 +295,94 @@ test('permite rotar la contraseña Admin después de una recuperación de un sol
  const supervisor=await request(base,'/api/login',{method:'POST',body:{username:'supervisor',password:'supervisor-test'}});
  assert.equal((await request(base,'/api/admin/change-password',{token:supervisor.data.token,method:'POST',body:{newPassword:next}})).status,403);
 });
+
+
+test('AKT INTELIGENTE entrega solo indicadores permitidos por perfil y no modifica datos', async t => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'familia-akt-assistant-'));
+  const dataDir = path.join(temp, 'data');
+  fs.mkdirSync(dataDir, { recursive: true });
+  fs.mkdirSync(path.join(temp, 'public'));
+  fs.copyFileSync(path.join(repoRoot, 'server.js'), path.join(temp, 'server.js'));
+  const state = {
+    users: {
+      admin: { pass: 'AdminTest123', role: 'Admin', name: 'Admin de prueba' },
+      supervisor: { pass: 'SupervisorTest123', role: 'Supervisor', name: 'Supervisor de prueba' },
+      coordinador: { pass: 'CoordinadorTest123', role: 'Coordinador', name: 'Coordinador de prueba' },
+      patinador: { pass: 'PatinadorTest123', role: 'Patinador', name: 'Patinador de prueba', puestos: ['PRE 1'] }
+    },
+    tasks: [{ id: 'T-1', standardNKD: true, standardMoto: 'NKD', lote: 10, cantidad: 10, entregado: 2, estado: 'Parcial', puesto: 'PRE 1' }]
+  };
+  const workLots = [
+    { id: 'LOT-ACTIVE', model: 'NKD', number: 7, codigoLoteOperacion: 'KK711', tasks: [
+      { id: 'T-1', ean: '770000000001', puesto: 'PRE 1', lote: 10, cantidad: 10, entregado: 2, entregas: [{ id: 'EV-1', patinador: 'Patinador de prueba', cantidad: 2 }], entrega: null }
+    ] },
+    { id: 'LOT-HISTORY', model: 'NKD', number: 6, codigoLoteOperacion: 'KK700', tasks: [
+      { id: 'T-OLD', puesto: 'PRE 1', lote: 20, cantidad: 20, entregado: 20, entregas: [{ patinador: 'Patinador de prueba', cantidad: 20 }] }
+    ] }
+  ];
+  fs.writeFileSync(path.join(dataDir, 'state.json'), JSON.stringify(state, null, 2));
+  fs.writeFileSync(path.join(dataDir, 'work-lots.json'), JSON.stringify(workLots, null, 2));
+  const originalState = fs.readFileSync(path.join(dataDir, 'state.json'), 'utf8');
+  const originalLots = fs.readFileSync(path.join(dataDir, 'work-lots.json'), 'utf8');
+
+  const port = await freePort();
+  const baseUrl = 'http://127.0.0.1:' + port;
+  const child = spawn(process.execPath, ['server.js'], { cwd: temp, env: { ...process.env, PORT: String(port) }, stdio: 'ignore' });
+  t.after(async () => {
+    child.kill('SIGTERM');
+    await new Promise(resolve => { if (child.exitCode !== null) return resolve(); child.once('exit', resolve); setTimeout(resolve, 1500).unref(); });
+    fs.rmSync(temp, { recursive: true, force: true });
+  });
+  await waitForHealth(baseUrl, child);
+  async function login(username, password) {
+    const result = await request(baseUrl, '/api/login', { method: 'POST', body: { username, password } });
+    assert.equal(result.status, 200);
+    return result.data.token;
+  }
+
+  const anonymous = await request(baseUrl, '/api/assistant/production-summary');
+  assert.equal(anonymous.status, 401);
+  const invalid = await request(baseUrl, '/api/assistant/production-summary', { token: 'invalid-token' });
+  assert.equal(invalid.status, 401);
+
+  const supervisorToken = await login('supervisor', 'SupervisorTest123');
+  const supervisor = await request(baseUrl, '/api/assistant/production-summary', { token: supervisorToken });
+  assert.equal(supervisor.status, 200);
+  assert.equal(supervisor.data.role, 'Supervisor');
+  assert.equal(supervisor.data.lots.length, 1, 'solo debe incluir el lote vigente');
+  assert.deepEqual(Object.keys(supervisor.data.lots[0]).sort(), ['lot', 'model', 'percentage']);
+  assert.deepEqual(Object.keys(supervisor.data.skaters[0]).sort(), ['lot', 'model', 'name', 'percentage']);
+  assert.equal(supervisor.data.skaters[0].percentage, 20);
+  assert.equal(supervisor.data.tasks, undefined);
+  assert.equal(supervisor.data.users, undefined);
+  assert.equal(JSON.stringify(supervisor.data).includes('EV-1'), false);
+
+  const adminToken = await login('admin', 'AdminTest123');
+  const admin = await request(baseUrl, '/api/assistant/production-summary', { token: adminToken });
+  assert.equal(admin.status, 200);
+  assert.equal(admin.data.summary.totalUnits, 10);
+  assert.equal(admin.data.summary.deliveredUnits, 2);
+  assert.equal(admin.data.summary.pendingUnits, 8);
+  assert.equal(admin.data.summary.percentage, 20);
+  assert.equal(admin.data.skaters[0].deliveredUnits, 2);
+
+  const coordinatorToken = await login('coordinador', 'CoordinadorTest123');
+  const coordinator = await request(baseUrl, '/api/assistant/production-summary', { token: coordinatorToken });
+  assert.equal(coordinator.status, 200);
+  assert.equal(coordinator.data.role, 'Coordinador');
+  assert.equal(coordinator.data.summary.percentage, 20);
+
+  const patinadorToken = await login('patinador', 'PatinadorTest123');
+  const patinador = await request(baseUrl, '/api/assistant/production-summary', { token: patinadorToken });
+  assert.equal(patinador.status, 200);
+  assert.equal(patinador.data.role, 'Patinador');
+  assert.equal(patinador.data.summary.totalUnits, 10);
+  assert.equal(patinador.data.summary.deliveredUnits, 2);
+  assert.equal(patinador.data.lots.length, 1);
+  assert.equal(patinador.data.lots[0].lot, 'KK711 · lote 7');
+
+  const sharedLogin = await request(baseUrl, '/api/login', { method: 'POST', body: { username: 'patinadores', password: 'DiaTest123' } });
+  assert.equal(sharedLogin.status, 401, 'sin credenciales compartidas configuradas, el login compartido no se crea en este fixture');
+  assert.equal(fs.readFileSync(path.join(dataDir, 'state.json'), 'utf8'), originalState, 'la consulta no debe modificar state.json');
+  assert.equal(fs.readFileSync(path.join(dataDir, 'work-lots.json'), 'utf8'), originalLots, 'la consulta no debe modificar work-lots.json');
+});
