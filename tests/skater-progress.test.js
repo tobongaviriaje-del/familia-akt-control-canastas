@@ -75,9 +75,12 @@ test('las tareas de los cuatro modelos se normalizan desde los lotes y conservan
     { id: 'e', number: 1, model: 'CHR', tasks: [{ id: '5', puesto: 'PRE 5', cantidad: 600 }] }
   ];
   const mapped = context.__lots(lots);
-  assert.equal(mapped.length, 4);
+  assert.equal(mapped.length, 5);
   assert.ok(mapped.every(task => task.standardNKD === true));
-  assert.deepEqual(Array.from(mapped, task => task.standardMoto), ['CR4 125', 'CR4 150', 'NKD', 'XRS-180']);
+  assert.deepEqual(Array.from(mapped, task => task.standardMoto), ['CR4 125', 'CR4 150', 'NKD', 'XRS-180', 'CHR']);
+  const chr = mapped.find(task => task.standardMoto === 'CHR');
+  assert.equal(chr.__progressLotLabel, 'Sin código · lote 1');
+  assert.equal(context.__summary([chr], { role: 'Patinador', name: 'Caro', puestos: ['PRE 5'] }, 'caro').pct, 0);
   assert.equal(mapped[0].__progressLotLabel, 'Sin código · lote 794');
   const ana = context.__summary(mapped, { role: 'Patinador', name: 'Ana', puestos: ['PRE 1'] }, 'ana');
   assert.equal(ana.assigned, 1);
@@ -138,5 +141,25 @@ test('la vista de Admin/Supervisor incluye todos los lotes y muestra error si la
   assert.match(html, /No se mostrarán totales incompletos/);
   assert.match(html, /\['Admin','Supervisor'\]/);
   assert.match(html, /<th>Modelo<\/th><th>Lote<\/th>/);
-  assert.match(html, /<th>Entregadas<\/th><th>Pendientes<\/th><th>Avance<\/th>/);
+  assert.match(html, /<th>Entregadas<\/th><th>Pendientes<\/th>/);
+  assert.match(html, /<th>Avance<\/th>/);
+});
+
+
+test('CHR entra en el comparativo individual y conserva sus entregas por patinador', () => {
+  const context = loadProgressHelpers();
+  const mapped = context.__lots([{ id: 'chr-lot', number: 12, model: 'CHR', codigoLoteOperacion: 'CHR-012', tasks: [{ id: 'chr-task', puesto: 'PRE 5', cantidad: 300, entregado: 120, entregas: [{ patinador: 'Caro', cantidad: 120 }] }] }]);
+  assert.equal(mapped.length, 1);
+  assert.equal(mapped[0].standardMoto, 'CHR');
+  const summary = context.__summary(mapped, { role: 'Patinador', name: 'Caro', puestos: ['PRE 5'] }, 'caro');
+  assert.equal(summary.assigned, 1);
+  assert.equal(summary.total, 300);
+  assert.equal(summary.delivered, 120);
+  assert.equal(summary.pct, 40);
+});
+
+test('la vista de Supervisor solo muestra patinador, modelo, lote y porcentaje de entrega', () => {
+  assert.match(html, /const isSupervisor=current\.role==='Supervisor'/);
+  assert.ok(html.includes("isSupervisor?'':'<th>Refs.</th><th>Entregadas</th><th>Pendientes</th>'"));
+  assert.match(html, /!isSupervisor&&selected\?/);
 });

@@ -264,7 +264,7 @@ function tareasAsignadasAUsuarioEstandar(task,user,username){
  return asignadoPorPuesto||asignadoDirecto;
 }
 function tareasLotesParaProgreso(lots){
- const modelosPermitidos=new Set(['NKD','CR4 125','CR4 150','XRS-180']);
+ const modelosPermitidos=new Set(['NKD','CR4 125','CR4 150','XRS-180','CHR']);
  return (Array.isArray(lots)?lots:[]).flatMap(lot=>{
   const model=normalizarModeloContinuidad(lot&&lot.model);
   if(!modelosPermitidos.has(model))return [];
@@ -273,8 +273,8 @@ function tareasLotesParaProgreso(lots){
   const label=code?(code+' · lote '+String(lot.number||lotId)):('Sin código · lote '+String(lot.number||lotId));
   return (Array.isArray(lot.tasks)?lot.tasks:[]).map(task=>({
    ...task,
-   // El comparativo trabaja con los estándares de estos cuatro modelos.
-   // Las tareas de /api/work-lots no llevan la marca standardNKD del estado antiguo.
+   // La marca standardNKD identifica referencias de estándar de cualquier modelo, incluido CHR.
+   // Las tareas de /api/work-lots no llevan esa marca del estado antiguo.
    standardNKD:true,
    standardMoto:model,
    codigoLoteOperacion:String(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote||code||'').trim().toUpperCase(),
@@ -406,6 +406,7 @@ function renderProgresoPatinadores(){
   return;
  }
  const isCoordinator=current.role==='Coordinador'||String(current.role||'').toLowerCase()==='coordinador';
+ const isSupervisor=current.role==='Supervisor';
  if(!['Admin','Supervisor'].includes(current.role)&&!isCoordinator){panel.classList.add('hidden');return;}
  panel.classList.remove('hidden');if(progress)progress.innerHTML='Consulta de avance por lote u operación. Esta vista no modifica entregas ni estándares.';
  if(skaterWorkLotProgress===null){
@@ -443,7 +444,7 @@ function renderProgresoPatinadores(){
  const active=[...activeMap.values()].filter(x=>x.pending>0).sort((a,b)=>b.latestAt-a.latestAt)[0]||null;
  const next=Array.isArray(queuedStandardBatches)?queuedStandardBatches.find(x=>Array.isArray(x.tasks)&&x.tasks.length>0)||null:null;
  const selected=skaters.find(([key])=>key===selectedSupervisorSkater)||null;
- const buttons=skaters.map(([key,u])=>'<button type="button" class="'+(key===selectedSupervisorSkater?'':'secondary')+'" data-skater="'+esc(key)+'" onclick="seleccionarPatinadorSupervisor(this.dataset.skater)" style="margin:4px 6px 4px 0">'+esc(u.name||u.nombre||key)+'</button>').join('');
+ const buttons=isSupervisor?'':skaters.map(([key,u])=>'<button type="button" class="'+(key===selectedSupervisorSkater?'':'secondary')+'" data-skater="'+esc(key)+'" onclick="seleccionarPatinadorSupervisor(this.dataset.skater)" style="margin:4px 6px 4px 0">'+esc(u.name||u.nombre||key)+'</button>').join('');
  const progressCard=(label,op,u,key,isNext)=>{
   if(!op)return '<div class="notice"><b>'+label+'</b><p class="muted">'+(isNext?'No hay un lote siguiente preparado.':'No se detecta un lote actual con tareas pendientes hoy.')+'</p></div>';
   const r=resumenEntregaPatinador(op.tasks,u,key),done=pct(r.pct),left=Math.max(0,100-done),hasTasks=r.assigned>0&&r.total>0;
@@ -460,12 +461,12 @@ function renderProgresoPatinadores(){
    if(!r.assigned)return;
    found=true;
    const done=pct(r.pct),pending=Math.max(0,r.total-r.delivered);
-   comparisonRows.push('<tr><td>'+esc(name)+'</td><td>'+esc(op.modelo)+'</td><td>'+esc(op.lotLabel||op.codigo||'Sin código')+'</td><td style="text-align:right">'+fmt(r.assigned)+'</td><td style="text-align:right">'+fmt(r.delivered)+'</td><td style="text-align:right">'+fmt(pending)+'</td><td><b>'+fmt(done)+'%</b><div style="height:8px;min-width:90px;background:#e5e7eb;border-radius:8px;overflow:hidden;margin-top:4px"><div style="height:8px;width:'+done+'%;background:#16a34a"></div></div></td></tr>');
+   comparisonRows.push(isSupervisor?'<tr><td>'+esc(name)+'</td><td>'+esc(op.modelo)+'</td><td>'+esc(op.lotLabel||op.codigo||'Sin código')+'</td><td><b>'+fmt(done)+'%</b><div style="height:8px;min-width:90px;background:#e5e7eb;border-radius:8px;overflow:hidden;margin-top:4px"><div style="height:8px;width:'+done+'%;background:#16a34a"></div></div></td></tr>':'<tr><td>'+esc(name)+'</td><td>'+esc(op.modelo)+'</td><td>'+esc(op.lotLabel||op.codigo||'Sin código')+'</td><td style="text-align:right">'+fmt(r.assigned)+'</td><td style="text-align:right">'+fmt(r.delivered)+'</td><td style="text-align:right">'+fmt(pending)+'</td><td><b>'+fmt(done)+'%</b><div style="height:8px;min-width:90px;background:#e5e7eb;border-radius:8px;overflow:hidden;margin-top:4px"><div style="height:8px;width:'+done+'%;background:#16a34a"></div></div></td></tr>');
   });
-  if(!found)comparisonRows.push('<tr><td>'+esc(name)+'</td><td colspan="6" class="muted">Sin tareas estándar asignadas</td></tr>');
+  if(!found)comparisonRows.push('<tr><td>'+esc(name)+'</td><td colspan="'+(isSupervisor?'3':'6')+'" class="muted">Sin tareas estándar asignadas</td></tr>');
  });
- const comparisonTable='<div class="topbar"><h4>📊 Avance de entregas de todos los patinadores</h4><button type="button" class="small secondary" onclick="cargarDatosProgresoPatinadores(true)">↻ Actualizar datos</button></div><p class="muted">Datos leídos de los lotes de trabajo guardados en el servidor. Las correcciones se conservan en el historial y no se restan automáticamente de los eventos de entrega.</p><div style="overflow-x:auto"><table class="scroll" style="width:100%;min-width:760px"><thead><tr><th>Patinador</th><th>Modelo</th><th>Lote</th><th>Refs.</th><th>Entregadas</th><th>Pendientes</th><th>Avance</th></tr></thead><tbody>'+(comparisonRows.join('')||'<tr><td colspan="7" class="muted">No hay patinadores registrados.</td></tr>')+'</tbody></table></div>';
- box.innerHTML='<h4>📦 Seguimiento por patinador</h4><p class="muted">Consulta el avance individual y compara todos los patinadores, sin limitarse al lote actual.</p><div style="display:flex;flex-wrap:wrap;gap:4px">'+(buttons||'<p class="muted">No hay patinadores registrados.</p>')+'</div>'+comparisonTable+(selected?'<h4>Detalle de: '+esc(selected[1].name||selected[1].nombre||selected[0])+'</h4>'+progressCard('Lote actual',active,selected[1],selected[0],false)+progressCard('Lote siguiente',next,selected[1],selected[0],true):'');
+ const comparisonTable='<div class="topbar"><h4>📊 Avance de entregas de todos los patinadores</h4><button type="button" class="small secondary" onclick="cargarDatosProgresoPatinadores(true)">↻ Actualizar datos</button></div>'+(isSupervisor?'':'<p class="muted">Datos leídos de los lotes de trabajo guardados en el servidor. Las correcciones se conservan en el historial y no se restan automáticamente de los eventos de entrega.</p>')+'<div style="overflow-x:auto"><table class="scroll" style="width:100%;min-width:'+(isSupervisor?'420px':'760px')+'"><thead><tr><th>Patinador</th><th>Modelo</th><th>Lote</th>'+(isSupervisor?'':'<th>Refs.</th><th>Entregadas</th><th>Pendientes</th>')+'<th>Avance</th></tr></thead><tbody>'+(comparisonRows.join('')||'<tr><td colspan="'+(isSupervisor?'4':'7')+'" class="muted">No hay patinadores registrados.</td></tr>')+'</tbody></table></div>';
+ box.innerHTML='<h4>📦 Seguimiento por patinador</h4>'+(isSupervisor?'':'<p class="muted">Consulta el avance individual y compara todos los patinadores, sin limitarse al lote actual.</p><div style="display:flex;flex-wrap:wrap;gap:4px">'+(buttons||'<p class="muted">No hay patinadores registrados.</p>')+'</div>')+comparisonTable+(!isSupervisor&&selected?'<h4>Detalle de: '+esc(selected[1].name||selected[1].nombre||selected[0])+'</h4>'+progressCard('Lote actual',active,selected[1],selected[0],false)+progressCard('Lote siguiente',next,selected[1],selected[0],true):'');
 }
 async function retirarLoteCompletado(){
  if(!isAdmin())return;
