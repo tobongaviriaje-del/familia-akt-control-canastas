@@ -9,7 +9,7 @@ const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8
 const server = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
 
 function loadProgressHelpers() {
-  const start = html.indexOf('function tareasLotesParaProgreso(');
+  const start = html.indexOf('function tareasAsignadasAUsuarioEstandar(');
   const end = html.indexOf('\nfunction guardarCodigoOperacionCompartido()', start);
   assert.notEqual(start, -1);
   assert.ok(end > start);
@@ -20,8 +20,7 @@ function loadProgressHelpers() {
     normalizarModeloContinuidad: value => String(value || '').trim().toUpperCase(),
     normalizarPuestoEstandar: value => String(value || '').trim(),
     unidadesObjetivoEstandar: task => task.objetivo ?? task.cantidad ?? 0,
-    tareasAsignadasAUsuarioEstandar: (task, user) =>
-      user && user.role === 'Patinador' && (user.puestos || []).includes(task.puesto)
+    normalizarPuestoEstandar: value => String(value || '').trim(),
   };
   vm.runInNewContext(source + '\nglobalThis.__combine = combinarTareasProgreso; globalThis.__summary = resumenEntregaPatinador; globalThis.__lots = tareasLotesParaProgreso;', context);
   return context;
@@ -95,6 +94,28 @@ test('incluye modelos y lotes servidos por el backend y no mezcla operaciones co
   const merged = context.__combine([nkd, cr4, otherLot]);
   assert.equal(merged.length, 3);
   assert.deepEqual(Array.from(merged, x => x.standardMoto), ['NKD', 'CR4 150', 'NKD']);
+});
+
+
+test('reconoce la asignación directa por patinadorEstandar aunque no tenga el puesto en su perfil', () => {
+  const context = loadProgressHelpers();
+  const task = { standardNKD: true, puesto: 'PRE 26', patinadorEstandar: 'Ana María' };
+  const ana = { role: 'Patinador', name: 'Ana María', puestos: [] };
+  const beto = { role: 'Patinador', name: 'Beto', puestos: [] };
+  assert.equal(context.tareasAsignadasAUsuarioEstandar(task, ana, 'ana'), true);
+  assert.equal(context.tareasAsignadasAUsuarioEstandar(task, beto, 'beto'), false);
+});
+
+test('mantiene separados dos lotes distintos aunque compartan código, EAN y puesto', () => {
+  const context = loadProgressHelpers();
+  const base = { standardNKD: true, standardMoto: 'NKD', puesto: 'PRE 1', ean: '123', objetivo: 600, codigoLoteOperacion: 'KK800' };
+  const mapped = context.__lots([
+    { id: 'lote-1', number: 1, model: 'NKD', codigoLoteOperacion: 'KK800', tasks: [{ ...base, id: 'task-1' }] },
+    { id: 'lote-2', number: 2, model: 'NKD', codigoLoteOperacion: 'KK800', tasks: [{ ...base, id: 'task-2' }] }
+  ]);
+  const merged = context.__combine(mapped);
+  assert.equal(merged.length, 2);
+  assert.notEqual(merged[0].__progressLotKey, merged[1].__progressLotKey);
 });
 
 test('la vista de Admin/Supervisor incluye todos los lotes y muestra error si la consulta real falla', () => {
