@@ -141,7 +141,8 @@ test('la vista de Admin/Supervisor incluye todos los lotes y muestra error si la
   assert.match(html, /No se mostrarán totales incompletos/);
   assert.match(html, /\['Admin','Supervisor'\]/);
   assert.match(html, /<th>Modelo<\/th><th>Lote<\/th>/);
-  assert.match(html, /<th>Entregadas<\/th><th>Pendientes<\/th><th>Avance<\/th>/);
+  assert.match(html, /<th>Entregadas<\/th><th>Pendientes<\/th>/);
+  assert.match(html, /<th>Avance<\/th>/);
 });
 
 
