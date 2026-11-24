@@ -76,7 +76,7 @@ test('Inteligencia incorpora todos los lotes del servidor y conserva su identida
   assert.equal(rows.get('NKD').length, 2);
   assert.equal(rows.get('NKD')[0].codigoLoteOperacion, 'KK711');
   assert.equal(rows.get('NKD')[0].__progressLotKey, 'nkd-711');
-  assert.equal(rows.get('NKD')[1].codigoLoteOperacion, 'Sin código');
+  assert.equal(rows.get('NKD')[1].codigoLoteOperacion, 'SIN CÓDIGO');
   const groups = context.__aktIntelTest.groupsByOperation(rows.get('NKD'));
   assert.equal(groups.length, 2);
   assert.equal(groups.find(group => group.code === 'KK711').done, 80);
