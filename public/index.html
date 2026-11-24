@@ -308,7 +308,7 @@ function combinarTareasProgreso(tasks){
   let group=groups.get(key);
   if(!group){group={task:{...x},events:new Map()};groups.set(key,group);}
   else if(Math.max(0,Number(x.entregado)||0)>Math.max(0,Number(group.task.entregado)||0)||Math.max(0,Number(unidadesObjetivoEstandar(x))||0)>Math.max(0,Number(unidadesObjetivoEstandar(group.task))||0)){group.task={...x};}
-  const events=Array.isArray(x.entregas)?x.entregas:(x.entrega?[x.entrega]:[]);
+  const events=eventosEntregaTarea(x);
   events.forEach(e=>{if(e&&typeof e==='object')group.events.set(eventKey(e),e);});
  });
  return [...groups.values()].map(group=>({...group.task,entregas:[...group.events.values()]}));
