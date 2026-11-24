@@ -108,6 +108,13 @@ test('protege credenciales, cambios administrativos y cierre de jornada', async 
   assert.equal(sharedSave.status, 200, 'el Patinador compartido debe poder guardar una entrega asignada');
   assert.equal(sharedSave.data.tasks[0].entregado, 3);
 
+  const publicState = await request(baseUrl, '/api/state');
+  assert.equal(publicState.status, 401, 'el estado global no debe exponerse sin una sesión autenticada');
+  assert.equal(publicState.data.ok, false);
+
+  const invalidSessionState = await request(baseUrl, '/api/state', { token: 'token-invalido' });
+  assert.equal(invalidSessionState.status, 401, 'un token inválido no debe consultar el estado global');
+
   const safeState = await request(baseUrl, '/api/state', { token: supervisorToken });
   assert.equal(safeState.status, 200);
   assert.equal(safeState.data.patinadoresAuth, undefined);

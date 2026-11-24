@@ -730,7 +730,17 @@ if(p.startsWith('/api/reference-photos/')&&req.method==='GET'){
  fs.readFile(path.join(dir,file),(err,data)=>{if(err)return sendJson(res,404,{ok:false,error:'Foto no encontrada.'});res.writeHead(200,{'Content-Type':'image/webp','Cache-Control':'private, max-age=86400'});res.end(data);});return;
 }
 
-if(p==='/api/state'&&req.method==='GET'){const safe=JSON.parse(JSON.stringify(readState()));delete safe.patinadoresAuth;for(const user of Object.values(safe.users||{})){if(!user||typeof user!=='object')continue;delete user.pass;delete user.passDia;delete user.passNoche;}return sendJson(res,200,safe);}
+if(p==='/api/state'&&req.method==='GET'){
+ const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token);
+ if(!authorized(req)||!session)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
+ let safe;
+ try{safe=JSON.parse(JSON.stringify(readStateSnapshot()));}catch(e){return sendJson(res,503,{ok:false,error:'No se pudo consultar el estado persistente.'});}
+ const viewer=safe.users&&safe.users[session.username];
+ if(!viewer)return sendJson(res,403,{ok:false,error:'La cuenta no tiene acceso al estado de la aplicación.'});
+ delete safe.patinadoresAuth;
+ for(const user of Object.values(safe.users||{})){if(!user||typeof user!=='object')continue;delete user.pass;delete user.passDia;delete user.passNoche;}
+ return sendJson(res,200,safe);
+}
 if(p==='/api/jornada/cerrar'&&req.method==='POST'){
 const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),authState=readState();
 if(!session||!authState.users[session.username]||authState.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede cerrar la jornada.'});
