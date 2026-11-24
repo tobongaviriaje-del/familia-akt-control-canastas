@@ -327,6 +327,48 @@ if(p==='/api/work-lots/overview'&&req.method==='GET'){
   return sendJson(res,200,{ok:true,soloLectura:true,lot:{id:row.id,model:row.model,number:row.number,codigoLoteOperacion:String(row.codigoLoteOperacion||code||'').trim().toUpperCase(),createdAt:row.createdAt,updatedAt:row.updatedAt},tasks});
  }catch(e){console.error('Error consultando lote en modo lectura:',e);return sendJson(res,500,{ok:false,error:'No se pudo consultar el lote.'});}
 }
+
+if(p==='/api/admin/work-lots/diagnostic'&&req.method==='GET'){
+ const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token);
+ if(!authorized(req)||!session)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
+ let state;
+ try{state=JSON.parse(fs.readFileSync(STATE_FILE,'utf8'));}catch(e){return sendJson(res,503,{ok:false,error:'No se pudo verificar el acceso administrativo.'});}
+ const viewer=state.users&&state.users[session.username];
+ if(!viewer||viewer.role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo Admin puede consultar este diagnóstico.'});
+ const model=workLotModel(url.searchParams.get('model')),code=String(url.searchParams.get('code')||'').trim().toUpperCase();
+ if(model!=='NKD'||code!=='KK711')return sendJson(res,400,{ok:false,error:'Este diagnóstico está limitado a NKD / KK711.'});
+ try{
+  const rows=readWorkLots().filter(x=>x&&workLotModel(x.model)==='NKD').sort((a,b)=>workLotNumber(b.number)-workLotNumber(a.number));
+  const row=rows.find(candidate=>{
+   const header=String(candidate.codigoLoteOperacion||'').trim().toUpperCase();
+   const codes=[...new Set((Array.isArray(candidate.tasks)?candidate.tasks:[]).map(t=>String(t&&(t.codigoLoteOperacion||t.loteCodigo||t.codigoLote)||'').trim().toUpperCase()).filter(Boolean))];
+   return header===code||codes.includes(code);
+  });
+  if(!row)return sendJson(res,404,{ok:false,error:'No se encontró NKD / KK711 en los lotes guardados.'});
+  const tasks=Array.isArray(row.tasks)?row.tasks:[];
+  const totals={references:tasks.length,targetUnits:0,deliveredUnits:0,pendingUnits:0,deliveryEvents:0,deliveryEventUnits:0,correctionUnits:0,netEventUnits:0,referenceMismatches:0};
+  const mismatches=[],eventSamples=[];
+  for(const task of tasks){
+   const target=Math.max(0,workLotTarget(task)),delivered=workLotNumber(task&&task.entregado);
+   const events=Array.isArray(task&&task.entregas)?task.entregas:[];
+   const corrections=Array.isArray(task&&task.correcciones)?task.correcciones:[];
+   const eventUnits=events.reduce((n,event)=>n+Math.max(0,workLotNumber(event&&event.cantidad)),0);
+   const correctionUnits=corrections.reduce((n,event)=>n+Math.max(0,workLotNumber(event&&event.unidades)),0);
+   const netEventUnits=eventUnits-correctionUnits;
+   totals.targetUnits+=target;totals.deliveredUnits+=delivered;totals.pendingUnits+=Math.max(0,target-delivered);
+   totals.deliveryEvents+=events.length;totals.deliveryEventUnits+=eventUnits;totals.correctionUnits+=correctionUnits;totals.netEventUnits+=netEventUnits;
+   if(delivered!==netEventUnits||delivered>target){
+    totals.referenceMismatches++;
+    if(mismatches.length<30)mismatches.push({referenceId:String(task&&task.id||''),position:String(task&&task.puesto||''),target,delivered,eventUnits,correctionUnits,netEventUnits});
+   }
+   for(const event of events.slice(-2)){
+    if(eventSamples.length<20)eventSamples.push({referenceId:String(task&&task.id||''),quantity:workLotNumber(event&&event.cantidad),physicalBaskets:workLotNumber(event&&event.canastasFisicas)});
+   }
+  }
+  return sendJson(res,200,{ok:true,soloLectura:true,model:'NKD',requestedCode:code,lot:{number:row.number,headerCode:String(row.codigoLoteOperacion||''),taskCodes:[...new Set(tasks.map(t=>String(t&&(t.codigoLoteOperacion||t.loteCodigo||t.codigoLote)||'').trim().toUpperCase()).filter(Boolean))],references:tasks.length},totals,mismatches,eventSamples});
+ }catch(e){console.error('Error en diagnóstico de solo lectura NKD KK711:',e);return sendJson(res,500,{ok:false,error:'No se pudo consultar el diagnóstico del lote.'});}
+}
+
 if(p==='/api/work-lots'&&['GET','POST','PUT'].includes(req.method)){
  const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token);
  if(!authorized(req)||!session)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
