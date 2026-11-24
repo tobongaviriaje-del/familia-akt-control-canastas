@@ -329,7 +329,7 @@ function resumenEntregaPatinador(tasks,user,username){
   const objetivo=Math.max(0,Number(unidadesObjetivoEstandar(x))||0);
   total+=objetivo;
   const eventos=eventosEntregaTarea(x);
-  const propias=eventos.filter(e=>nombres.has(identidad(e&&e.patinador))).reduce((n,e)=>n+Math.max(0,Number(e&&e.cantidad)||0),0);
+  const propias=eventos.filter(e=>{const responsable=e&&(e.patinador||e.username||e.usuario||e.nombrePatinador||e.nombre);return nombres.has(identidad(responsable));}).reduce((n,e)=>n+Math.max(0,Number(e&&e.cantidad)||0),0);
   // Las correcciones permanecen en el historial. El avance atribuido usa eventos
   // positivos del patinador y nunca resta correctionUnits del acumulado entregado.
   delivered+=Math.min(objetivo,propias);
