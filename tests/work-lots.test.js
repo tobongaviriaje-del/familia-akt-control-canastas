@@ -73,7 +73,8 @@ test('el endpoint de avance entrega solo el lote vigente por modelo y no altera 
  },tasks:[
   {id:'nkd-active-1',standardNKD:true,standardMoto:'NKD',puesto:'PRE 1',cantidad:100,entregado:20},
   {id:'nkd-active-2',standardNKD:true,standardMoto:'NKD',puesto:'PRE 2',cantidad:100,entregado:0},
-  {id:'chr-active-1',standardNKD:true,standardMoto:'CHR',puesto:'PRE 3',cantidad:80,entregado:10}
+  {id:'chr-active-1',standardNKD:true,standardMoto:'CHR',puesto:'PRE 3',cantidad:80,entregado:10},
+  {id:'cr4-active-1',standardNKD:true,standardMoto:'CR4 125',codigoLoteOperacion:'CR4-TODAY',puesto:'PRE 4',cantidad:100,entregado:25}
  ]};
  const workLots=[
   {id:'nkd-old',model:'NKD',number:11,codigoLoteOperacion:'NKD-OLD',tasks:[{id:'nkd-historic-1',cantidad:500}]},
@@ -97,9 +98,10 @@ test('el endpoint de avance entrega solo el lote vigente por modelo y no altera 
  for(const token of tokens){
   const response=await request(baseUrl,'/api/admin/work-lots/progress',{token});
   assert.equal(response.status,200,JSON.stringify(response.data));
-  assert.deepEqual(response.data.lots.map(x=>x.id).sort(),['chr-current','nkd-current']);
+  assert.deepEqual(response.data.lots.map(x=>x.id).sort(),['active-CR4 125','chr-current','nkd-current']);
   assert.equal(response.data.lots.find(x=>x.model==='NKD').tasks.length,2);
   assert.equal(response.data.lots.find(x=>x.model==='CHR').tasks[0].id,'chr-active-1');
+  const cr4=response.data.lots.find(x=>x.model==='CR4 125');assert.equal(cr4.codigoLoteOperacion,'CR4-TODAY');assert.equal(cr4.tasks.length,1);assert.equal(cr4.tasks[0].entregado,25);
  }
  assert.equal(fs.readFileSync(path.join(dataDir,'state.json'),'utf8'),before,'el endpoint GET no debe borrar ni cambiar usuarios o datos después de iniciar sesión');
 });
