@@ -10,8 +10,7 @@ const server = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
 
 function loadProgressHelpers() {
   const start = html.indexOf('function tareasAsignadasAUsuarioEstandar(');
-  const end = html.indexOf('
-function guardarCodigoOperacionCompartido()', start);
+  const end = html.indexOf('\nfunction guardarCodigoOperacionCompartido()', start);
   assert.notEqual(start, -1);
   assert.ok(end > start);
   const source = html.slice(start, end);
@@ -23,8 +22,7 @@ function guardarCodigoOperacionCompartido()', start);
     unidadesObjetivoEstandar: task => task.objetivo ?? task.cantidad ?? 0,
     normalizarPuestoEstandar: value => String(value || '').trim(),
   };
-  vm.runInNewContext(source + '
-globalThis.__combine = combinarTareasProgreso; globalThis.__summary = resumenEntregaPatinador; globalThis.__lots = tareasLotesParaProgreso; globalThis.tareasAsignadasAUsuarioEstandar = tareasAsignadasAUsuarioEstandar; globalThis.__operationKey = claveOperacionProgreso;', context);
+  vm.runInNewContext(source + '\nglobalThis.__combine = combinarTareasProgreso; globalThis.__summary = resumenEntregaPatinador; globalThis.__lots = tareasLotesParaProgreso; globalThis.tareasAsignadasAUsuarioEstandar = tareasAsignadasAUsuarioEstandar; globalThis.__operationKey = claveOperacionProgreso;', context);
   return context;
 }
 
