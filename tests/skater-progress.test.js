@@ -66,6 +66,16 @@ test('combina copias de una referencia sin duplicar el objetivo y conserva event
   assert.equal(beto.delivered, 250);
 });
 
+test('incluye modelos y lotes servidos por el backend y no mezcla operaciones con el mismo EAN', () => {
+  const context = loadProgressHelpers();
+  const nkd = { standardNKD: true, standardMoto: 'NKD', puesto: 'PRE 1', ean: '123', objetivo: 600, codigoLoteOperacion: 'KK711' };
+  const cr4 = { ...nkd, standardMoto: 'CR4 150', codigoLoteOperacion: 'CR4-150-02' };
+  const otherLot = { ...nkd, codigoLoteOperacion: 'KK712' };
+  const merged = context.__combine([nkd, cr4, otherLot]);
+  assert.equal(merged.length, 3);
+  assert.deepEqual(Array.from(merged, x => x.standardMoto), ['NKD', 'CR4 150', 'NKD']);
+});
+
 test('la vista de Admin/Supervisor incluye todos los lotes y muestra error si la consulta real falla', () => {
   assert.match(html, /skaterWorkLotProgress\.flatMap/);
   assert.match(html, /No se mostrarán totales incompletos/);
