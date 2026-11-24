@@ -26,6 +26,7 @@ test('Patinadores solo reciben lotes trabajados hoy, el seleccionado y el siguie
  const temp=fs.mkdtempSync(path.join(os.tmpdir(),'akt-work-lot-visibility-'));
  const dataDir=path.join(temp,'data');fs.mkdirSync(dataDir,{recursive:true});fs.mkdirSync(path.join(temp,'public'));
  fs.copyFileSync(path.join(repoRoot,'server.js'),path.join(temp,'server.js'));
+ fs.copyFileSync(path.join(repoRoot,'public/icon.svg'),path.join(temp,'public/icon.svg'));
  const now=new Date().toISOString(),old='2024-01-15T12:00:00-05:00';
  const state={users:{patinador1:{pass:'Patinador123',role:'Patinador',name:'Patinador Uno',puestos:['PRE 1']}},tasks:[{id:'active',standardNKD:true,standardMoto:'CHR',puesto:'PRE 1',cantidad:80,entregado:12}]};
  const lots=[
