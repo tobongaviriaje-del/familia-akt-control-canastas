@@ -159,6 +159,6 @@ test('CHR entra en el comparativo individual y conserva sus entregas por patinad
 
 test('la vista de Supervisor solo muestra patinador, modelo, lote y porcentaje de entrega', () => {
   assert.match(html, /const isSupervisor=current\.role==='Supervisor'/);
-  assert.match(html, /isSupervisor\?'':'<th>Refs\.<\\/th><th>Entregadas<\\/th><th>Pendientes<\\/th>'/);
+  assert.ok(html.includes("isSupervisor?'':'<th>Refs.</th><th>Entregadas</th><th>Pendientes</th>'"));
   assert.match(html, /!isSupervisor&&selected\?/);
 });
