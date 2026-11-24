@@ -307,6 +307,22 @@ if(p==='/api/estibas-recibidas'&&req.method==='POST'){
  });
  return;
 }
+if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
+ const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token);
+ if(!authorized(req)||!session)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
+ const state=readState(),viewer=state.users&&state.users[session.username],allowed=['Admin','Supervisor','Coordinador'];
+ if(!viewer||!allowed.includes(viewer.role))return sendJson(res,403,{ok:false,error:'No tienes permiso para consultar el avance de los patinadores.'});
+ try{
+  const lots=readWorkLots().map(row=>{
+   const tasks=Array.isArray(row.tasks)?row.tasks:[];
+   const taskCodes=[...new Set(tasks.map(t=>String(t&&(t.codigoLoteOperacion||t.loteCodigo||t.codigoLote)||'').trim().toUpperCase()).filter(Boolean))];
+   const code=String(row.codigoLoteOperacion||'').trim().toUpperCase()||(taskCodes.length===1?taskCodes[0]:'');
+   return {id:String(row.id||''),model:workLotModel(row.model),number:workLotNumber(row.number),codigoLoteOperacion:code,createdAt:row.createdAt||null,updatedAt:row.updatedAt||null,tasks};
+  }).sort((a,b)=>a.model.localeCompare(b.model,'es')||a.number-b.number);
+  return sendJson(res,200,{ok:true,soloLectura:true,source:'work-lots',lots});
+ }catch(e){console.error('Error consultando avance de patinadores:',e);return sendJson(res,503,{ok:false,error:'No se pudieron leer los lotes de trabajo. No se modificó ningún dato.'});}
+}
+
 if(p==='/api/work-lots/overview'&&req.method==='GET'){
  const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token);
  if(!authorized(req)||!session)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
