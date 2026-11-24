@@ -129,6 +129,14 @@ function start(){
   const wrapped=function(){const value=original.apply(this,arguments);try{mount();sync();}catch(error){console.warn('AKT INTELIGENTE:',error);}return value;};
   wrapped.__aktAssistantWrapped=true;render=wrapped;
  }
+ // Refuerza el montaje al terminar el inicio de sesión: evita depender
+ // exclusivamente de que el primer render ocurra después de cargar este módulo.
+ if(typeof login==='function'&&!login.__aktAssistantWrapped){
+  const originalLogin=login;
+  const wrappedLogin=async function(){const value=await originalLogin.apply(this,arguments);try{mount();sync();}catch(error){console.warn('AKT INTELIGENTE login:',error);}return value;};
+  wrappedLogin.__aktAssistantWrapped=true;login=wrappedLogin;
+ }
+ window.addEventListener('pageshow',()=>{try{mount();sync();}catch(error){console.warn('AKT INTELIGENTE pageshow:',error);}});
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(start,0));else setTimeout(start,0);
 })();
