@@ -260,17 +260,38 @@ function tareasAsignadasAUsuarioEstandar(task,user,username){
  const puestos=Array.isArray(user.puestos)?user.puestos.map(p=>clean(normalizarPuestoEstandar(p))):[];
  return puestos.includes(clean(normalizarPuestoEstandar(task.puesto)));
 }
+function combinarTareasProgreso(tasks){
+ const clean=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
+ const eventKey=e=>String(e&&e.id||'')||JSON.stringify([e&&e.patinador,e&&e.cantidad,e&&e.fechaHora,e&&e.metodo,e&&e.numeroOperacion,e&&e.observaciones,e&&e.canastasFisicas,e&&e.turno]);
+ const groups=new Map();
+ (Array.isArray(tasks)?tasks:[]).filter(x=>x&&(x.standardNKD||esContinuidadXRS180(x))).forEach(x=>{
+  const modelo=normalizarModeloContinuidad(modeloDeTareaEstandar(x)||'NKD');
+  const codigo=String(x.codigoLoteOperacion||'').trim().toUpperCase();
+  const ean=String(x.ean||'').replace(/\s+/g,'').toUpperCase();
+  const puesto=clean(normalizarPuestoEstandar(x.puesto));
+  const referencia=(!ean||ean==='0')?(String(x.numeroReferencia||'').trim()||clean(x.producto)||String(x.id||'')):ean;
+  const key=[modelo,codigo,referencia,puesto].join('|');
+  let group=groups.get(key);
+  if(!group){group={task:{...x},events:new Map()};groups.set(key,group);}
+  else if(Math.max(0,Number(x.entregado)||0)>Math.max(0,Number(group.task.entregado)||0)||Math.max(0,Number(unidadesObjetivoEstandar(x))||0)>Math.max(0,Number(unidadesObjetivoEstandar(group.task))||0)){group.task={...x};}
+  const events=Array.isArray(x.entregas)?x.entregas:(x.entrega?[x.entrega]:[]);
+  events.forEach(e=>{if(e&&typeof e==='object')group.events.set(eventKey(e),e);});
+ });
+ return [...groups.values()].map(group=>({...group.task,entregas:[...group.events.values()]}));
+}
 function resumenEntregaPatinador(tasks,user,username){
  const assigned=tasks.filter(x=>(x.standardNKD||esContinuidadXRS180(x))&&tareasAsignadasAUsuarioEstandar(x,user,username));
- const identidad=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/\s+/g,' ');
+ const identidad=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
  const nombres=new Set([identidad(username),identidad(user&&user.name),identidad(user&&user.nombre)].filter(Boolean));
  let total=0,delivered=0;
  assigned.forEach(x=>{
   const objetivo=Math.max(0,Number(unidadesObjetivoEstandar(x))||0);
   total+=objetivo;
-  const propias=(Array.isArray(x.entregas)?x.entregas:[]).filter(e=>nombres.has(identidad(e&&e.patinador))).reduce((n,e)=>n+Math.max(0,Number(e&&e.cantidad)||0),0);
-  const correcciones=(Array.isArray(x.correcciones)?x.correcciones:[]).filter(c=>nombres.has(identidad(c&&c.usuario))).reduce((n,c)=>n+Math.max(0,Number(c&&c.unidades)||0),0);
-  delivered+=Math.min(objetivo,Math.max(0,propias-correcciones));
+  const eventos=Array.isArray(x.entregas)?x.entregas:(x.entrega?[x.entrega]:[]);
+  const propias=eventos.filter(e=>nombres.has(identidad(e&&e.patinador))).reduce((n,e)=>n+Math.max(0,Number(e&&e.cantidad)||0),0);
+  // Las correcciones permanecen en el historial. El avance atribuido usa eventos
+  // positivos del patinador y nunca resta correctionUnits del acumulado entregado.
+  delivered+=Math.min(objetivo,propias);
  });
  return {assigned:assigned.length,total,delivered,pct:total?Math.min(100,delivered/total*100):0};
 }
@@ -289,6 +310,20 @@ function guardarCodigoOperacionCompartido(){
 }
 let selectedTrackingOperation='';
 let selectedSupervisorSkater='';
+let skaterWorkLotProgress=null,skaterWorkLotProgressLoading=false,skaterWorkLotProgressError='';
+async function cargarDatosProgresoPatinadores(forzar=false){
+ if(skaterWorkLotProgressLoading||(!forzar&&skaterWorkLotProgress!==null))return;
+ skaterWorkLotProgressLoading=true;skaterWorkLotProgressError='';
+ try{
+  const token=sessionStorage.getItem('cc_session_token');
+  const response=await fetch('/api/admin/work-lots/progress',{cache:'no-store',headers:token?{Authorization:'Bearer '+token}:{}});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok||!data.ok)throw new Error(data.error||'No se pudieron leer los lotes reales de los patinadores.');
+  if(!Array.isArray(data.lots))throw new Error('El servidor respondió sin la lista de lotes. No se mostrarán totales incompletos.');
+  skaterWorkLotProgress=data.lots;
+ }catch(error){skaterWorkLotProgressError=error.message||'No se pudieron consultar los lotes de trabajo.';}
+ finally{skaterWorkLotProgressLoading=false;renderProgresoPatinadores();}
+}
 function seleccionarPatinadorSupervisor(username){selectedSupervisorSkater=String(username||'');renderProgresoPatinadores();}
 let ccAlertAudio=null,ccAlertAudioEnabled=localStorage.getItem('cc_alertas_lote_audio')==='1';
 async function activarAvisosLote(){try{const AC=window.AudioContext||window.webkitAudioContext;if(AC){ccAlertAudio=ccAlertAudio||new AC();if(ccAlertAudio.state==='suspended')await ccAlertAudio.resume();}ccAlertAudioEnabled=true;localStorage.setItem('cc_alertas_lote_audio','1');if(navigator.vibrate)navigator.vibrate([120,70,120]);reproducirAvisoLote();renderProgresoPatinadores();}catch(e){alert('El navegador no permitió activar el sonido. Revisa los permisos del dispositivo.');}}
@@ -298,7 +333,7 @@ function cambiarOperacionSeguimiento(value){selectedTrackingOperation=String(val
 function renderProgresoPatinadores(){
  const panel=$('patinadorProgressPanel'),box=$('patinadorProgressAdmin');
  if(!panel||!box||!current)return;
- const tasks=tareasSinDuplicadosEstandar(getTasks()),progress=$('standardProgress');
+ const localTasks=getTasks(),tasks=tareasSinDuplicadosEstandar(localTasks),progress=$('standardProgress');
  const esc=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
  const pct=v=>Math.max(0,Math.min(100,Number(v)||0));
  const fmt=v=>Number(v||0).toLocaleString('es-CO',{maximumFractionDigits:1});
@@ -342,6 +377,25 @@ function renderProgresoPatinadores(){
  const isCoordinator=current.role==='Coordinador'||String(current.role||'').toLowerCase()==='coordinador';
  if(!['Admin','Supervisor'].includes(current.role)&&!isCoordinator){panel.classList.add('hidden');return;}
  panel.classList.remove('hidden');if(progress)progress.innerHTML='Consulta de avance por lote u operación. Esta vista no modifica entregas ni estándares.';
+ if(skaterWorkLotProgress===null){
+  box.innerHTML=skaterWorkLotProgressLoading?'<p class="notice">Consultando los lotes de trabajo y sus entregas directamente en el servidor…</p>':
+   (skaterWorkLotProgressError?'<p class="error">No se pudieron cargar los datos reales: '+esc(skaterWorkLotProgressError)+'</p><button type="button" class="secondary" onclick="cargarDatosProgresoPatinadores(true)">Reintentar consulta</button>':'<p class="notice">Cargando entregas registradas en los lotes de trabajo…</p>');
+  if(!skaterWorkLotProgressLoading&&!skaterWorkLotProgressError)cargarDatosProgresoPatinadores();
+  return;
+ }
+ const lotTasks=skaterWorkLotProgress.flatMap(lot=>{
+  const code=String(lot.codigoLoteOperacion||'').trim().toUpperCase()||('LOTE-'+String(lot.number||lot.id||''));
+  return (Array.isArray(lot.tasks)?lot.tasks:[]).map(task=>({...task,standardMoto:task.standardMoto||lot.model,codigoLoteOperacion:task.codigoLoteOperacion||code}));
+ });
+ const baseKey=task=>[normalizarModeloContinuidad(modeloDeTareaEstandar(task)||'NKD'),String(task.ean||'').replace(/\s+/g,'').toUpperCase()||String(task.numeroReferencia||task.producto||task.id||''),String(normalizarPuestoEstandar(task.puesto)||'').trim().toLowerCase()].join('|');
+ const operationKey=task=>baseKey(task)+'|'+String(task.codigoLoteOperacion||'').trim().toUpperCase();
+ const workLotReferences=new Set(lotTasks.map(baseKey)),workLotOperations=new Set(lotTasks.map(operationKey));
+ const legacyTasks=localTasks.filter(task=>{
+  if(!(task.standardNKD||esContinuidadXRS180(task)))return false;
+  const code=String(task.codigoLoteOperacion||'').trim().toUpperCase();
+  return code?!workLotOperations.has(operationKey(task)):!workLotReferences.has(baseKey(task));
+ });
+ const reportTasks=combinarTareasProgreso([...legacyTasks,...lotTasks]);
  const skaters=Object.entries(users||{}).filter(([key,u])=>u&&u.role==='Patinador');
  if(!skaters.some(([key])=>key===selectedSupervisorSkater))selectedSupervisorSkater=skaters[0]?.[0]||'';
  const activeMap=new Map();
@@ -351,7 +405,7 @@ function renderProgresoPatinadores(){
  };
  // No filtrar por fecha de creación: los estándares pueden haberse cargado antes
  // de iniciar la jornada. El lote activo se determina por las unidades pendientes.
- tasks.filter(x=>(x.standardNKD||esContinuidadXRS180(x))).forEach(x=>{
+ reportTasks.filter(x=>(x.standardNKD||esContinuidadXRS180(x))).forEach(x=>{
   const modelo=modeloDeTareaEstandar(x),codigo=String(x.codigoLoteOperacion||'').trim(),key=modelo+'|||'+codigo;
   if(!activeMap.has(key))activeMap.set(key,{modelo,codigo,tasks:[],latestAt:0,total:0,delivered:0,pending:0});
   const op=activeMap.get(key),objetivo=Math.max(0,Number(unidadesObjetivoEstandar(x))||0),entregado=Math.min(objetivo,Math.max(0,Number(x.entregado)||0));
@@ -381,7 +435,7 @@ function renderProgresoPatinadores(){
   });
   if(!found)comparisonRows.push('<tr><td>'+esc(name)+'</td><td colspan="6" class="muted">Sin tareas estándar asignadas</td></tr>');
  });
- const comparisonTable='<h4>📊 Avance de entregas de todos los patinadores</h4><p class="muted">Comparativo de todos los modelos y lotes disponibles. Cada cifra usa las entregas registradas a nombre del patinador y descuenta sus correcciones, sin duplicar referencias estándar.</p><div style="overflow-x:auto"><table class="scroll" style="width:100%;min-width:760px"><thead><tr><th>Patinador</th><th>Modelo</th><th>Lote</th><th>Refs.</th><th>Entregadas</th><th>Pendientes</th><th>Avance</th></tr></thead><tbody>'+(comparisonRows.join('')||'<tr><td colspan="7" class="muted">No hay patinadores registrados.</td></tr>')+'</tbody></table></div>';
+ const comparisonTable='<div class="topbar"><h4>📊 Avance de entregas de todos los patinadores</h4><button type="button" class="small secondary" onclick="cargarDatosProgresoPatinadores(true)">↻ Actualizar datos</button></div><p class="muted">Datos leídos de los lotes de trabajo guardados en el servidor. Las correcciones se conservan en el historial y no se restan automáticamente de los eventos de entrega.</p><div style="overflow-x:auto"><table class="scroll" style="width:100%;min-width:760px"><thead><tr><th>Patinador</th><th>Modelo</th><th>Lote</th><th>Refs.</th><th>Entregadas</th><th>Pendientes</th><th>Avance</th></tr></thead><tbody>'+(comparisonRows.join('')||'<tr><td colspan="7" class="muted">No hay patinadores registrados.</td></tr>')+'</tbody></table></div>';
  box.innerHTML='<h4>📦 Seguimiento por patinador</h4><p class="muted">Consulta el avance individual y compara todos los patinadores, sin limitarse al lote actual.</p><div style="display:flex;flex-wrap:wrap;gap:4px">'+(buttons||'<p class="muted">No hay patinadores registrados.</p>')+'</div>'+comparisonTable+(selected?'<h4>Detalle de: '+esc(selected[1].name||selected[1].nombre||selected[0])+'</h4>'+progressCard('Lote actual',active,selected[1],selected[0],false)+progressCard('Lote siguiente',next,selected[1],selected[0],true):'');
 }
 async function retirarLoteCompletado(){
