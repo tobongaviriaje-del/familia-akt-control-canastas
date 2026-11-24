@@ -1749,14 +1749,25 @@ function pintarLoteRegistradoContinuidad(data,modelo){
  const host=$('continuidadWorkLotInfo');if(!host)return;
  const esc=v=>String(v??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
  const status=$('continuidadEstadoLote');
- if(data&&data.notFound){host.innerHTML='<b>Lotes del sistema nuevo:</b> No se encontró un lote registrado para '+esc(modelo)+'.';return;}
- if(data&&data.error){host.innerHTML='<b>Lotes del sistema nuevo:</b> No fue posible consultar ('+esc(data.error)+').';return;}
+ if(data&&data.notFound){
+  if(status&&modelo==='NKD')status.innerHTML='<b>Estado NKD:</b> el servidor no encontró un lote de trabajo registrado.';
+  host.innerHTML='<b>Lotes del sistema nuevo:</b> No se encontró un lote registrado para '+esc(modelo)+'.';return;
+ }
+ if(data&&data.error){
+  if(status&&modelo==='NKD')status.innerHTML='<b>Estado NKD no verificado:</b> '+esc(data.error);
+  host.innerHTML='<b>Lotes del sistema nuevo:</b> No fue posible consultar ('+esc(data.error)+').';return;
+ }
  const lot=data&&data.lot,tasks=Array.isArray(data&&data.tasks)?data.tasks:[];
- if(!lot){host.textContent='No hay información de lotes del sistema nuevo.';return;}
- const code=String(lot.codigoLoteOperacion||'').trim();
+ if(!lot){
+  if(status&&modelo==='NKD')status.innerHTML='<b>Estado NKD no verificado:</b> la consulta no devolvió un lote.';
+  host.textContent='No hay información de lotes del sistema nuevo.';return;
+ }
+ const taskCodes=[...new Set(tasks.map(t=>String(t&&(t.codigoLoteOperacion||t.loteCodigo||t.codigoLote)||'').trim().toUpperCase()).filter(Boolean))];
+ const code=String(lot.codigoLoteOperacion||((modelo==='NKD'&&taskCodes.length===1)?taskCodes[0]:'')).trim();
  const total=tasks.reduce((n,t)=>n+Math.max(0,unidadesObjetivoEstandar(t)),0);
  const entregado=tasks.reduce((n,t)=>n+Math.min(Math.max(0,Number(t.entregado)||0),Math.max(0,unidadesObjetivoEstandar(t))),0);
  const restante=Math.max(0,total-entregado),pct=total?Math.min(100,Math.round(entregado/total*100)):0;
+ if(status&&modelo==='NKD'&&!code&&taskCodes.length>1)status.innerHTML='<b>Lote NKD encontrado, pero hay varios códigos de operación:</b> '+taskCodes.map(esc).join(', ');
  if(status&&code){
   status.innerHTML='<b>Lote de trabajo encontrado:</b> OPR '+esc(code)+(total?' · '+pct+'% entregado ('+entregado+' / '+total+') · '+restante+' pendientes':' · '+tasks.length+' referencias');
  }
