@@ -63,6 +63,16 @@ if(!Array.isArray(s.freeDeliveries))s.freeDeliveries=[];
 return s;
 }catch(e){console.error('No se pudo leer el estado persistente; se bloquea la operación para proteger los datos:',e.message);throw new Error('No se pudo leer el estado persistente. No se aplicaron cambios.');}
 }
+function readStateSnapshot(){
+ try{
+  if(!fs.existsSync(STATE_FILE))throw new Error('No existe el estado persistente.');
+  const s=JSON.parse(fs.readFileSync(STATE_FILE,'utf8'));
+  if(!s.users||typeof s.users!=='object'||Array.isArray(s.users))s.users={};
+  if(!Array.isArray(s.tasks))s.tasks=[];
+  return s;
+ }catch(e){console.error('No se pudo leer el estado en modo consulta:',e.message);throw new Error('No se pudo consultar el estado persistente.');}
+}
+
 function writeState(s){ensureState();const tmp=STATE_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(s,null,2));fs.renameSync(tmp,STATE_FILE);}
 function archiveTasks(tasks,meta={}){fs.mkdirSync(HISTORY_DIR,{recursive:true});const stamp=new Date().toISOString().replace(/[:.]/g,'-');const file=path.join(HISTORY_DIR,'jornada-'+stamp+'.json');fs.writeFileSync(file,JSON.stringify({app:'Familia AKT Control de Canastas',fechaCierre:new Date().toISOString(),meta,tasks},null,2));return {file:path.basename(file),count:tasks.length};}
 const mime={'.html':'text/html; charset=utf-8','.js':'application/javascript; charset=utf-8','.json':'application/json; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.jpg':'image/jpeg'};
@@ -369,10 +379,28 @@ if(p==='/api/estibas-recibidas'&&req.method==='POST'){
 if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
  const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token);
  if(!authorized(req)||!session)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
- const state=readState(),viewer=state.users&&state.users[session.username],allowed=['Admin','Supervisor','Coordinador'];
+ const state=readStateSnapshot(),viewer=state.users&&state.users[session.username],allowed=['Admin','Supervisor','Coordinador'];
  if(!viewer||!allowed.includes(viewer.role))return sendJson(res,403,{ok:false,error:'No tienes permiso para consultar el avance de los patinadores.'});
  try{
-  const lots=readWorkLots().map(row=>{
+  const activeIdsByModel=new Map();
+  const standardModels=new Set(['NKD','CR4 150','CR4 125','XRS-180','CHR']);
+  for(const task of state.tasks){
+   const model=workLotModel(task&&(task.standardMoto||task.modeloMoto||task.modeloEstandar||task.modelo||(task.standardNKD?'NKD':'')));
+   if(!standardModels.has(model)||!task||task.id==null)continue;
+   if(!activeIdsByModel.has(model))activeIdsByModel.set(model,new Set());
+   activeIdsByModel.get(model).add(String(task.id));
+  }
+  const activeByModel=new Map();
+  for(const candidate of readWorkLots()){
+   const model=workLotModel(candidate&&candidate.model),activeIds=activeIdsByModel.get(model);
+   if(!activeIds||!activeIds.size)continue;
+   const tasks=Array.isArray(candidate&&candidate.tasks)?candidate.tasks:[];
+   const matches=tasks.reduce((count,task)=>count+(task&&task.id!=null&&activeIds.has(String(task.id))?1:0),0);
+   if(!matches)continue;
+   const previous=activeByModel.get(model);
+   if(!previous||matches>previous.matches||(matches===previous.matches&&workLotNumber(candidate.number)>workLotNumber(previous.row.number)))activeByModel.set(model,{row:candidate,matches});
+  }
+  const lots=[...activeByModel.values()].map(({row})=>{
    const tasks=Array.isArray(row.tasks)?row.tasks:[];
    const taskCodes=[...new Set(tasks.map(t=>String(t&&(t.codigoLoteOperacion||t.loteCodigo||t.codigoLote)||'').trim().toUpperCase()).filter(Boolean))];
    const code=String(row.codigoLoteOperacion||'').trim().toUpperCase()||(taskCodes.length===1?taskCodes[0]:'');
