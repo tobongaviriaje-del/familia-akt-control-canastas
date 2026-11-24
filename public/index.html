@@ -254,11 +254,14 @@ function guardarNumeroOperacion(){
 }
 function tareasAsignadasAUsuarioEstandar(task,user,username){
  if(!task||(!task.standardNKD&&!esContinuidadXRS180(task))||!user||user.role!=='Patinador')return false;
- // Para continuidad día/noche, compartir el mismo saldo entre patinadores habilitados
- // en el puesto, sin crear una segunda copia de la tarea.
  const clean=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
+ // La asignación puede ser por puesto compartido o por responsable directo del estándar.
  const puestos=Array.isArray(user.puestos)?user.puestos.map(p=>clean(normalizarPuestoEstandar(p))):[];
- return puestos.includes(clean(normalizarPuestoEstandar(task.puesto)));
+ const asignadoPorPuesto=puestos.includes(clean(normalizarPuestoEstandar(task.puesto)));
+ const responsable=clean(task.patinadorEstandar);
+ const identidades=[username,user.name,user.nombre].map(clean).filter(Boolean);
+ const asignadoDirecto=!!responsable&&identidades.some(v=>v===responsable||v.startsWith(responsable+' ')||v.endsWith(' '+responsable));
+ return asignadoPorPuesto||asignadoDirecto;
 }
 function tareasLotesParaProgreso(lots){
  const modelosPermitidos=new Set(['NKD','CR4 125','CR4 150','XRS-180']);
@@ -267,7 +270,7 @@ function tareasLotesParaProgreso(lots){
   if(!modelosPermitidos.has(model))return [];
   const lotId=String(lot.id||lot.number||'sin-id');
   const code=String(lot.codigoLoteOperacion||'').trim().toUpperCase();
-  const label=code||('Sin código · lote '+String(lot.number||lotId));
+  const label=code?(code+' · lote '+String(lot.number||lotId)):('Sin código · lote '+String(lot.number||lotId));
   return (Array.isArray(lot.tasks)?lot.tasks:[]).map(task=>({
    ...task,
    // El comparativo trabaja con los estándares de estos cuatro modelos.
@@ -290,7 +293,7 @@ function combinarTareasProgreso(tasks){
   const ean=String(x.ean||'').replace(/\s+/g,'').toUpperCase();
   const puesto=clean(normalizarPuestoEstandar(x.puesto));
   const referencia=(!ean||ean==='0')?(String(x.numeroReferencia||'').trim()||clean(x.producto)||String(x.id||'')):ean;
-  const lotKey=!codigo&&x.__progressLotKey?'|'+String(x.__progressLotKey):'';
+  const lotKey=x.__progressLotKey?'|LOTE:'+String(x.__progressLotKey):'';
   const key=[modelo,codigo,referencia,puesto].join('|')+lotKey;
   let group=groups.get(key);
   if(!group){group={task:{...x},events:new Map()};groups.set(key,group);}
@@ -408,11 +411,12 @@ function renderProgresoPatinadores(){
  const baseKey=task=>[normalizarModeloContinuidad(modeloDeTareaEstandar(task)||'NKD'),String(task.ean||'').replace(/\s+/g,'').toUpperCase()||String(task.numeroReferencia||task.producto||task.id||''),String(normalizarPuestoEstandar(task.puesto)||'').trim().toLowerCase()].join('|');
  const operationKey=task=>baseKey(task)+'|'+String(task.codigoLoteOperacion||'').trim().toUpperCase();
  const workLotReferences=new Set(lotTasks.map(baseKey)),workLotOperations=new Set(lotTasks.map(operationKey));
- const legacyTasks=localTasks.filter(task=>{
-  if(!(task.standardNKD||esContinuidadXRS180(task)))return false;
-  const code=String(task.codigoLoteOperacion||'').trim().toUpperCase();
-  return code?!workLotOperations.has(operationKey(task)):!workLotReferences.has(baseKey(task));
- });
+ // Los lotes del servidor son la fuente vigente. El estado local es un espejo:
+ // si la referencia/puesto ya existe en cualquier lote real, no volver a sumar su copia local,
+ // aunque el código de operación antiguo no coincida.
+ const legacyTasks=localTasks.filter(task=>
+  (task.standardNKD||esContinuidadXRS180(task))&&!workLotReferences.has(baseKey(task))
+ );
  const reportTasks=combinarTareasProgreso([...legacyTasks,...lotTasks]);
  const skaters=Object.entries(users||{}).filter(([key,u])=>u&&u.role==='Patinador');
  if(!skaters.some(([key])=>key===selectedSupervisorSkater))selectedSupervisorSkater=skaters[0]?.[0]||'';
