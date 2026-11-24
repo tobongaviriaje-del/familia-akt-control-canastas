@@ -63,7 +63,7 @@ test('Inteligencia carga dinámicamente los lotes CHR y calcula su avance', () =
 });
 
 
-test('Inteligencia incorpora todos los lotes del servidor y conserva su identidad', () => {
+test('Inteligencia conserva solo el lote vigente más reciente de cada modelo', () => {
   const source = fs.readFileSync(path.join(__dirname, '../public/operaciones-inteligentes.js'), 'utf8');
   const bootstrap = source.indexOf("if(document.readyState==='loading')");
   const isolated = source.slice(0, bootstrap) + 'globalThis.__aktIntelTest = { groupsByOperation, flattenWorkLotProgress };})();';
@@ -73,17 +73,15 @@ test('Inteligencia incorpora todos los lotes del servidor y conserva su identida
     { id: 'nkd-711', model: 'NKD', number: 4, codigoLoteOperacion: 'KK711', tasks: [{ id: 'a', lote: 100, entregado: 80 }] },
     { id: 'nkd-next', model: 'NKD', number: 5, codigoLoteOperacion: '', tasks: [{ id: 'b', lote: 200, entregado: 0 }] }
   ] }, [
-    { id: 'a', standardMoto: 'NKD', codigoLoteOperacion: 'KK711' },
-    { id: 'b', standardMoto: 'NKD' }
+    { id: 'a', standardMoto: 'NKD', codigoLoteOperacion: 'KK711' }
   ]);
-  assert.equal(rows.get('NKD').length, 2);
+  assert.equal(rows.get('NKD').length, 1);
   assert.equal(rows.get('NKD')[0].codigoLoteOperacion, 'KK711');
   assert.equal(rows.get('NKD')[0].__progressLotKey, 'nkd-711');
-  assert.equal(rows.get('NKD')[1].codigoLoteOperacion, 'SIN CÓDIGO');
   const groups = context.__aktIntelTest.groupsByOperation(rows.get('NKD'));
-  assert.equal(groups.length, 2);
-  assert.equal(groups.find(group => group.code === 'KK711').done, 80);
-  assert.equal(groups.find(group => group.code === 'KK711').pending, 20);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].done, 80);
+  assert.equal(groups[0].pending, 20);
 });
 
 test('Inteligencia recupera el código del lote desde la tarea local con el mismo ID', () => {

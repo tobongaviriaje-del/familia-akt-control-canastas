@@ -285,7 +285,7 @@ function tareasLotesParaProgreso(lots){
 }
 function eventosEntregaTarea(task){
  const events=Array.isArray(task&&task.entregas)?task.entregas:[];
- const signature=e=>String(e&&e.id||'')||JSON.stringify([e&&e.patinador,e&&e.cantidad,e&&e.fechaHora,e&&e.metodo,e&&e.numeroOperacion,e&&e.observaciones,e&&e.canastasFisicas,e&&e.turno]);
+ const signature=e=>String(e&&e.id||'')||JSON.stringify([e&&(e.patinador||e.username||e.usuario||e.nombrePatinador||e.nombre),e&&e.cantidad,e&&e.fechaHora,e&&e.metodo,e&&e.numeroOperacion,e&&e.observaciones,e&&e.canastasFisicas,e&&e.turno]);
  const seen=new Set(),result=[];
  [...events,...(task&&task.entrega&&typeof task.entrega==='object'?[task.entrega]:[])].forEach(event=>{
   if(!event||typeof event!=='object')return;
@@ -295,7 +295,7 @@ function eventosEntregaTarea(task){
 }
 function combinarTareasProgreso(tasks){
  const clean=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
- const eventKey=e=>String(e&&e.id||'')||JSON.stringify([e&&e.patinador,e&&e.cantidad,e&&e.fechaHora,e&&e.metodo,e&&e.numeroOperacion,e&&e.observaciones,e&&e.canastasFisicas,e&&e.turno]);
+ const eventKey=e=>String(e&&e.id||'')||JSON.stringify([e&&(e.patinador||e.username||e.usuario||e.nombrePatinador||e.nombre),e&&e.cantidad,e&&e.fechaHora,e&&e.metodo,e&&e.numeroOperacion,e&&e.observaciones,e&&e.canastasFisicas,e&&e.turno]);
  const groups=new Map();
  (Array.isArray(tasks)?tasks:[]).filter(x=>x&&(x.standardNKD||esContinuidadXRS180(x))).forEach(x=>{
   const modelo=normalizarModeloContinuidad(modeloDeTareaEstandar(x)||'NKD');
@@ -323,13 +323,13 @@ function claveOperacionProgreso(task){
 function resumenEntregaPatinador(tasks,user,username){
  const assigned=tasks.filter(x=>(x.standardNKD||esContinuidadXRS180(x))&&tareasAsignadasAUsuarioEstandar(x,user,username));
  const identidad=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
- const nombres=new Set([identidad(username),identidad(user&&user.name),identidad(user&&user.nombre)].filter(Boolean));
+ const nombres=new Set([identidad(username),identidad(user&&user.username),identidad(user&&user.name),identidad(user&&user.nombre)].filter(Boolean));
  let total=0,delivered=0;
  assigned.forEach(x=>{
   const objetivo=Math.max(0,Number(unidadesObjetivoEstandar(x))||0);
   total+=objetivo;
   const eventos=eventosEntregaTarea(x);
-  const propias=eventos.filter(e=>nombres.has(identidad(e&&e.patinador))).reduce((n,e)=>n+Math.max(0,Number(e&&e.cantidad)||0),0);
+  const propias=eventos.filter(e=>{const responsable=e&&(e.patinador||e.username||e.usuario||e.nombrePatinador||e.nombre);return nombres.has(identidad(responsable));}).reduce((n,e)=>n+Math.max(0,Number(e&&e.cantidad)||0),0);
   // Las correcciones permanecen en el historial. El avance atribuido usa eventos
   // positivos del patinador y nunca resta correctionUnits del acumulado entregado.
   delivered+=Math.min(objetivo,propias);

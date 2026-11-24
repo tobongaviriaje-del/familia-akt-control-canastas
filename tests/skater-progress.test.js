@@ -43,6 +43,18 @@ test('cuenta la entrega histórica en entrega aunque entregas exista vacío', ()
   assert.equal(merged[0].entregas[0].id, 'legacy-1');
 });
 
+test('atribuye entregas históricas usando alias de identidad del patinador', () => {
+  const context = loadProgressHelpers();
+  const task = { standardNKD: true, puesto: 'PRE 26', objetivo: 600, entregas: [
+    { usuario: 'Ana', cantidad: 120 },
+    { username: 'ana', cantidad: 60 }
+  ] };
+  const ana = context.__summary([task], { role: 'Patinador', name: 'Ana', username: 'ana', puestos: ['PRE 26'] }, 'ana');
+  assert.equal(ana.total, 600);
+  assert.equal(ana.delivered, 180);
+  assert.equal(ana.pct, 30);
+});
+
 test('no duplica un movimiento que aparece en entregas y también en entrega', () => {
   const context = loadProgressHelpers();
   const movement = { id: 'same-event', patinador: 'Ana', cantidad: 180, fechaHora: '20/11/2026 09:00' };
@@ -54,6 +66,19 @@ test('no duplica un movimiento que aparece en entregas y también en entrega', (
   assert.equal(merged[0].entregas.length, 1);
   const ana = context.__summary(merged, { role: 'Patinador', name: 'Ana', puestos: ['PRE 26'] }, 'ana');
   assert.equal(ana.delivered, 180);
+});
+
+test('deduplica el mismo movimiento cuando los registros usan alias distintos', () => {
+  const context = loadProgressHelpers();
+  const merged = context.__combine([{
+    standardNKD: true, puesto: 'PRE 26', objetivo: 600,
+    entregas: [{ patinador: 'Ana', cantidad: 120, fechaHora: '20/11/2026 09:00' }],
+    entrega: { usuario: 'Ana', cantidad: 120, fechaHora: '20/11/2026 09:00' }
+  }]);
+  assert.equal(merged[0].entregas.length, 1);
+  const ana = context.__summary(merged, { role: 'Patinador', name: 'Ana', puestos: ['PRE 26'] }, 'ana');
+  assert.equal(ana.delivered, 120);
+  assert.equal(ana.pct, 20);
 });
 
 test('el comparativo consulta los lotes reales del servidor y no depende solo de /api/state', () => {
