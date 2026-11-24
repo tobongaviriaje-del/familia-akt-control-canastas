@@ -264,7 +264,7 @@ function tareasAsignadasAUsuarioEstandar(task,user,username){
  return asignadoPorPuesto||asignadoDirecto;
 }
 function tareasLotesParaProgreso(lots){
- const modelosPermitidos=new Set(['NKD','CR4 125','CR4 150','XRS-180']);
+ const modelosPermitidos=new Set(['NKD','CR4 125','CR4 150','XRS-180','CHR']);
  return (Array.isArray(lots)?lots:[]).flatMap(lot=>{
   const model=normalizarModeloContinuidad(lot&&lot.model);
   if(!modelosPermitidos.has(model))return [];
@@ -273,8 +273,8 @@ function tareasLotesParaProgreso(lots){
   const label=code?(code+' · lote '+String(lot.number||lotId)):('Sin código · lote '+String(lot.number||lotId));
   return (Array.isArray(lot.tasks)?lot.tasks:[]).map(task=>({
    ...task,
-   // El comparativo trabaja con los estándares de estos cuatro modelos.
-   // Las tareas de /api/work-lots no llevan la marca standardNKD del estado antiguo.
+   // La marca standardNKD identifica referencias de estándar de cualquier modelo, incluido CHR.
+   // Las tareas de /api/work-lots no llevan esa marca del estado antiguo.
    standardNKD:true,
    standardMoto:model,
    codigoLoteOperacion:String(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote||code||'').trim().toUpperCase(),
