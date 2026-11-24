@@ -38,7 +38,9 @@ function modelFilter(query){
 function buildAnswer(query,data){
  const who=currentUser(),role=who&&who.role,q=norm(query),model=modelFilter(query);
  const codeMatch=String(query||'').toUpperCase().match(/\b[A-Z]{1,5}\s*[-]?\s*\d{2,}\b/);
- const lotCode=codeMatch?codeMatch[0].replace(/\s+/g,'').replace('-',''):'';
+ const rawCode=codeMatch?codeMatch[0]:'';
+ const isModelCode=/^(?:CR4\s*[- ]?\s*12[5]|CR4\s*[- ]?\s*15[0]|XRS\s*[- ]?\s*180)$/i.test(rawCode);
+ const lotCode=codeMatch&&!isModelCode?rawCode.replace(/\s+/g,'').replace('-',''):'';
  let lots=(Array.isArray(data.lots)?data.lots:[]).filter(x=>(!model||x.model===model)&&(!lotCode||norm(x.lot).replace(/[\s-]/g,'').includes(norm(lotCode))));
  let skaters=(Array.isArray(data.skaters)?data.skaters:[]).filter(x=>(!model||x.model===model)&&(!lotCode||norm(x.lot).replace(/[\s-]/g,'').includes(norm(lotCode))));
  const low=q.includes('atras')||q.includes('mas bajo')||q.includes('menor')||q.includes('peor');
