@@ -72,7 +72,10 @@ test('Inteligencia incorpora todos los lotes del servidor y conserva su identida
   const rows = context.__aktIntelTest.flattenWorkLotProgress({ lots: [
     { id: 'nkd-711', model: 'NKD', number: 4, codigoLoteOperacion: 'KK711', tasks: [{ id: 'a', lote: 100, entregado: 80 }] },
     { id: 'nkd-next', model: 'NKD', number: 5, codigoLoteOperacion: '', tasks: [{ id: 'b', lote: 200, entregado: 0 }] }
-  ] });
+  ] }, [
+    { id: 'a', standardMoto: 'NKD', codigoLoteOperacion: 'KK711' },
+    { id: 'b', standardMoto: 'NKD' }
+  ]);
   assert.equal(rows.get('NKD').length, 2);
   assert.equal(rows.get('NKD')[0].codigoLoteOperacion, 'KK711');
   assert.equal(rows.get('NKD')[0].__progressLotKey, 'nkd-711');
@@ -81,4 +84,27 @@ test('Inteligencia incorpora todos los lotes del servidor y conserva su identida
   assert.equal(groups.length, 2);
   assert.equal(groups.find(group => group.code === 'KK711').done, 80);
   assert.equal(groups.find(group => group.code === 'KK711').pending, 20);
+});
+
+test('Inteligencia recupera el código del lote desde la tarea local con el mismo ID', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../public/operaciones-inteligentes.js'), 'utf8');
+  const bootstrap = source.indexOf("if(document.readyState==='loading')");
+  const isolated = source.slice(0, bootstrap) + 'globalThis.__aktIntelTest = { groupsByOperation, flattenWorkLotProgress };})();';
+  const context = { document: {}, console };
+  vm.runInNewContext(isolated, context);
+  const rows = context.__aktIntelTest.flattenWorkLotProgress({ lots: [
+    { id: 'worklot-711', model: 'NKD', number: 711, tasks: [
+      { id: 'ref-1', lote: 100, entregado: 90 },
+      { id: 'ref-2', lote: 100, entregado: 0 }
+    ] }
+  ] }, [
+    { id: 'ref-1', standardMoto: 'NKD', codigoLoteOperacion: 'KK711' },
+    { id: 'ref-2', standardMoto: 'NKD', codigoLoteOperacion: 'KK711' }
+  ]);
+  const groups = context.__aktIntelTest.groupsByOperation(rows.get('NKD'));
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].code, 'KK711');
+  assert.equal(groups[0].done, 90);
+  assert.equal(groups[0].pending, 110);
+  assert.equal(groups[0].lotNumber, 711);
 });
