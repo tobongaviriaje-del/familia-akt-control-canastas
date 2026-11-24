@@ -106,10 +106,10 @@ async function ask(query){
  if(button){button.disabled=true;button.textContent='Consultando…';}
  addMessage('user',text);
  try{
-  const response=await fetch('/api/assistant/production-summary',{method:'GET',cache:'no-store',headers:{Authorization:'Bearer '+token}});
+  const response=await fetch('/api/assistant/production-summary?question='+encodeURIComponent(text),{method:'GET',cache:'no-store',headers:{Authorization:'Bearer '+token}});
   const data=await response.json().catch(()=>({}));
   if(!response.ok||!data.ok)throw new Error(data.error||'No se pudieron consultar los indicadores.');
-  addMessage('bot',buildAnswer(text,data));
+  addMessage('bot',data.answer||buildAnswer(text,data));
  }catch(error){addMessage('bot','No pude verificar los datos en este momento: '+(error.message||'error de consulta')+'. No voy a inventar una respuesta.');}
  finally{busy=false;if(button){button.disabled=false;button.textContent='Preguntar';}if(input)input.focus();}
 }
