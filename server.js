@@ -730,6 +730,96 @@ if(p.startsWith('/api/reference-photos/')&&req.method==='GET'){
  fs.readFile(path.join(dir,file),(err,data)=>{if(err)return sendJson(res,404,{ok:false,error:'Foto no encontrada.'});res.writeHead(200,{'Content-Type':'image/webp','Cache-Control':'private, max-age=86400'});res.end(data);});return;
 }
 
+if(p==='/api/assistant/production-summary'&&req.method==='GET'){
+ const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token);
+ if(!authorized(req)||!session)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
+ try{
+  const state=readStateSnapshot(),viewer=state.users&&state.users[session.username],role=viewer&&viewer.role;
+  if(!viewer)return sendJson(res,403,{ok:false,error:'La cuenta no tiene acceso al asistente de producción.'});
+  // El acceso compartido no identifica de forma segura a un patinador individual.
+  // No aceptar username enviado por el cliente para evitar suplantación entre perfiles.
+  if(session.username==='patinadores')return sendJson(res,403,{ok:false,error:'Para consultar tu avance personal debes ingresar con tu cuenta individual de Patinador.'});
+  const allowed=['Admin','Supervisor','Coordinador','Patinador'];
+  if(!allowed.includes(role))return sendJson(res,403,{ok:false,error:'Tu perfil no tiene permiso para consultar el asistente de producción.'});
+  const standardModels=new Set(['NKD','CR4 150','CR4 125','XRS-180','CHR']),activeIdsByModel=new Map();
+  for(const task of Array.isArray(state.tasks)?state.tasks:[]){
+   const model=workLotModel(task&&(task.standardMoto||task.modeloMoto||task.modeloEstandar||task.modelo||(task.standardNKD?'NKD':'')));
+   if(!task||task.id==null||!standardModels.has(model))continue;
+   if(!activeIdsByModel.has(model))activeIdsByModel.set(model,new Set());
+   activeIdsByModel.get(model).add(String(task.id));
+  }
+  const activeByModel=new Map();
+  for(const candidate of readWorkLots()){
+   const model=workLotModel(candidate&&candidate.model),activeIds=activeIdsByModel.get(model);
+   if(!activeIds||!activeIds.size)continue;
+   const tasks=Array.isArray(candidate&&candidate.tasks)?candidate.tasks:[];
+   const matches=tasks.reduce((count,task)=>count+(task&&task.id!=null&&activeIds.has(String(task.id))?1:0),0);
+   if(!matches)continue;
+   const previous=activeByModel.get(model);
+   if(!previous||matches>previous.matches||(matches===previous.matches&&workLotNumber(candidate.number)>workLotNumber(previous.row.number)))activeByModel.set(model,{row:candidate,matches});
+  }
+  const lots=[...activeByModel.values()].map(({row})=>{
+   const tasks=Array.isArray(row.tasks)?row.tasks:[];
+   const taskCodes=[...new Set(tasks.map(t=>String(t&&(t.codigoLoteOperacion||t.loteCodigo||t.codigoLote)||'').trim().toUpperCase()).filter(Boolean))];
+   const code=String(row.codigoLoteOperacion||'').trim().toUpperCase()||(taskCodes.length===1?taskCodes[0]:'');
+   return {id:String(row.id||''),model:workLotModel(row.model),number:workLotNumber(row.number),code,tasks};
+  }).sort((a,b)=>a.model.localeCompare(b.model,'es')||a.number-b.number);
+  const norm=v=>workLotNorm(v);
+  const eventSignature=e=>String(e&&e.id||'')||JSON.stringify([e&&(e.patinador||e.username||e.usuario||e.nombrePatinador||e.nombre),e&&e.cantidad,e&&e.fechaHora,e&&e.metodo,e&&e.numeroOperacion,e&&e.observaciones,e&&e.canastasFisicas,e&&e.turno]);
+  const taskEvents=task=>{
+   const events=[...(Array.isArray(task&&task.entregas)?task.entregas:[]),...(task&&task.entrega&&typeof task.entrega==='object'?[task.entrega]:[])],seen=new Set();
+   return events.filter(event=>{if(!event||typeof event!=='object')return false;const key=eventSignature(event);if(seen.has(key))return false;seen.add(key);return true;});
+  };
+  const identitiesFor=(user,username)=>new Set([username,user&&user.username,user&&user.name,user&&user.nombre].map(norm).filter(Boolean));
+  const assignedTo=(task,user,username)=>workLotUserCanTask(user,username,task);
+  const rows=[];
+  for(const lot of lots){
+   const operations=new Map();
+   for(const task of lot.tasks){
+    const code=String(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote||lot.code||'').trim().toUpperCase();
+    const key=[lot.model,code,String(lot.id)].join('|||');
+    if(!operations.has(key))operations.set(key,{model:lot.model,lot:code?code+' · lote '+lot.number:'Sin código · lote '+lot.number,number:lot.number,tasks:[]});
+    operations.get(key).tasks.push(task);
+   }
+   rows.push(...operations.values());
+  }
+  const summarize=(op,user,username)=>{
+   const assigned=op.tasks.filter(task=>assignedTo(task,user,username));
+   const total=assigned.reduce((sum,task)=>sum+Math.max(0,workLotTarget(task)),0);
+   const identities=identitiesFor(user,username);
+   let delivered=0;
+   for(const task of assigned){
+    const target=Math.max(0,workLotTarget(task));
+    const own=taskEvents(task).filter(event=>identities.has(norm(event.patinador||event.username||event.usuario||event.nombrePatinador||event.nombre))).reduce((sum,event)=>sum+Math.max(0,workLotNumber(event.cantidad)),0);
+    delivered+=Math.min(target,own);
+   }
+   const pending=Math.max(0,total-delivered);
+   return {references:assigned.length,totalUnits:total,deliveredUnits:delivered,pendingUnits:pending,percentage:total?Math.min(100,delivered/total*100):0};
+  };
+  if(role==='Patinador'){
+   const personal=rows.map(op=>({model:op.model,lot:op.lot,...summarize(op,viewer,session.username)})).filter(op=>op.references>0);
+   const totalUnits=personal.reduce((n,x)=>n+x.totalUnits,0),deliveredUnits=personal.reduce((n,x)=>n+x.deliveredUnits,0);
+   return sendJson(res,200,{ok:true,soloLectura:true,role,source:'work-lots',summary:{references:personal.reduce((n,x)=>n+x.references,0),totalUnits,deliveredUnits,pendingUnits:Math.max(0,totalUnits-deliveredUnits),percentage:totalUnits?Math.min(100,deliveredUnits/totalUnits*100):0},lots:personal});
+  }
+  const lotSummaries=rows.map(op=>{
+   const total=op.tasks.reduce((n,task)=>n+Math.max(0,workLotTarget(task)),0);
+   const delivered=op.tasks.reduce((n,task)=>n+Math.min(Math.max(0,workLotNumber(task.entregado)),Math.max(0,workLotTarget(task))),0);
+   const percentage=total?Math.min(100,delivered/total*100):0;
+   return {model:op.model,lot:op.lot,percentage,...(role==='Supervisor'?{}:{references:op.tasks.length,totalUnits:total,deliveredUnits:delivered,pendingUnits:Math.max(0,total-delivered)})};
+  });
+  const skaters=Object.entries(state.users||{}).filter(([,user])=>user&&user.role==='Patinador').flatMap(([username,user])=>rows.flatMap(op=>{
+   const result=summarize(op,user,username);if(!result.references)return [];
+   return [{name:String(user.name||user.nombre||username),model:op.model,lot:op.lot,percentage:result.percentage,...(role==='Supervisor'?{}:{references:result.references,totalUnits:result.totalUnits,deliveredUnits:result.deliveredUnits,pendingUnits:result.pendingUnits})}];
+  }));
+  const totals=lotSummaries.reduce((acc,lot)=>{
+   if(role!=='Supervisor'){acc.references+=lot.references;acc.totalUnits+=lot.totalUnits;acc.deliveredUnits+=lot.deliveredUnits;acc.pendingUnits+=lot.pendingUnits;}
+   return acc;
+  },{references:0,totalUnits:0,deliveredUnits:0,pendingUnits:0});
+  if(role!=='Supervisor')totals.percentage=totals.totalUnits?Math.min(100,totals.deliveredUnits/totals.totalUnits*100):0;
+  return sendJson(res,200,{ok:true,soloLectura:true,role,source:'work-lots',...(role==='Supervisor'?{}:{summary:totals}),lots:lotSummaries,skaters});
+ }catch(e){console.error('Error consultando resumen para AKT INTELIGENTE:',e);return sendJson(res,503,{ok:false,error:'No se pudieron consultar los indicadores de producción. No se modificó ningún dato.'});}
+}
+
 if(p==='/api/state'&&req.method==='GET'){
  const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token);
  if(!authorized(req)||!session)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
