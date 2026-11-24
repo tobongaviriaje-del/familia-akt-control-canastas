@@ -37,31 +37,50 @@ function modelFilter(query){
 }
 function buildAnswer(query,data){
  const who=currentUser(),role=who&&who.role,q=norm(query),model=modelFilter(query);
- const lots=(Array.isArray(data.lots)?data.lots:[]).filter(x=>!model||x.model===model);
- const skaters=(Array.isArray(data.skaters)?data.skaters:[]).filter(x=>!model||x.model===model);
+ const codeMatch=String(query||'').toUpperCase().match(/\b[A-Z]{1,5}\s*[-]?\s*\d{2,}\b/);
+ const lotCode=codeMatch?codeMatch[0].replace(/\s+/g,'').replace('-',''):'';
+ let lots=(Array.isArray(data.lots)?data.lots:[]).filter(x=>(!model||x.model===model)&&(!lotCode||norm(x.lot).replace(/[\s-]/g,'').includes(norm(lotCode))));
+ let skaters=(Array.isArray(data.skaters)?data.skaters:[]).filter(x=>(!model||x.model===model)&&(!lotCode||norm(x.lot).replace(/[\s-]/g,'').includes(norm(lotCode))));
+ const low=q.includes('atras')||q.includes('mas bajo')||q.includes('menor')||q.includes('peor')||q.includes('pendiente');
+ const high=q.includes('mejor')||q.includes('mayor avance')||q.includes('mas alto')||q.includes('mas avanzado');
+ const byPct=(items,field='percentage',descending=false)=>[...items].sort((a,b)=>(Number(a[field]||0)-Number(b[field]||0))*(descending?-1:1));
+ const lotLabel=x=>x.model+' · '+x.lot;
  if(role==='Patinador'){
   const summary=data.summary||{};
-  if(!lots.length)return 'No encuentro un lote activo asignado a tu cuenta en los datos disponibles. No voy a completar cifras por suposición.';
-  if(q.includes('lote')||q.includes('modelo'))return 'Tu avance por lote:\n'+lots.map(x=>x.model+' · '+x.lot+': '+pct(x.percentage)+' ('+fmt(x.deliveredUnits)+' de '+fmt(x.totalUnits)+' unidades; '+fmt(x.pendingUnits)+' pendientes).').join('\n');
+  if(!lots.length)return 'No encuentro un lote activo asignado a tu cuenta que coincida con esa consulta. No voy a completar cifras por suposición.';
+  if(q.includes('lote')||q.includes('modelo')||model||lotCode)return 'Tu avance por lote:\n'+lots.map(x=>lotLabel(x)+': '+pct(x.percentage)+' ('+fmt(x.deliveredUnits)+' de '+fmt(x.totalUnits)+' unidades; '+fmt(x.pendingUnits)+' pendientes).').join('\n');
   return 'Tu avance registrado en los lotes activos:\n'+fmt(summary.deliveredUnits)+' de '+fmt(summary.totalUnits)+' unidades entregadas ('+pct(summary.percentage)+').\nPendientes: '+fmt(summary.pendingUnits)+' unidades en '+fmt(summary.references)+' referencias asignadas.';
  }
  if(!lots.length)return 'No encontré lotes activos que coincidan con esa consulta. Los indicadores no se estiman cuando no hay datos.';
  if(role==='Supervisor'){
-  if(q.includes('lote')||q.includes('modelo')||model){
-   return 'Avance de los lotes activos'+(model?' para '+model:'')+':\n'+lots.map(x=>x.model+' · '+x.lot+': '+pct(x.percentage)+'.').join('\n');
+  if(q.includes('patinador')||q.includes('quien')||q.includes('quién')){
+   const selected=skaters.filter(x=>q.includes(norm(x.name)));
+   const ranked=byPct(selected.length?selected:skaters,'percentage',high);
+   if(!ranked.length)return 'No hay porcentajes individuales disponibles para esta selección.';
+   if(low||high)return (low?'Patinador con menor porcentaje registrado':'Patinador con mayor porcentaje registrado')+':\n'+ranked.slice(0,1).map(x=>x.name+' · '+lotLabel(x)+': '+pct(x.percentage)+'.').join('\n');
+   return 'Porcentaje de entrega por patinador'+(model?' · '+model:'')+':\n'+ranked.map(x=>x.name+' · '+lotLabel(x)+': '+pct(x.percentage)+'.').join('\n');
   }
-  const matching=skaters.filter(x=>q.includes(norm(x.name)));
-  const selected=matching.length?matching:skaters;
-  return 'Porcentaje de entrega por patinador'+(model?' · '+model:'')+':\n'+(selected.length?selected.map(x=>x.name+' · '+x.model+' · '+x.lot+': '+pct(x.percentage)+'.').join('\n'):'No hay porcentajes individuales disponibles para esta selección.');
+  const rankedLots=byPct(lots,'percentage',high);
+  if(low||high)return (low?'Lote con menor avance':'Lote con mayor avance')+':\n'+rankedLots.slice(0,1).map(x=>lotLabel(x)+': '+pct(x.percentage)+'.').join('\n');
+  if(q.includes('lote')||q.includes('modelo')||model||lotCode){
+   return 'Avance de los lotes activos'+(model?' para '+model:'')+':\n'+rankedLots.map(x=>lotLabel(x)+': '+pct(x.percentage)+'.').join('\n');
+  }
+  return 'Porcentaje de entrega por patinador:\n'+(skaters.length?byPct(skaters).map(x=>x.name+' · '+lotLabel(x)+': '+pct(x.percentage)+'.').join('\n'):'No hay porcentajes individuales disponibles para esta selección.')+'\n\nAvance de lotes:\n'+rankedLots.map(x=>lotLabel(x)+': '+pct(x.percentage)+'.').join('\n');
  }
- const selectedSkaters=skaters.filter(x=>q.includes(norm(x.name)));
- if(q.includes('patinador')||selectedSkaters.length){
-  const chosen=selectedSkaters.length?selectedSkaters:skaters;
-  return 'Comparativo de entrega por patinador'+(model?' · '+model:'')+':\n'+(chosen.length?chosen.map(x=>x.name+' · '+x.model+' · '+x.lot+': '+pct(x.percentage)+' ('+fmt(x.deliveredUnits)+' de '+fmt(x.totalUnits)+'; '+fmt(x.pendingUnits)+' pendientes).').join('\n'):'No hay patinadores con asignaciones en los lotes activos.');
+ const matchingSkaters=skaters.filter(x=>q.includes(norm(x.name)));
+ if(q.includes('patinador')||q.includes('quien')||q.includes('quién')||matchingSkaters.length){
+  const chosen=matchingSkaters.length?matchingSkaters:skaters,ranked=byPct(chosen,'percentage',high);
+  if(!ranked.length)return 'No hay patinadores con asignaciones en los lotes activos.';
+  if(low||high)return (low?'Patinador con menor porcentaje de entrega':'Patinador con mayor porcentaje de entrega')+':\n'+ranked.slice(0,1).map(x=>x.name+' · '+lotLabel(x)+': '+pct(x.percentage)+' ('+fmt(x.deliveredUnits)+' de '+fmt(x.totalUnits)+'; '+fmt(x.pendingUnits)+' pendientes).').join('\n');
+  return 'Comparativo de entrega por patinador'+(model?' · '+model:'')+':\n'+ranked.map(x=>x.name+' · '+lotLabel(x)+': '+pct(x.percentage)+' ('+fmt(x.deliveredUnits)+' de '+fmt(x.totalUnits)+'; '+fmt(x.pendingUnits)+' pendientes).').join('\n');
+ }
+ if(low||high){
+  const ranked=byPct(lots,'percentage',high);
+  return (low?'Lote con menor avance':'Lote con mayor avance')+':\n'+ranked.slice(0,1).map(x=>lotLabel(x)+': '+pct(x.percentage)+' ('+fmt(x.deliveredUnits)+' de '+fmt(x.totalUnits)+' unidades).').join('\n');
  }
  const total=lots.reduce((n,x)=>n+Number(x.totalUnits||0),0),delivered=lots.reduce((n,x)=>n+Number(x.deliveredUnits||0),0),pending=lots.reduce((n,x)=>n+Number(x.pendingUnits||0),0),references=lots.reduce((n,x)=>n+Number(x.references||0),0);
  const percent=total?Math.min(100,delivered/total*100):0;
- return 'Resumen de producción'+(model?' · '+model:'')+' según los lotes activos:\n'+fmt(delivered)+' de '+fmt(total)+' unidades entregadas ('+pct(percent)+').\nPendientes: '+fmt(pending)+' unidades · Referencias: '+fmt(references)+'.\n\nLotes:\n'+lots.map(x=>x.model+' · '+x.lot+': '+pct(x.percentage)+' ('+fmt(x.deliveredUnits)+' / '+fmt(x.totalUnits)+').').join('\n');
+ return 'Resumen de producción'+(model?' · '+model:'')+(lotCode?' · '+lotCode:'')+' según los lotes activos:\n'+fmt(delivered)+' de '+fmt(total)+' unidades entregadas ('+pct(percent)+').\nPendientes: '+fmt(pending)+' unidades · Referencias: '+fmt(references)+'.\n\nLotes:\n'+byPct(lots).map(x=>lotLabel(x)+': '+pct(x.percentage)+' ('+fmt(x.deliveredUnits)+' / '+fmt(x.totalUnits)+').').join('\n');
 }
 async function ask(query){
  if(busy)return;
