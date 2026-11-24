@@ -70,6 +70,19 @@ test('no duplica un movimiento que aparece en entregas y también en entrega', (
   assert.equal(ana.delivered, 180);
 });
 
+test('deduplica el mismo movimiento cuando los registros usan alias distintos', () => {
+  const context = loadProgressHelpers();
+  const merged = context.__combine([{
+    standardNKD: true, puesto: 'PRE 26', objetivo: 600,
+    entregas: [{ patinador: 'Ana', cantidad: 120, fechaHora: '20/11/2026 09:00' }],
+    entrega: { usuario: 'Ana', cantidad: 120, fechaHora: '20/11/2026 09:00' }
+  }]);
+  assert.equal(merged[0].entregas.length, 1);
+  const ana = context.__summary(merged, { role: 'Patinador', name: 'Ana', puestos: ['PRE 26'] }, 'ana');
+  assert.equal(ana.delivered, 120);
+  assert.equal(ana.pct, 20);
+});
+
 test('el comparativo consulta los lotes reales del servidor y no depende solo de /api/state', () => {
   assert.match(html, /fetch\('\/api\/admin\/work-lots\/progress'/);
   assert.match(html, /combinarTareasProgreso\(\[\.\.\.legacyTasks,\.\.\.lotTasks\]\)/);
