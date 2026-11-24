@@ -77,7 +77,7 @@ test('las tareas de los cuatro modelos se normalizan desde los lotes y conservan
   const mapped = context.__lots(lots);
   assert.equal(mapped.length, 5);
   assert.ok(mapped.every(task => task.standardNKD === true));
-  assert.deepEqual(Array.from(mapped, task => task.standardMoto), ['CR4 125', 'CR4 150', 'CHR', 'NKD', 'XRS-180']);
+  assert.deepEqual(Array.from(mapped, task => task.standardMoto), ['CR4 125', 'CR4 150', 'NKD', 'XRS-180', 'CHR']);
   const chr = mapped.find(task => task.standardMoto === 'CHR');
   assert.equal(chr.__progressLotLabel, 'Sin código · lote 1');
   assert.equal(context.__summary([chr], { role: 'Patinador', name: 'Caro', puestos: ['PRE 5'] }, 'caro').pct, 0);
@@ -155,4 +155,10 @@ test('CHR entra en el comparativo individual y conserva sus entregas por patinad
   assert.equal(summary.total, 300);
   assert.equal(summary.delivered, 120);
   assert.equal(summary.pct, 40);
+});
+
+test('la vista de Supervisor solo muestra patinador, modelo, lote y porcentaje de entrega', () => {
+  assert.match(html, /const isSupervisor=current\.role==='Supervisor'/);
+  assert.match(html, /isSupervisor\?'':'<th>Refs\.<\\/th><th>Entregadas<\\/th><th>Pendientes<\\/th>'/);
+  assert.match(html, /!isSupervisor&&selected\?/);
 });
