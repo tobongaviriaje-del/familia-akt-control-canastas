@@ -84,19 +84,22 @@ test('el endpoint de avance entrega solo el lote vigente por modelo y no altera 
  ];
  fs.writeFileSync(path.join(dataDir,'state.json'),JSON.stringify(state));
  fs.writeFileSync(path.join(dataDir,'work-lots.json'),JSON.stringify(workLots));
- const before=fs.readFileSync(path.join(dataDir,'state.json'),'utf8');
- const port=await freePort(),baseUrl='http://127.0.0.1:'+port;const child=spawn(process.execPath,['server.js'],{cwd:temp,env:{...process.env,PORT:String(port)},stdio:'ignore'});
+  const port=await freePort(),baseUrl='http://127.0.0.1:'+port;const child=spawn(process.execPath,['server.js'],{cwd:temp,env:{...process.env,PORT:String(port)},stdio:'ignore'});
  t.after(async()=>{child.kill('SIGTERM');await new Promise(resolve=>{if(child.exitCode!==null)return resolve();child.once('exit',resolve);setTimeout(resolve,1500).unref();});fs.rmSync(temp,{recursive:true,force:true});});
  await waitForHealth(baseUrl,child);
+ const tokens=[];
  for(const username of ['admin','supervisor','coordinator']){
   const password={admin:'AdminTest123',supervisor:'Supervisor123',coordinator:'Coordinator123'}[username];
   const login=await request(baseUrl,'/api/login',{method:'POST',body:{username,password}});
-  assert.equal(login.status,200,JSON.stringify(login.data));
-  const response=await request(baseUrl,'/api/admin/work-lots/progress',{token:login.data.token});
+  assert.equal(login.status,200,JSON.stringify(login.data));tokens.push(login.data.token);
+ }
+ const before=fs.readFileSync(path.join(dataDir,'state.json'),'utf8');
+ for(const token of tokens){
+  const response=await request(baseUrl,'/api/admin/work-lots/progress',{token});
   assert.equal(response.status,200,JSON.stringify(response.data));
   assert.deepEqual(response.data.lots.map(x=>x.id).sort(),['chr-current','nkd-current']);
   assert.equal(response.data.lots.find(x=>x.model==='NKD').tasks.length,2);
   assert.equal(response.data.lots.find(x=>x.model==='CHR').tasks[0].id,'chr-active-1');
  }
- assert.equal(fs.readFileSync(path.join(dataDir,'state.json'),'utf8'),before,'una consulta GET no debe borrar ni cambiar usuarios o datos');
+ assert.equal(fs.readFileSync(path.join(dataDir,'state.json'),'utf8'),before,'el endpoint GET no debe borrar ni cambiar usuarios o datos después de iniciar sesión');
 });
