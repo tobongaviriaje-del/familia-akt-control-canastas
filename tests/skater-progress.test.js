@@ -22,7 +22,7 @@ function loadProgressHelpers() {
     unidadesObjetivoEstandar: task => task.objetivo ?? task.cantidad ?? 0,
     normalizarPuestoEstandar: value => String(value || '').trim(),
   };
-  vm.runInNewContext(source + '\nglobalThis.__combine = combinarTareasProgreso; globalThis.__summary = resumenEntregaPatinador; globalThis.__lots = tareasLotesParaProgreso;', context);
+  vm.runInNewContext(source + '\nglobalThis.__combine = combinarTareasProgreso; globalThis.__summary = resumenEntregaPatinador; globalThis.__lots = tareasLotesParaProgreso; globalThis.tareasAsignadasAUsuarioEstandar = tareasAsignadasAUsuarioEstandar;', context);
   return context;
 }
 
