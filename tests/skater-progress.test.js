@@ -23,7 +23,7 @@ function loadProgressHelpers() {
     tareasAsignadasAUsuarioEstandar: (task, user) =>
       user && user.role === 'Patinador' && (user.puestos || []).includes(task.puesto)
   };
-  vm.runInNewContext(source + '\nglobalThis.__combine = combinarTareasProgreso; globalThis.__summary = resumenEntregaPatinador;', context);
+  vm.runInNewContext(source + '\nglobalThis.__combine = combinarTareasProgreso; globalThis.__summary = resumenEntregaPatinador; globalThis.__lots = tareasLotesParaProgreso;', context);
   return context;
 }
 
@@ -64,6 +64,27 @@ test('combina copias de una referencia sin duplicar el objetivo y conserva event
   assert.equal(ana.delivered, 350);
   assert.equal(beto.total, 600);
   assert.equal(beto.delivered, 250);
+});
+
+test('las tareas de los cuatro modelos se normalizan desde los lotes y conservan su identidad', () => {
+  const context = loadProgressHelpers();
+  const lots = [
+    { id: 'a', number: 794, model: 'CR4 125', tasks: [{ id: '1', puesto: 'PRE 1', cantidad: 510, entregado: 200, entregas: [{ patinador: 'Ana', cantidad: 200 }] }] },
+    { id: 'b', number: 795, model: 'CR4-150', tasks: [{ id: '2', puesto: 'PRE 2', cantidad: 600 }] },
+    { id: 'c', number: 796, model: 'NKD', tasks: [{ id: '3', puesto: 'PRE 3', cantidad: 600 }] },
+    { id: 'd', number: 797, model: 'XRS-180', tasks: [{ id: '4', puesto: 'PRE 4', cantidad: 600 }] },
+    { id: 'e', number: 1, model: 'CHR', tasks: [{ id: '5', puesto: 'PRE 5', cantidad: 600 }] }
+  ];
+  const mapped = context.__lots(lots);
+  assert.equal(mapped.length, 4);
+  assert.ok(mapped.every(task => task.standardNKD === true));
+  assert.deepEqual(Array.from(mapped, task => task.standardMoto), ['CR4 125', 'CR4 150', 'NKD', 'XRS-180']);
+  assert.equal(mapped[0].__progressLotLabel, 'Sin código · lote 794');
+  const ana = context.__summary(mapped, { role: 'Patinador', name: 'Ana', puestos: ['PRE 1'] }, 'ana');
+  assert.equal(ana.assigned, 1);
+  assert.equal(ana.total, 510);
+  assert.equal(ana.delivered, 200);
+  assert.equal(ana.pct, 200 / 510 * 100);
 });
 
 test('incluye modelos y lotes servidos por el backend y no mezcla operaciones con el mismo EAN', () => {
