@@ -257,6 +257,65 @@ if(p==='/api/admin/patinadores-credentials'&&req.method==='POST'){
  }catch{return sendJson(res,400,{ok:false,error:'Solicitud inválida.'});}});
  return;
 }
+if(p==='/api/admin/work-lots/standardize-kk809'&&req.method==='POST'){
+ const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token);
+ if(!authorized(req)||!session)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
+ const initialState=readState(),admin=initialState.users&&initialState.users[session.username];
+ if(!admin||admin.role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo Administración puede corregir este lote.'});
+ let raw='';req.on('data',chunk=>{raw+=chunk;if(raw.length>10000)req.destroy();});req.on('end',()=>{
+  try{
+   const body=JSON.parse(raw||'{}'),action=String(body.action||'preview');
+   // Corrección deliberadamente cerrada: no acepta modelo, lote ni cantidad distintos.
+   if(String(body.model||'').trim().toUpperCase()!=='CR4 125'||String(body.code||'').trim().toUpperCase()!=='KK809')return sendJson(res,400,{ok:false,error:'Esta corrección está limitada exclusivamente a CR4 125 / KK809.'});
+   if(!['preview','apply'].includes(action))return sendJson(res,400,{ok:false,error:'Acción no válida.'});
+   const state=readState(),rows=readWorkLots(),target=270,model='CR4 125',code='KK809';
+   const modelOf=t=>workLotModel(t&&(t.standardMoto||(t.standardNKD?'NKD':'')));
+   const taskCode=t=>String(t&&(t.codigoLoteOperacion||t.loteCodigo||t.codigoLote)||'').trim().toUpperCase();
+   const matchingBatches=(Array.isArray(state.queuedStandardBatches)?state.queuedStandardBatches:[]).filter(batch=>workLotModel(batch&&batch.modelo)===model&&String(batch&&batch.codigo||'').trim().toUpperCase()===code);
+   const batchIds=new Set(matchingBatches.map(batch=>String(batch.id||'')));
+   const matchingState=(Array.isArray(state.tasks)?state.tasks:[]).filter(task=>modelOf(task)===model&&taskCode(task)===code);
+   const matchingQueue=matchingBatches.flatMap(batch=>(Array.isArray(batch.tasks)?batch.tasks:[]).filter(task=>modelOf(task)===model));
+   const matchingRows=rows.filter(row=>{
+    if(workLotModel(row&&row.model)!==model)return false;
+    if(String(row&&row.codigoLoteOperacion||'').trim().toUpperCase()===code)return true;
+    if(row&&row.sourceBatchId&&batchIds.has(String(row.sourceBatchId)))return true;
+    return (Array.isArray(row&&row.tasks)?row.tasks:[]).some(task=>taskCode(task)===code&&modelOf(task)===model);
+   });
+   const matchingWork=matchingRows.flatMap(row=>(Array.isArray(row.tasks)?row.tasks:[]).filter(task=>modelOf(task)===model));
+   const all=[...matchingState,...matchingQueue,...matchingWork];
+   if(!all.length)return sendJson(res,404,{ok:false,error:'No se encontró ninguna referencia identificable de CR4 125 / KK809. No se modificó ningún dato.'});
+   const conflicts=all.filter(task=>workLotNumber(task&&task.entregado)>target);
+   const summary={
+    model,code,targetUnitsPerReference:target,
+    stateReferences:matchingState.length,queuedReferences:matchingQueue.length,
+    workLotRows:matchingRows.length,workLotReferences:matchingWork.length,
+    totalReferenceRecords:all.length,
+    deliveredUnits:all.reduce((sum,task)=>sum+Math.max(0,workLotNumber(task&&task.entregado)),0),
+    conflicts:conflicts.length
+   };
+   if(conflicts.length)return sendJson(res,409,{ok:false,summary,error:'Hay referencias con más de 270 unidades ya entregadas. Se bloqueó la corrección completa y no se modificó ningún dato.'});
+   if(action==='preview')return sendJson(res,200,{ok:true,soloLectura:true,summary,mensaje:'Vista previa solamente. No se modificó ningún dato.'});
+   const beforeState=JSON.stringify(state),beforeRows=JSON.stringify(rows);
+   const applyTask=task=>{
+    task.lote=target;task.lotePiezas=target;task.cantidad=target;
+    const capacity=workLotNumber(task.cantidadCanasta);
+    if(capacity>0){task.numCanastas=Math.ceil(target/capacity);task.numCanastasRaw=String(task.numCanastas);}
+   };
+   matchingState.forEach(applyTask);
+   matchingQueue.forEach(applyTask);
+   matchingWork.forEach(applyTask);
+   try{
+    if(matchingState.length||matchingQueue.length)writeState(state);
+    if(matchingRows.length)writeWorkLots(rows);
+   }catch(error){
+    try{if(matchingState.length||matchingQueue.length)writeState(JSON.parse(beforeState));}catch(rollbackError){console.error('No se pudo revertir state tras fallo de corrección KK809:',rollbackError.message);}
+    try{if(matchingRows.length)writeWorkLots(JSON.parse(beforeRows));}catch(rollbackError){console.error('No se pudo revertir work-lots tras fallo de corrección KK809:',rollbackError.message);}
+    throw error;
+   }
+   return sendJson(res,200,{ok:true,summary,mensaje:'CR4 125 / KK809 corregido a 270 unidades por referencia. Se conservaron las entregas y los demás lotes.'});
+  }catch(e){console.error('Error corrigiendo CR4 125 / KK809:',e);return sendJson(res,500,{ok:false,error:'No se pudo completar la corrección. Verifica el lote antes de reintentar.'});}
+ });return;
+}
 if(p==='/api/work-lots/open-queued'&&req.method==='POST'){
  const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token);
  if(!authorized(req)||!session)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
