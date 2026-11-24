@@ -10,7 +10,8 @@ const server = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
 
 function loadProgressHelpers() {
   const start = html.indexOf('function tareasAsignadasAUsuarioEstandar(');
-  const end = html.indexOf('\nfunction guardarCodigoOperacionCompartido()', start);
+  const end = html.indexOf('
+function guardarCodigoOperacionCompartido()', start);
   assert.notEqual(start, -1);
   assert.ok(end > start);
   const source = html.slice(start, end);
@@ -22,7 +23,8 @@ function loadProgressHelpers() {
     unidadesObjetivoEstandar: task => task.objetivo ?? task.cantidad ?? 0,
     normalizarPuestoEstandar: value => String(value || '').trim(),
   };
-  vm.runInNewContext(source + '\nglobalThis.__combine = combinarTareasProgreso; globalThis.__summary = resumenEntregaPatinador; globalThis.__lots = tareasLotesParaProgreso; globalThis.tareasAsignadasAUsuarioEstandar = tareasAsignadasAUsuarioEstandar; globalThis.__operationKey = claveOperacionProgreso;', context);
+  vm.runInNewContext(source + '
+globalThis.__combine = combinarTareasProgreso; globalThis.__summary = resumenEntregaPatinador; globalThis.__lots = tareasLotesParaProgreso; globalThis.tareasAsignadasAUsuarioEstandar = tareasAsignadasAUsuarioEstandar; globalThis.__operationKey = claveOperacionProgreso;', context);
   return context;
 }
 
@@ -43,7 +45,19 @@ test('cuenta la entrega histórica en entrega aunque entregas exista vacío', ()
   assert.equal(merged[0].entregas[0].id, 'legacy-1');
 });
 
-test('atribuye entregas históricas usando alias de identidad del patinador', () => {\n  const context = loadProgressHelpers();\n  const task = { standardNKD: true, puesto: 'PRE 26', objetivo: 600, entregas: [\n    { usuario: 'Ana', cantidad: 120 },\n    { username: 'ana', cantidad: 60 }\n  ] };\n  const ana = context.__summary([task], { role: 'Patinador', name: 'Ana', username: 'ana', puestos: ['PRE 26'] }, 'ana');\n  assert.equal(ana.total, 600);\n  assert.equal(ana.delivered, 180);\n  assert.equal(ana.pct, 30);\n});\n\ntest('no duplica un movimiento que aparece en entregas y también en entrega', () => {
+test('atribuye entregas históricas usando alias de identidad del patinador', () => {
+  const context = loadProgressHelpers();
+  const task = { standardNKD: true, puesto: 'PRE 26', objetivo: 600, entregas: [
+    { usuario: 'Ana', cantidad: 120 },
+    { username: 'ana', cantidad: 60 }
+  ] };
+  const ana = context.__summary([task], { role: 'Patinador', name: 'Ana', username: 'ana', puestos: ['PRE 26'] }, 'ana');
+  assert.equal(ana.total, 600);
+  assert.equal(ana.delivered, 180);
+  assert.equal(ana.pct, 30);
+});
+
+test('no duplica un movimiento que aparece en entregas y también en entrega', () => {
   const context = loadProgressHelpers();
   const movement = { id: 'same-event', patinador: 'Ana', cantidad: 180, fechaHora: '20/11/2026 09:00' };
   const merged = context.__combine([{
