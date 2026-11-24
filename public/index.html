@@ -303,6 +303,13 @@ function combinarTareasProgreso(tasks){
  });
  return [...groups.values()].map(group=>({...group.task,entregas:[...group.events.values()]}));
 }
+function claveOperacionProgreso(task){
+ const modelo=normalizarModeloContinuidad(modeloDeTareaEstandar(task)||'NKD');
+ const codigo=String(task.codigoLoteOperacion||'').trim().toUpperCase();
+ const lote=String(task.__progressLotKey||'').trim();
+ // Un código puede repetirse en lotes físicos distintos: conservar siempre la identidad del lote.
+ return [modelo,codigo,lote?'LOTE:'+lote:''].join('|||');
+}
 function resumenEntregaPatinador(tasks,user,username){
  const assigned=tasks.filter(x=>(x.standardNKD||esContinuidadXRS180(x))&&tareasAsignadasAUsuarioEstandar(x,user,username));
  const identidad=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
@@ -428,7 +435,7 @@ function renderProgresoPatinadores(){
  // No filtrar por fecha de creación: los estándares pueden haberse cargado antes
  // de iniciar la jornada. El lote activo se determina por las unidades pendientes.
  reportTasks.filter(x=>(x.standardNKD||esContinuidadXRS180(x))).forEach(x=>{
-  const modelo=modeloDeTareaEstandar(x),codigo=String(x.codigoLoteOperacion||'').trim(),lotKey=String(x.__progressLotKey||''),key=modelo+'|||'+(codigo||('SIN-CODIGO-'+lotKey));
+  const modelo=modeloDeTareaEstandar(x),codigo=String(x.codigoLoteOperacion||'').trim(),key=claveOperacionProgreso(x);
   if(!activeMap.has(key))activeMap.set(key,{modelo,codigo,lotLabel:x.__progressLotLabel||codigo||'Sin código',tasks:[],latestAt:0,total:0,delivered:0,pending:0});
   const op=activeMap.get(key),objetivo=Math.max(0,Number(unidadesObjetivoEstandar(x))||0),entregado=Math.min(objetivo,Math.max(0,Number(x.entregado)||0));
   op.tasks.push(x);op.latestAt=Math.max(op.latestAt,fechaOperacion(x));op.total+=objetivo;op.delivered+=entregado;op.pending+=Math.max(0,objetivo-entregado);
