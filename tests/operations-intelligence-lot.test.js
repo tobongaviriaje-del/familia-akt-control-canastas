@@ -128,3 +128,20 @@ test('Inteligencia muestra varios lotes iniciados del mismo modelo y excluye pre
   assert.deepEqual(groups.map(group => group.code).sort(), ['KK888', 'KK889']);
   assert.equal(groups.reduce((sum, group) => sum + group.done, 0), 75);
 });
+
+
+test('Inteligencia normaliza CR4-150 y no depende de que los IDs estén en tareas locales', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../public/operaciones-inteligentes.js'), 'utf8');
+  const bootstrap = source.indexOf("if(document.readyState==='loading')");
+  const isolated = source.slice(0, bootstrap) + 'globalThis.__aktIntelTest = { groupsByOperation, flattenWorkLotProgress };})();';
+  const context = { document: {}, console };
+  vm.runInNewContext(isolated, context);
+  const rows = context.__aktIntelTest.flattenWorkLotProgress({ lots: [
+    { id: 'cr4-150-live', model: 'CR4 150', active: true, number: 3, codigoLoteOperacion: 'CR4-150-03', tasks: [{ id: 'independent-id', lote: 150, entregado: 45 }] }
+  ]});
+  assert.equal(rows.get('CR4 150').length, 1);
+  const groups = context.__aktIntelTest.groupsByOperation(rows.get('CR4 150'));
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].model, 'CR4-150');
+  assert.equal(groups[0].done, 45);
+});
