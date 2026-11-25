@@ -603,7 +603,7 @@ if(p==='/api/work-lots'&&['GET','POST','PUT'].includes(req.method)){
     const selected=rows.find(x=>x.model===model&&x.id===String(body.lotId||''));
     if(!selected)return sendJson(res,404,{ok:false,error:'No se encontró el lote guardado.'});
     if(!(selected.tasks||[]).some(task=>workLotUserCanTask(user,actor,task)))return sendJson(res,403,{ok:false,error:'No tienes puestos asignados en este lote.'});
-    rememberWorkLotSelection(actor,model,selected);
+    rememberWorkLotSelection(actor,model,selected,true);
     return sendJson(res,200,workLotResponse(selected,user,actor,rows));
    }
    if(body.action!=='next')return sendJson(res,400,{ok:false,error:'Acción de lote no válida.'});
