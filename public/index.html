@@ -417,6 +417,17 @@ function renderProgresoPatinadores(){
  }
  const isCoordinator=current.role==='Coordinador'||String(current.role||'').toLowerCase()==='coordinador';
  const isSupervisor=current.role==='Supervisor';
+ const limitedRole=isSupervisor||isCoordinator;
+ const appView=$('appView');
+ if(appView)appView.classList.toggle('akt-limited-view',limitedRole);
+ if(limitedRole){
+  if(!$('aktLimitedRoleStyle')){
+   const limitedStyle=document.createElement('style');limitedStyle.id='aktLimitedRoleStyle';
+   limitedStyle.textContent='#appView.akt-limited-view> :not(#patinadorProgressPanel){display:none!important}#appView.akt-limited-view>#patinadorProgressPanel{display:block!important;margin-top:14px}#appView.akt-limited-view>#patinadorProgressPanel .akt-active-lot{border:1px solid #dbe3ef;border-radius:12px;padding:14px;margin:12px 0;background:#fff}#appView.akt-limited-view>#patinadorProgressPanel .akt-active-lot h3{margin:0 0 8px}#appView.akt-limited-view>#patinadorProgressPanel .akt-role-row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid #e5e7eb}#appView.akt-limited-view>#patinadorProgressPanel .akt-role-pct{font-weight:800;white-space:nowrap}';
+   document.head.appendChild(limitedStyle);
+  }
+  const heading=panel.querySelector('h2');if(heading)heading.textContent='📊 Lotes en trabajo y porcentajes';
+ }
  if(!['Admin','Supervisor'].includes(current.role)&&!isCoordinator){panel.classList.add('hidden');return;}
  panel.classList.remove('hidden');if(progress)progress.innerHTML='Consulta de avance por lote u operación. Esta vista no modifica entregas ni estándares.';
  if(skaterWorkLotProgress===null){
@@ -461,6 +472,17 @@ function renderProgresoPatinadores(){
   const color=isNext?'#64748b':'#16a34a';
   return '<div class="notice" style="margin:10px 0"><b>'+(isNext?'🕒 ':'🟢 ')+label+'</b><h3>'+esc(op.modelo)+' · Lote '+esc(op.lotLabel||op.codigo||'Sin código')+'</h3>'+(hasTasks?'<div class="grid"><div><b>Avance (+)</b><h2>'+fmt(done)+'%</h2><small>'+fmt(r.delivered)+' de '+fmt(r.total)+' unidades</small></div><div><b>Pendiente (−)</b><h2>'+fmt(left)+'%</h2><small>'+fmt(Math.max(0,r.total-r.delivered))+' unidades por entregar</small></div></div><div style="display:flex;height:12px;background:#e5e7eb;border-radius:8px;overflow:hidden;margin:8px 0"><div style="width:'+done+'%;background:'+color+'"></div><div style="width:'+left+'%;background:#cbd5e1"></div></div><p class="muted">Referencias asignadas: '+r.assigned+'</p>':'<p class="muted">Este patinador no tiene tareas asignadas en este lote.</p>')+'</div>';
  };
+
+ if(isSupervisor||isCoordinator){
+  const activeOperations=[...activeMap.values()].filter(op=>op.pending>0).map(op=>({...op,overallPct:op.total?100*op.delivered/op.total:0})).sort((a,b)=>a.overallPct-b.overallPct||a.modelo.localeCompare(b.modelo,'es')||a.codigo.localeCompare(b.codigo,'es'));
+  const cards=activeOperations.map(op=>{
+   const skaterRows=skaters.map(([key,u])=>({key,name:u.name||u.nombre||key,progress:resumenEntregaPatinador(op.tasks,u,key)})).filter(x=>x.progress.assigned>0).sort((a,b)=>a.progress.pct-b.progress.pct||a.name.localeCompare(b.name,'es'));
+   const lotPct=pct(op.overallPct);
+   return '<section class="akt-active-lot"><h3>'+esc(op.modelo)+' · '+esc(op.lotLabel||op.codigo||'Sin código')+'</h3><div class="akt-role-row"><span>Avance del lote</span><span class="akt-role-pct">'+fmt(lotPct)+'%</span></div><div style="height:9px;background:#e5e7eb;border-radius:8px;overflow:hidden;margin:5px 0 12px"><div style="height:9px;width:'+lotPct+'%;background:#16a34a"></div></div><b>Entrega por patinador</b>'+(skaterRows.length?skaterRows.map(row=>'<div class="akt-role-row"><span>'+esc(row.name)+'</span><span class="akt-role-pct">'+fmt(pct(row.progress.pct))+'%</span></div>').join(''):'<p class="muted">Todavía no hay entregas asignadas a patinadores en este lote.</p>')+'</section>';
+  }).join('');
+  box.innerHTML=cards||'<p class="notice">No hay lotes en trabajo en este momento.</p>';
+  return;
+ }
  const allOperations=[...activeMap.values()].sort((a,b)=>a.modelo.localeCompare(b.modelo,'es')||a.codigo.localeCompare(b.codigo,'es'));
  const comparisonRows=[];
  skaters.forEach(([key,u])=>{
