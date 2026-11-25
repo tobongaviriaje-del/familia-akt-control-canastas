@@ -125,7 +125,7 @@ test('Inteligencia muestra varios lotes iniciados del mismo modelo y excluye pre
   assert.equal(rows.get('CHR').length, 1);
   const groups = context.__aktIntelTest.groupsByOperation(rows.get('NKD'));
   assert.equal(groups.length, 2);
-  assert.deepEqual(groups.map(group => group.code).sort(), ['KK888', 'KK889']);
+  assert.equal(groups.map(group => group.code).sort().join(','), 'KK888,KK889');
   assert.equal(groups.reduce((sum, group) => sum + group.done, 0), 75);
 });
 
