@@ -10,6 +10,7 @@ test('Inteligencia consulta dinámicamente los lotes vigentes de todos los model
   assert.match(source, /STANDARD_LOT_MODELS=\['NKD','CR4 150','CR4 125','XRS-180','CHR'\]/);
   assert.match(source, /fetch\('\/api\/admin\/work-lots\/progress'/);
   assert.match(source, /__progressLotKey:lotKey/);
+  assert.match(source, /lot.active!==true/);
   assert.doesNotMatch(source, /overview\?model=\x27\+encodeURIComponent\(modelName\)/);
 
   const bootstrap = source.indexOf("if(document.readyState==='loading')");
@@ -70,8 +71,8 @@ test('Inteligencia conserva solo el lote vigente más reciente de cada modelo', 
   const context = { document: {}, console };
   vm.runInNewContext(isolated, context);
   const rows = context.__aktIntelTest.flattenWorkLotProgress({ lots: [
-    { id: 'nkd-711', model: 'NKD', number: 4, codigoLoteOperacion: 'KK711', tasks: [{ id: 'a', lote: 100, entregado: 80 }] },
-    { id: 'nkd-next', model: 'NKD', number: 5, codigoLoteOperacion: '', tasks: [{ id: 'b', lote: 200, entregado: 0 }] }
+    { id: 'nkd-711', model: 'NKD', active: true, number: 4, codigoLoteOperacion: 'KK711', tasks: [{ id: 'a', lote: 100, entregado: 80 }] },
+    { id: 'nkd-next', model: 'NKD', active: false, number: 5, codigoLoteOperacion: '', tasks: [{ id: 'b', lote: 200, entregado: 0 }] }
   ] }, [
     { id: 'a', standardMoto: 'NKD', codigoLoteOperacion: 'KK711' }
   ]);
@@ -91,7 +92,7 @@ test('Inteligencia recupera el código del lote desde la tarea local con el mism
   const context = { document: {}, console };
   vm.runInNewContext(isolated, context);
   const rows = context.__aktIntelTest.flattenWorkLotProgress({ lots: [
-    { id: 'worklot-711', model: 'NKD', number: 711, tasks: [
+    { id: 'worklot-711', model: 'NKD', active: true, number: 711, tasks: [
       { id: 'ref-1', lote: 100, entregado: 90 },
       { id: 'ref-2', lote: 100, entregado: 0 }
     ] }
@@ -105,4 +106,42 @@ test('Inteligencia recupera el código del lote desde la tarea local con el mism
   assert.equal(groups[0].done, 90);
   assert.equal(groups[0].pending, 110);
   assert.equal(groups[0].lotNumber, 711);
+});
+
+
+test('Inteligencia muestra varios lotes iniciados del mismo modelo y excluye preparados', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../public/operaciones-inteligentes.js'), 'utf8');
+  const bootstrap = source.indexOf("if(document.readyState==='loading')");
+  const isolated = source.slice(0, bootstrap) + 'globalThis.__aktIntelTest = { groupsByOperation, flattenWorkLotProgress };})();';
+  const context = { document: {}, console };
+  vm.runInNewContext(isolated, context);
+  const rows = context.__aktIntelTest.flattenWorkLotProgress({ lots: [
+    { id: 'nkd-a', model: 'NKD', active: true, number: 8, codigoLoteOperacion: 'KK888', tasks: [{ id: 'saved-a', lote: 100, entregado: 25 }] },
+    { id: 'nkd-b', model: 'NKD', active: true, number: 9, codigoLoteOperacion: 'KK889', tasks: [{ id: 'saved-b', lote: 200, entregado: 50 }] },
+    { id: 'nkd-prepared', model: 'NKD', active: false, number: 10, codigoLoteOperacion: 'KK890', tasks: [{ id: 'prepared', lote: 300, entregado: 0 }] },
+    { id: 'chr-live', model: 'CHR', active: true, number: 2, codigoLoteOperacion: 'CHR-02', tasks: [{ id: 'chr-saved', lote: 80, entregado: 40 }] }
+  ]});
+  assert.equal(rows.get('NKD').length, 2);
+  assert.equal(rows.get('CHR').length, 1);
+  const groups = context.__aktIntelTest.groupsByOperation(rows.get('NKD'));
+  assert.equal(groups.length, 2);
+  assert.equal(groups.map(group => group.code).sort().join(','), 'KK888,KK889');
+  assert.equal(groups.reduce((sum, group) => sum + group.done, 0), 75);
+});
+
+
+test('Inteligencia normaliza CR4-150 y no depende de que los IDs estén en tareas locales', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../public/operaciones-inteligentes.js'), 'utf8');
+  const bootstrap = source.indexOf("if(document.readyState==='loading')");
+  const isolated = source.slice(0, bootstrap) + 'globalThis.__aktIntelTest = { groupsByOperation, flattenWorkLotProgress };})();';
+  const context = { document: {}, console };
+  vm.runInNewContext(isolated, context);
+  const rows = context.__aktIntelTest.flattenWorkLotProgress({ lots: [
+    { id: 'cr4-150-live', model: 'CR4 150', active: true, number: 3, codigoLoteOperacion: 'CR4-150-03', tasks: [{ id: 'independent-id', lote: 150, entregado: 45 }] }
+  ]});
+  assert.equal(rows.get('CR4 150').length, 1);
+  const groups = context.__aktIntelTest.groupsByOperation(rows.get('CR4 150'));
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].model, 'CR4-150');
+  assert.equal(groups[0].done, 45);
 });

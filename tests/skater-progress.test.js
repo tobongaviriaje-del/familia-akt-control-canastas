@@ -85,10 +85,9 @@ test('el comparativo consulta los lotes reales del servidor y no depende solo de
   assert.match(html, /fetch\('\/api\/admin\/work-lots\/progress'/);
   assert.match(html, /combinarTareasProgreso\(\[\.\.\.legacyTasks,\.\.\.lotTasks\]\)/);
   assert.match(server, /if\(p==='\/api\/admin\/work-lots\/progress'&&req\.method==='GET'\)/);
-  assert.match(server, /source:'active-state\+work-lots',lots/);
-  assert.match(server, /const activeTasksByModel=new Map\(\)/);
-  assert.match(server, /for\(const candidate of savedLots\)/);
-  assert.match(server, /const tasks=activeTasks\.map\(activeTask=>/);
+  assert.match(server, /source:'patinador-selections\+work-lots',lots/);
+  assert.match(server, /if\(!selection\.startedAt\)continue/);
+  assert.match(server, /rememberWorkLotSelection\(actor,model,selected,true\)/);
 });
 
 test('las correcciones no se restan de las entregas atribuidas al patinador', () => {

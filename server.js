@@ -149,9 +149,9 @@ function writeWorkLotSelections(selections){
  fs.renameSync(tmp,WORK_LOT_SELECTIONS_FILE);
 }
 function workLotSelectionKey(username,model){return workLotNorm(username)+'|'+workLotModel(model);}
-function rememberWorkLotSelection(username,model,row){
- const selections=readWorkLotSelections();
- selections[workLotSelectionKey(username,model)]={lotId:String(row.id),updatedAt:new Date().toISOString()};
+function rememberWorkLotSelection(username,model,row,started=false){
+ const selections=readWorkLotSelections(),key=workLotSelectionKey(username,model),previous=selections[key]||{},now=new Date().toISOString();
+ selections[key]={lotId:String(row.id),updatedAt:now,startedAt:started?(previous.lotId===String(row.id)&&previous.startedAt?previous.startedAt:now):(previous.lotId===String(row.id)?previous.startedAt||null:null)};
  writeWorkLotSelections(selections);
 }
 const WORK_LOT_DELIVERY_FIELDS=['entregado','estado','entregas','entrega','canastasEntregadas','confirmacionesCanastas','correcciones'];
@@ -474,57 +474,41 @@ if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
  const state=readStateSnapshot(),viewer=state.users&&state.users[session.username],allowed=['Admin','Supervisor','Coordinador'];
  if(!viewer||!allowed.includes(viewer.role))return sendJson(res,403,{ok:false,error:'No tienes permiso para consultar el avance de los patinadores.'});
  try{
-  // state.tasks representa exclusivamente las tareas que siguen activas.
-  // Se usa como fuente de vigencia para no mostrar lotes históricos cerrados.
-  const activeTasksByModel=new Map();
-  const standardModels=new Set(['NKD','CR4 150','CR4 125','XRS-180','CHR']);
-  for(const task of Array.isArray(state.tasks)?state.tasks:[]){
-   if(!task||task.id==null)continue;
-   const model=workLotModel(task.standardMoto||task.modeloMoto||task.modeloEstandar||task.modelo||(task.standardNKD?'NKD':''));
-   if(!standardModels.has(model))continue;
-   if(!activeTasksByModel.has(model))activeTasksByModel.set(model,[]);
-   activeTasksByModel.get(model).push(task);
+  // La selección persistida por Patinadores es la señal de inicio real.
+  // No inferir actividad por coincidencia de IDs con state.tasks: los lotes
+  // guardados pueden tener instantáneas válidas con IDs distintos.
+  const savedLots=readWorkLots(),selections=readWorkLotSelections(),activeByLot=new Map();
+  const users=state.users&&typeof state.users==='object'?state.users:{};
+  for(const [selectionKey,selection] of Object.entries(selections)){
+   if(!selection||!selection.lotId)continue;
+   const split=selectionKey.lastIndexOf('|');
+   if(split<=0)continue;
+   const actorKey=workLotNorm(selectionKey.slice(0,split)),model=workLotModel(selectionKey.slice(split+1));
+   if(!actorKey||!['NKD','CR4 150','CR4 125','XRS-180','CHR'].includes(model))continue;
+   const username=Object.keys(users).find(key=>workLotNorm(key)===actorKey),patinador=username&&users[username];
+   if(!patinador||patinador.role!=='Patinador')continue;
+   const row=savedLots.find(candidate=>candidate&&workLotModel(candidate.model)===model&&String(candidate.id)===String(selection.lotId));
+   if(!row||!Array.isArray(row.tasks)||!row.tasks.length)continue;
+   const pending=row.tasks.reduce((sum,task)=>sum+Math.max(0,workLotTarget(task)-workLotNumber(task&&task.entregado)),0);
+   // GET solo recuerda la pantalla abierta: no inicia un lote.
+   // Solo una selección explícita o un guardado de trabajo marca el inicio.
+   if(!selection.startedAt)continue;
+   if(pending<=0)continue;
+   const lotId=String(row.id);
+   if(!activeByLot.has(lotId))activeByLot.set(lotId,{row,model,patinadores:new Set(),startedAt:selection.startedAt||selection.updatedAt||null});
+   const entry=activeByLot.get(lotId);
+   entry.patinadores.add(String(patinador.name||username));
+   if(selection.startedAt&&(!entry.startedAt||String(selection.startedAt)<String(entry.startedAt)))entry.startedAt=selection.startedAt;
   }
-  const savedLots=readWorkLots(),lots=[];
-  for(const [model,activeTasks] of activeTasksByModel){
-   const activeIds=new Set(activeTasks.map(task=>String(task.id)));
-   let selected=null,selectedMatches=0;
-   for(const candidate of savedLots){
-    if(!candidate||workLotModel(candidate.model)!==model)continue;
-    const candidateTasks=Array.isArray(candidate.tasks)?candidate.tasks:[];
-    const matches=candidateTasks.reduce((count,task)=>count+(task&&task.id!=null&&activeIds.has(String(task.id))?1:0),0);
-    if(matches>selectedMatches||(matches>0&&matches===selectedMatches&&(!selected||workLotNumber(candidate.number)>workLotNumber(selected.number)))){
-     selected=candidate;selectedMatches=matches;
-    }
-   }
-   // Conserva las entregas del lote guardado, pero limita las referencias
-   // estrictamente a las que siguen activas en state.tasks. Si el lote todavía
-   // no tiene instantánea en work-lots, usa las tareas activas como respaldo.
-   const savedById=new Map((Array.isArray(selected&&selected.tasks)?selected.tasks:[]).filter(task=>task&&task.id!=null).map(task=>[String(task.id),task]));
-   const tasks=activeTasks.map(activeTask=>{
-    const saved=savedById.get(String(activeTask.id));
-    if(!saved)return activeTask;
-    const merged={...activeTask,...saved};
-    merged.codigoLoteOperacion=String(saved.codigoLoteOperacion||saved.loteCodigo||saved.codigoLote||activeTask.codigoLoteOperacion||activeTask.loteCodigo||activeTask.codigoLote||'').trim().toUpperCase();
-    return merged;
-   });
+  const lots=[...activeByLot.values()].map(({row,model,patinadores,startedAt})=>{
+   const tasks=(Array.isArray(row.tasks)?row.tasks:[]).map(task=>({...task,standardNKD:true,standardMoto:model}));
    const taskCodes=[...new Set(tasks.map(task=>String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase()).filter(Boolean))];
-   const code=String(selected&&selected.codigoLoteOperacion||'').trim().toUpperCase()||(taskCodes.length===1?taskCodes[0]:'');
-   lots.push({
-    id:String(selected&&selected.id||('active-'+model)),
-    model,
-    number:selected?workLotNumber(selected.number):null,
-    codigoLoteOperacion:code,
-    createdAt:selected&&selected.createdAt||null,
-    updatedAt:selected&&selected.updatedAt||null,
-    tasks
-   });
-  }
-  lots.sort((a,b)=>a.model.localeCompare(b.model,'es'));
-  return sendJson(res,200,{ok:true,soloLectura:true,source:'active-state+work-lots',lots});
+   const code=String(row.codigoLoteOperacion||'').trim().toUpperCase()||(taskCodes.length===1?taskCodes[0]:'');
+   return {id:String(row.id),model,number:workLotNumber(row.number),codigoLoteOperacion:code,createdAt:row.createdAt||null,updatedAt:row.updatedAt||null,startedAt,active:true,activePatinadores:[...patinadores].sort((a,b)=>a.localeCompare(b,'es')),tasks};
+  }).sort((a,b)=>a.model.localeCompare(b.model,'es')||a.number-b.number);
+  return sendJson(res,200,{ok:true,soloLectura:true,source:'patinador-selections+work-lots',lots});
  }catch(e){console.error('Error consultando avance de patinadores:',e);return sendJson(res,503,{ok:false,error:'No se pudieron leer los lotes de trabajo. No se modificó ningún dato.'});}
 }
-
 if(p==='/api/work-lots/overview'&&req.method==='GET'){
  const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token);
  if(!authorized(req)||!session)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
@@ -602,7 +586,7 @@ if(p==='/api/work-lots'&&['GET','POST','PUT'].includes(req.method)){
    const rememberedIsDifferentLot=!!(rememberedRow&&activeCodes.size&&rememberedCodes.size&&![...activeCodes].some(code=>rememberedCodes.has(code)));
    // Conservar la selección si corresponde al mismo lote; reemplazarla solo si el código activo demuestra que es otro lote.
    row=rememberedRow&&!rememberedIsDifferentLot?rememberedRow:ensureWorkLot(rows,state,model,actor);
-   if(!remembered||remembered.lotId!==String(row.id))rememberWorkLotSelection(actor,model,row);
+   if(!remembered||remembered.lotId!==String(row.id))rememberWorkLotSelection(actor,model,row,false);
   }catch(e){return sendJson(res,503,{ok:false,error:e.message||'No se pudo recuperar el lote de trabajo.'});}
   if(action==='GET')return sendJson(res,200,workLotResponse(row,user,actor,rows));
   if(action==='POST'){
@@ -612,7 +596,7 @@ if(p==='/api/work-lots'&&['GET','POST','PUT'].includes(req.method)){
     const code=String(body.code||'').trim().toUpperCase();if(!/^[A-Z0-9-]{2,40}$/.test(code))return sendJson(res,400,{ok:false,error:'El número de lote debe tener entre 2 y 40 caracteres: letras, números o guion.'});
     if(!(selected.tasks||[]).some(task=>workLotUserCanTask(user,actor,task)))return sendJson(res,403,{ok:false,error:'No tienes puestos asignados en este lote.'});
     selected.codigoLoteOperacion=code;selected.codigoOperacionActualizadoPor=user.name||actor;selected.codigoOperacionActualizadoEn=new Date().toLocaleString('es-CO');selected.updatedAt=new Date().toISOString()+'#'+require('crypto').randomUUID();writeWorkLots(rows);
-    rememberWorkLotSelection(actor,model,selected);
+    rememberWorkLotSelection(actor,model,selected,true);
     return sendJson(res,200,workLotResponse(selected,user,actor,rows));
    }
    if(body.action==='select'){
@@ -634,7 +618,7 @@ if(p==='/api/work-lots'&&['GET','POST','PUT'].includes(req.method)){
    if(selected.updatedAt!==body.version)return sendJson(res,409,{ok:false,error:'Otro usuario guardó cambios en este lote. Actualiza antes de continuar.'});
    let merged;try{merged=validateWorkLot(selected.tasks||[],body.tasks,user,actor);}catch(e){return sendJson(res,403,{ok:false,error:e.message||'No se pudo validar el cambio.'});}
    selected.tasks=merged;selected.updatedAt=new Date().toISOString()+'#'+require('crypto').randomUUID();writeWorkLots(rows);
-   rememberWorkLotSelection(actor,model,selected);
+   rememberWorkLotSelection(actor,model,selected,true);
    return sendJson(res,200,workLotResponse(selected,user,actor,rows));
   }
  };
