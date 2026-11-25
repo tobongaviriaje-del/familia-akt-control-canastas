@@ -105,3 +105,22 @@ test('el endpoint de avance entrega solo el lote vigente por modelo y no altera 
  }
  assert.equal(fs.readFileSync(path.join(dataDir,'state.json'),'utf8'),before,'el endpoint GET no debe borrar ni cambiar usuarios o datos después de iniciar sesión');
 });
+
+
+test('Patinadores abre el lote activo del modelo y no una selección histórica recordada',async t=>{
+ const temp=fs.mkdtempSync(path.join(os.tmpdir(),'akt-active-skater-lot-'));const dataDir=path.join(temp,'data');fs.mkdirSync(dataDir,{recursive:true});fs.mkdirSync(path.join(temp,'public'));
+ fs.copyFileSync(path.join(repoRoot,'server.js'),path.join(temp,'server.js'));
+ const activeTask={id:'cr4-today-1',standardNKD:true,standardMoto:'CR4 125',codigoLoteOperacion:'CR4-HOY',ean:'770000000125',producto:'Referencia CR4 125 de hoy',puesto:'PRE 1',cantidad:270,lote:270,entregado:35,entregas:[{id:'delivery-today',cantidad:35,patinador:'Patinador Uno'}],estado:'Parcial'};
+ const historicTask={id:'cr4-historic-1',standardNKD:true,standardMoto:'CR4 125',codigoLoteOperacion:'CR4-ANTERIOR',ean:'770000000124',producto:'Referencia histórica',puesto:'PRE 1',cantidad:270,lote:270,entregado:120,entregas:[{id:'delivery-old',cantidad:120,patinador:'Patinador Uno'}],estado:'Parcial'};
+ fs.writeFileSync(path.join(dataDir,'state.json'),JSON.stringify({users:{patinador1:{pass:'TestDia123',role:'Patinador',name:'Patinador Uno',puestos:['PRE 1']}},tasks:[activeTask]}));
+ fs.writeFileSync(path.join(dataDir,'work-lots.json'),JSON.stringify([{id:'cr4-historic-lot',model:'CR4 125',number:91,codigoLoteOperacion:'CR4-ANTERIOR',tasks:[historicTask]}]));
+ fs.writeFileSync(path.join(dataDir,'work-lot-selections.json'),JSON.stringify({'patinador1|CR4 125':{lotId:'cr4-historic-lot',updatedAt:'2026-11-23T10:00:00.000Z'}}));
+ const port=await freePort(),baseUrl='http://127.0.0.1:'+port;const child=spawn(process.execPath,['server.js'],{cwd:temp,env:{...process.env,PORT:String(port)},stdio:'ignore'});
+ t.after(async()=>{child.kill('SIGTERM');await new Promise(resolve=>{if(child.exitCode!==null)return resolve();child.once('exit',resolve);setTimeout(resolve,1500).unref();});fs.rmSync(temp,{recursive:true,force:true});});
+ await waitForHealth(baseUrl,child);
+ const login=await request(baseUrl,'/api/login',{method:'POST',body:{username:'patinador1',password:'TestDia123'}});assert.equal(login.status,200);const token=login.data.token;
+ const opened=await request(baseUrl,'/api/work-lots?model=CR4%20125&username=patinador1',{token});
+ assert.equal(opened.status,200,JSON.stringify(opened.data));assert.equal(opened.data.lot.codigoLoteOperacion,'CR4-HOY');assert.equal(opened.data.tasks.length,1);assert.equal(opened.data.tasks[0].id,'cr4-today-1');assert.equal(opened.data.tasks[0].entregado,35);
+ const rows=JSON.parse(fs.readFileSync(path.join(dataDir,'work-lots.json'),'utf8'));assert.equal(rows.length,2);assert.equal(rows.find(x=>x.id==='cr4-historic-lot').tasks[0].entregado,120);assert.equal(rows.find(x=>x.id===opened.data.lot.id).number,92);
+ const selection=JSON.parse(fs.readFileSync(path.join(dataDir,'work-lot-selections.json'),'utf8'));assert.equal(selection['patinador1|CR4 125'].lotId,opened.data.lot.id);
+});
