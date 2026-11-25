@@ -490,16 +490,15 @@ if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
    const row=savedLots.find(candidate=>candidate&&workLotModel(candidate.model)===model&&String(candidate.id)===String(selection.lotId));
    if(!row||!Array.isArray(row.tasks)||!row.tasks.length)continue;
    const pending=row.tasks.reduce((sum,task)=>sum+Math.max(0,workLotTarget(task)-workLotNumber(task&&task.entregado)),0);
-   const hasRealDelivery=row.tasks.some(task=>workLotNumber(task&&task.entregado)>0);
-   // GET solo recuerda la pantalla abierta: no inicia un lote. Inicio real:
-   // selección explícita o primera entrega guardada. Un lote completo sale.
-   if(!selection.startedAt&&!hasRealDelivery)continue;
+   // GET solo recuerda la pantalla abierta: no inicia un lote.
+   // Solo una selección explícita o un guardado de trabajo marca el inicio.
+   if(!selection.startedAt)continue;
    if(pending<=0)continue;
    const lotId=String(row.id);
-   if(!activeByLot.has(lotId))activeByLot.set(lotId,{row,model,patinadores:new Set(),startedAt:selection.updatedAt||null});
+   if(!activeByLot.has(lotId))activeByLot.set(lotId,{row,model,patinadores:new Set(),startedAt:selection.startedAt||selection.updatedAt||null});
    const entry=activeByLot.get(lotId);
    entry.patinadores.add(String(patinador.name||username));
-   if(selection.updatedAt&&(!entry.startedAt||String(selection.updatedAt)<String(entry.startedAt)))entry.startedAt=selection.updatedAt;
+   if(selection.startedAt&&(!entry.startedAt||String(selection.startedAt)<String(entry.startedAt)))entry.startedAt=selection.startedAt;
   }
   const lots=[...activeByLot.values()].map(({row,model,patinadores,startedAt})=>{
    const tasks=(Array.isArray(row.tasks)?row.tasks:[]).map(task=>({...task,standardNKD:true,standardMoto:model}));
