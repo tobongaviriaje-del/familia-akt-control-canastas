@@ -69,7 +69,10 @@ test('el endpoint de avance entrega solo el lote vigente por modelo y no altera 
   supervisor:{pass:'Supervisor123',role:'Supervisor',name:'Supervisor'},
   coordinator:{pass:'Coordinator123',role:'Coordinador',name:'Coordinador'},
   fredy:{pass:'FredyTest123',role:'Admin',name:'Fredy'},
-  juanesteban:{pass:'RetiredTest123',role:'Patinador',name:'Usuario histórico'}
+  juanesteban:{pass:'RetiredTest123',role:'Patinador',name:'Usuario histórico'},
+  patinadorNkd:{pass:'NkdTest123',role:'Patinador',name:'Patinador NKD'},
+  patinadorChr:{pass:'ChrTest123',role:'Patinador',name:'Patinador CHR'},
+  patinadorCr4:{pass:'Cr4Test123',role:'Patinador',name:'Patinador CR4'}
  },tasks:[
   {id:'nkd-active-1',standardNKD:true,standardMoto:'NKD',puesto:'PRE 1',cantidad:100,entregado:20},
   {id:'nkd-active-2',standardNKD:true,standardMoto:'NKD',puesto:'PRE 2',cantidad:100,entregado:0},
@@ -81,10 +84,20 @@ test('el endpoint de avance entrega solo el lote vigente por modelo y no altera 
   {id:'nkd-current',model:'NKD',number:12,codigoLoteOperacion:'NKD-CURRENT',tasks:[{id:'nkd-active-1',cantidad:100,entregado:20},{id:'nkd-active-2',cantidad:100,entregado:0}]},
   {id:'nkd-future-empty',model:'NKD',number:13,codigoLoteOperacion:'NKD-FUTURE',tasks:[{id:'nkd-not-active',cantidad:700}]},
   {id:'chr-current',model:'CHR',number:4,codigoLoteOperacion:'CHR-CURRENT',tasks:[{id:'chr-active-1',cantidad:80,entregado:10}]},
-  {id:'cr4-historic',model:'CR4 125',number:90,codigoLoteOperacion:'CR4-HIST',tasks:[{id:'cr4-historic-1',cantidad:900}]}
+  {id:'cr4-historic',model:'CR4 125',number:90,codigoLoteOperacion:'CR4-HIST',tasks:[{id:'cr4-historic-1',cantidad:900}]},
+  {id:'active-CR4 125',model:'CR4 125',number:91,codigoLoteOperacion:'CR4-TODAY',tasks:[{id:'cr4-active-1',cantidad:100,entregado:25}]},
+  {id:'prepared-nkd',model:'NKD',number:14,codigoLoteOperacion:'NKD-PREP',tasks:[{id:'nkd-prepared',cantidad:200,entregado:0}]},
+  {id:'completed-chr',model:'CHR',number:5,codigoLoteOperacion:'CHR-DONE',tasks:[{id:'chr-completed',cantidad:50,entregado:50}]}
  ];
  fs.writeFileSync(path.join(dataDir,'state.json'),JSON.stringify(state));
  fs.writeFileSync(path.join(dataDir,'work-lots.json'),JSON.stringify(workLots));
+ fs.writeFileSync(path.join(dataDir,'work-lot-selections.json'),JSON.stringify({
+  'patinadornkd|NKD':{lotId:'nkd-current',updatedAt:'2026-11-24T08:00:00.000Z',startedAt:'2026-11-24T08:00:00.000Z'},
+  'patinadorchr|CHR':{lotId:'chr-current',updatedAt:'2026-11-24T08:05:00.000Z',startedAt:'2026-11-24T08:05:00.000Z'},
+  'patinadorcr4|CR4 125':{lotId:'active-CR4 125',updatedAt:'2026-11-24T08:10:00.000Z',startedAt:'2026-11-24T08:10:00.000Z'},
+  'juanesteban|NKD':{lotId:'prepared-nkd',updatedAt:'2026-11-24T08:11:00.000Z',startedAt:null},
+  'juanesteban|CHR':{lotId:'completed-chr',updatedAt:'2026-11-24T08:12:00.000Z',startedAt:'2026-11-24T08:12:00.000Z'}
+ }));
   const port=await freePort(),baseUrl='http://127.0.0.1:'+port;const child=spawn(process.execPath,['server.js'],{cwd:temp,env:{...process.env,PORT:String(port)},stdio:'ignore'});
  t.after(async()=>{child.kill('SIGTERM');await new Promise(resolve=>{if(child.exitCode!==null)return resolve();child.once('exit',resolve);setTimeout(resolve,1500).unref();});fs.rmSync(temp,{recursive:true,force:true});});
  await waitForHealth(baseUrl,child);
