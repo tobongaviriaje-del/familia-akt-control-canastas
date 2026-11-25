@@ -474,57 +474,40 @@ if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
  const state=readStateSnapshot(),viewer=state.users&&state.users[session.username],allowed=['Admin','Supervisor','Coordinador'];
  if(!viewer||!allowed.includes(viewer.role))return sendJson(res,403,{ok:false,error:'No tienes permiso para consultar el avance de los patinadores.'});
  try{
-  // state.tasks representa exclusivamente las tareas que siguen activas.
-  // Se usa como fuente de vigencia para no mostrar lotes históricos cerrados.
-  const activeTasksByModel=new Map();
-  const standardModels=new Set(['NKD','CR4 150','CR4 125','XRS-180','CHR']);
-  for(const task of Array.isArray(state.tasks)?state.tasks:[]){
-   if(!task||task.id==null)continue;
-   const model=workLotModel(task.standardMoto||task.modeloMoto||task.modeloEstandar||task.modelo||(task.standardNKD?'NKD':''));
-   if(!standardModels.has(model))continue;
-   if(!activeTasksByModel.has(model))activeTasksByModel.set(model,[]);
-   activeTasksByModel.get(model).push(task);
+  // La selección persistida por Patinadores es la señal de inicio real.
+  // No inferir actividad por coincidencia de IDs con state.tasks: los lotes
+  // guardados pueden tener instantáneas válidas con IDs distintos.
+  const savedLots=readWorkLots(),selections=readWorkLotSelections(),activeByLot=new Map();
+  const users=state.users&&typeof state.users==='object'?state.users:{};
+  for(const [selectionKey,selection] of Object.entries(selections)){
+   if(!selection||!selection.lotId)continue;
+   const split=selectionKey.lastIndexOf('|');
+   if(split<=0)continue;
+   const actorKey=workLotNorm(selectionKey.slice(0,split)),model=workLotModel(selectionKey.slice(split+1));
+   if(!actorKey||!['NKD','CR4 150','CR4 125','XRS-180','CHR'].includes(model))continue;
+   const username=Object.keys(users).find(key=>workLotNorm(key)===actorKey),patinador=username&&users[username];
+   if(!patinador||patinador.role!=='Patinador')continue;
+   const row=savedLots.find(candidate=>candidate&&workLotModel(candidate.model)===model&&String(candidate.id)===String(selection.lotId));
+   if(!row||!Array.isArray(row.tasks)||!row.tasks.length)continue;
+   const pending=row.tasks.reduce((sum,task)=>sum+Math.max(0,workLotTarget(task)-workLotNumber(task&&task.entregado)),0);
+   // Un lote completamente entregado deja de ser activo. Los preparados o
+   // históricos nunca aparecen porque no tienen una selección iniciada.
+   if(pending<=0)continue;
+   const lotId=String(row.id);
+   if(!activeByLot.has(lotId))activeByLot.set(lotId,{row,model,patinadores:new Set(),startedAt:selection.updatedAt||null});
+   const entry=activeByLot.get(lotId);
+   entry.patinadores.add(String(patinador.name||username));
+   if(selection.updatedAt&&(!entry.startedAt||String(selection.updatedAt)<String(entry.startedAt)))entry.startedAt=selection.updatedAt;
   }
-  const savedLots=readWorkLots(),lots=[];
-  for(const [model,activeTasks] of activeTasksByModel){
-   const activeIds=new Set(activeTasks.map(task=>String(task.id)));
-   let selected=null,selectedMatches=0;
-   for(const candidate of savedLots){
-    if(!candidate||workLotModel(candidate.model)!==model)continue;
-    const candidateTasks=Array.isArray(candidate.tasks)?candidate.tasks:[];
-    const matches=candidateTasks.reduce((count,task)=>count+(task&&task.id!=null&&activeIds.has(String(task.id))?1:0),0);
-    if(matches>selectedMatches||(matches>0&&matches===selectedMatches&&(!selected||workLotNumber(candidate.number)>workLotNumber(selected.number)))){
-     selected=candidate;selectedMatches=matches;
-    }
-   }
-   // Conserva las entregas del lote guardado, pero limita las referencias
-   // estrictamente a las que siguen activas en state.tasks. Si el lote todavía
-   // no tiene instantánea en work-lots, usa las tareas activas como respaldo.
-   const savedById=new Map((Array.isArray(selected&&selected.tasks)?selected.tasks:[]).filter(task=>task&&task.id!=null).map(task=>[String(task.id),task]));
-   const tasks=activeTasks.map(activeTask=>{
-    const saved=savedById.get(String(activeTask.id));
-    if(!saved)return activeTask;
-    const merged={...activeTask,...saved};
-    merged.codigoLoteOperacion=String(saved.codigoLoteOperacion||saved.loteCodigo||saved.codigoLote||activeTask.codigoLoteOperacion||activeTask.loteCodigo||activeTask.codigoLote||'').trim().toUpperCase();
-    return merged;
-   });
+  const lots=[...activeByLot.values()].map(({row,model,patinadores,startedAt})=>{
+   const tasks=(Array.isArray(row.tasks)?row.tasks:[]).map(task=>({...task,standardNKD:true,standardMoto:model}));
    const taskCodes=[...new Set(tasks.map(task=>String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase()).filter(Boolean))];
-   const code=String(selected&&selected.codigoLoteOperacion||'').trim().toUpperCase()||(taskCodes.length===1?taskCodes[0]:'');
-   lots.push({
-    id:String(selected&&selected.id||('active-'+model)),
-    model,
-    number:selected?workLotNumber(selected.number):null,
-    codigoLoteOperacion:code,
-    createdAt:selected&&selected.createdAt||null,
-    updatedAt:selected&&selected.updatedAt||null,
-    tasks
-   });
-  }
-  lots.sort((a,b)=>a.model.localeCompare(b.model,'es'));
-  return sendJson(res,200,{ok:true,soloLectura:true,source:'active-state+work-lots',lots});
+   const code=String(row.codigoLoteOperacion||'').trim().toUpperCase()||(taskCodes.length===1?taskCodes[0]:'');
+   return {id:String(row.id),model,number:workLotNumber(row.number),codigoLoteOperacion:code,createdAt:row.createdAt||null,updatedAt:row.updatedAt||null,startedAt,active:true,activePatinadores:[...patinadores].sort((a,b)=>a.localeCompare(b,'es')),tasks};
+  }).sort((a,b)=>a.model.localeCompare(b.model,'es')||a.number-b.number);
+  return sendJson(res,200,{ok:true,soloLectura:true,source:'patinador-selections+work-lots',lots});
  }catch(e){console.error('Error consultando avance de patinadores:',e);return sendJson(res,503,{ok:false,error:'No se pudieron leer los lotes de trabajo. No se modificó ningún dato.'});}
 }
-
 if(p==='/api/work-lots/overview'&&req.method==='GET'){
  const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token);
  if(!authorized(req)||!session)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
