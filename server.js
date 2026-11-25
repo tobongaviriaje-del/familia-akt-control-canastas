@@ -149,9 +149,9 @@ function writeWorkLotSelections(selections){
  fs.renameSync(tmp,WORK_LOT_SELECTIONS_FILE);
 }
 function workLotSelectionKey(username,model){return workLotNorm(username)+'|'+workLotModel(model);}
-function rememberWorkLotSelection(username,model,row){
- const selections=readWorkLotSelections();
- selections[workLotSelectionKey(username,model)]={lotId:String(row.id),updatedAt:new Date().toISOString()};
+function rememberWorkLotSelection(username,model,row,started=false){
+ const selections=readWorkLotSelections(),key=workLotSelectionKey(username,model),previous=selections[key]||{},now=new Date().toISOString();
+ selections[key]={lotId:String(row.id),updatedAt:now,startedAt:started?(previous.lotId===String(row.id)&&previous.startedAt?previous.startedAt:now):(previous.lotId===String(row.id)?previous.startedAt||null:null)};
  writeWorkLotSelections(selections);
 }
 const WORK_LOT_DELIVERY_FIELDS=['entregado','estado','entregas','entrega','canastasEntregadas','confirmacionesCanastas','correcciones'];
@@ -490,8 +490,10 @@ if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
    const row=savedLots.find(candidate=>candidate&&workLotModel(candidate.model)===model&&String(candidate.id)===String(selection.lotId));
    if(!row||!Array.isArray(row.tasks)||!row.tasks.length)continue;
    const pending=row.tasks.reduce((sum,task)=>sum+Math.max(0,workLotTarget(task)-workLotNumber(task&&task.entregado)),0);
-   // Un lote completamente entregado deja de ser activo. Los preparados o
-   // históricos nunca aparecen porque no tienen una selección iniciada.
+   const hasRealDelivery=row.tasks.some(task=>workLotNumber(task&&task.entregado)>0);
+   // GET solo recuerda la pantalla abierta: no inicia un lote. Inicio real:
+   // selección explícita o primera entrega guardada. Un lote completo sale.
+   if(!selection.startedAt&&!hasRealDelivery)continue;
    if(pending<=0)continue;
    const lotId=String(row.id);
    if(!activeByLot.has(lotId))activeByLot.set(lotId,{row,model,patinadores:new Set(),startedAt:selection.updatedAt||null});
@@ -585,7 +587,7 @@ if(p==='/api/work-lots'&&['GET','POST','PUT'].includes(req.method)){
    const rememberedIsDifferentLot=!!(rememberedRow&&activeCodes.size&&rememberedCodes.size&&![...activeCodes].some(code=>rememberedCodes.has(code)));
    // Conservar la selección si corresponde al mismo lote; reemplazarla solo si el código activo demuestra que es otro lote.
    row=rememberedRow&&!rememberedIsDifferentLot?rememberedRow:ensureWorkLot(rows,state,model,actor);
-   if(!remembered||remembered.lotId!==String(row.id))rememberWorkLotSelection(actor,model,row);
+   if(!remembered||remembered.lotId!==String(row.id))rememberWorkLotSelection(actor,model,row,false);
   }catch(e){return sendJson(res,503,{ok:false,error:e.message||'No se pudo recuperar el lote de trabajo.'});}
   if(action==='GET')return sendJson(res,200,workLotResponse(row,user,actor,rows));
   if(action==='POST'){
@@ -595,7 +597,7 @@ if(p==='/api/work-lots'&&['GET','POST','PUT'].includes(req.method)){
     const code=String(body.code||'').trim().toUpperCase();if(!/^[A-Z0-9-]{2,40}$/.test(code))return sendJson(res,400,{ok:false,error:'El número de lote debe tener entre 2 y 40 caracteres: letras, números o guion.'});
     if(!(selected.tasks||[]).some(task=>workLotUserCanTask(user,actor,task)))return sendJson(res,403,{ok:false,error:'No tienes puestos asignados en este lote.'});
     selected.codigoLoteOperacion=code;selected.codigoOperacionActualizadoPor=user.name||actor;selected.codigoOperacionActualizadoEn=new Date().toLocaleString('es-CO');selected.updatedAt=new Date().toISOString()+'#'+require('crypto').randomUUID();writeWorkLots(rows);
-    rememberWorkLotSelection(actor,model,selected);
+    rememberWorkLotSelection(actor,model,selected,true);
     return sendJson(res,200,workLotResponse(selected,user,actor,rows));
    }
    if(body.action==='select'){
@@ -617,7 +619,7 @@ if(p==='/api/work-lots'&&['GET','POST','PUT'].includes(req.method)){
    if(selected.updatedAt!==body.version)return sendJson(res,409,{ok:false,error:'Otro usuario guardó cambios en este lote. Actualiza antes de continuar.'});
    let merged;try{merged=validateWorkLot(selected.tasks||[],body.tasks,user,actor);}catch(e){return sendJson(res,403,{ok:false,error:e.message||'No se pudo validar el cambio.'});}
    selected.tasks=merged;selected.updatedAt=new Date().toISOString()+'#'+require('crypto').randomUUID();writeWorkLots(rows);
-   rememberWorkLotSelection(actor,model,selected);
+   rememberWorkLotSelection(actor,model,selected,true);
    return sendJson(res,200,workLotResponse(selected,user,actor,rows));
   }
  };
