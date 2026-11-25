@@ -270,6 +270,15 @@ function ensureWorkLot(rows,state,model,username){
    overlap:(Array.isArray(candidate.tasks)?candidate.tasks:[]).reduce((n,t)=>n+(activeIds.has(String(t&&t.id||''))?1:0),0)
   })).filter(x=>x.overlap>0).sort((a,b)=>b.overlap-a.overlap||workLotNumber(b.candidate.number)-workLotNumber(a.candidate.number));
   if(matches.length)row=matches[0].candidate;
+  else{
+   const activeCodes=new Set(tasks.map(t=>String(t&&t.codigoLoteOperacion||'').trim().toUpperCase()).filter(Boolean));
+   const candidates=rows.filter(x=>x&&x.model===model);
+   const hasDifferentLotCode=activeCodes.size&&candidates.some(candidate=>{
+    const codes=new Set((candidate.tasks||[]).map(t=>String(t&&t.codigoLoteOperacion||'').trim().toUpperCase()).filter(Boolean));
+    return codes.size&&![...activeCodes].some(code=>codes.has(code));
+   });
+   if(!hasDifferentLotCode)row=candidates.sort((a,b)=>workLotNumber(b.number)-workLotNumber(a.number))[0]||null;
+  }
  }else{
   row=rows.filter(x=>x&&x.model===model).sort((a,b)=>workLotNumber(b.number)-workLotNumber(a.number))[0]||null;
  }
@@ -587,12 +596,12 @@ if(p==='/api/work-lots'&&['GET','POST','PUT'].includes(req.method)){
   const rows=readWorkLots();let row;
   try{
    const selections=readWorkLotSelections(),remembered=selections[workLotSelectionKey(actor,model)];
-   const hasActiveModelTasks=(Array.isArray(state.tasks)?state.tasks:[]).some(t=>t&&t.standardNKD&&workLotModel(t.standardMoto||(t.standardNKD?'NKD':''))===model);
-   // Si hay referencias activas, su lote real prevalece sobre una selección antigua guardada.
-   // La selección recordada solo se usa cuando no existe actividad activa para ese modelo.
-   row=hasActiveModelTasks
-    ?ensureWorkLot(rows,state,model,actor)
-    :(remembered&&rows.find(x=>x&&x.model===model&&x.id===remembered.lotId))||ensureWorkLot(rows,state,model,actor);
+   const rememberedRow=remembered&&rows.find(x=>x&&x.model===model&&x.id===remembered.lotId);
+   const activeCodes=new Set((Array.isArray(state.tasks)?state.tasks:[]).filter(t=>t&&t.standardNKD&&workLotModel(t.standardMoto||(t.standardNKD?'NKD':''))===model).map(t=>String(t&&t.codigoLoteOperacion||'').trim().toUpperCase()).filter(Boolean));
+   const rememberedCodes=new Set((rememberedRow&&rememberedRow.tasks||[]).map(t=>String(t&&t.codigoLoteOperacion||'').trim().toUpperCase()).filter(Boolean));
+   const rememberedIsDifferentLot=!!(rememberedRow&&activeCodes.size&&rememberedCodes.size&&![...activeCodes].some(code=>rememberedCodes.has(code)));
+   // Conservar la selección si corresponde al mismo lote; reemplazarla solo si el código activo demuestra que es otro lote.
+   row=rememberedRow&&!rememberedIsDifferentLot?rememberedRow:ensureWorkLot(rows,state,model,actor);
    if(!remembered||remembered.lotId!==String(row.id))rememberWorkLotSelection(actor,model,row);
   }catch(e){return sendJson(res,503,{ok:false,error:e.message||'No se pudo recuperar el lote de trabajo.'});}
   if(action==='GET')return sendJson(res,200,workLotResponse(row,user,actor,rows));
