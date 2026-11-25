@@ -87,7 +87,8 @@ test('el endpoint de avance entrega solo el lote vigente por modelo y no altera 
   {id:'cr4-historic',model:'CR4 125',number:90,codigoLoteOperacion:'CR4-HIST',tasks:[{id:'cr4-historic-1',cantidad:900}]},
   {id:'active-CR4 125',model:'CR4 125',number:91,codigoLoteOperacion:'CR4-TODAY',tasks:[{id:'cr4-active-1',cantidad:100,entregado:25}]},
   {id:'prepared-nkd',model:'NKD',number:14,codigoLoteOperacion:'NKD-PREP',tasks:[{id:'nkd-prepared',cantidad:200,entregado:0}]},
-  {id:'completed-chr',model:'CHR',number:5,codigoLoteOperacion:'CHR-DONE',tasks:[{id:'chr-completed',cantidad:50,entregado:50}]}
+  {id:'completed-chr',model:'CHR',number:5,codigoLoteOperacion:'CHR-DONE',tasks:[{id:'chr-completed',cantidad:50,entregado:50}]},
+  {id:'stale-xrs',model:'XRS-180',number:7,codigoLoteOperacion:'XRS-OLD',tasks:[{id:'xrs-stale',cantidad:100,entregado:30}]}
  ];
  fs.writeFileSync(path.join(dataDir,'state.json'),JSON.stringify(state));
  fs.writeFileSync(path.join(dataDir,'work-lots.json'),JSON.stringify(workLots));
@@ -96,7 +97,8 @@ test('el endpoint de avance entrega solo el lote vigente por modelo y no altera 
   'patinadorchr|CHR':{lotId:'chr-current',updatedAt:'2026-11-24T08:05:00.000Z',startedAt:'2026-11-24T08:05:00.000Z'},
   'patinadorcr4|CR4 125':{lotId:'active-CR4 125',updatedAt:'2026-11-24T08:10:00.000Z',startedAt:'2026-11-24T08:10:00.000Z'},
   'juanesteban|NKD':{lotId:'prepared-nkd',updatedAt:'2026-11-24T08:11:00.000Z',startedAt:null},
-  'juanesteban|CHR':{lotId:'completed-chr',updatedAt:'2026-11-24T08:12:00.000Z',startedAt:'2026-11-24T08:12:00.000Z'}
+  'juanesteban|CHR':{lotId:'completed-chr',updatedAt:'2026-11-24T08:12:00.000Z',startedAt:'2026-11-24T08:12:00.000Z'},
+  'juanesteban|XRS-180':{lotId:'stale-xrs',updatedAt:'2026-11-24T08:13:00.000Z',startedAt:null}
  }));
   const port=await freePort(),baseUrl='http://127.0.0.1:'+port;const child=spawn(process.execPath,['server.js'],{cwd:temp,env:{...process.env,PORT:String(port)},stdio:'ignore'});
  t.after(async()=>{child.kill('SIGTERM');await new Promise(resolve=>{if(child.exitCode!==null)return resolve();child.once('exit',resolve);setTimeout(resolve,1500).unref();});fs.rmSync(temp,{recursive:true,force:true});});
