@@ -188,15 +188,24 @@ function workLotResponse(row,user,username,rows){
 }
 function validateWorkLot(saved,incoming,user,username){
  if(!Array.isArray(incoming))throw new Error('La lista de referencias no es válida.');
- const byId=new Map(incoming.map(x=>[String(x&&x.id),x]));
- if(byId.size!==incoming.length)throw new Error('Hay referencias repetidas.');
+ const byId=new Map();
+ for(const task of incoming){
+  const key=String(task&&task.id);
+  if(!byId.has(key))byId.set(key,[]);
+  byId.get(key).push(task);
+ }
+ const protectedFields=[...WORK_LOT_DELIVERY_FIELDS,...WORK_LOT_CAPACITY_FIELDS,...WORK_LOT_OPERATION_FIELDS];
  const result=[];
  for(const old of saved){
-  const key=String(old.id),candidate=byId.get(key);
-  if(!candidate){result.push(old);continue;}
-  byId.delete(key);
+  const key=String(old.id),candidates=byId.get(key);
+  if(!candidates||!candidates.length){result.push(old);continue;}
+  const oldReference=stableWorkString(withoutWork(old,protectedFields));
+  let candidateIndex=candidates.findIndex(task=>stableWorkString(withoutWork(task,protectedFields))===oldReference);
+  if(candidateIndex<0)candidateIndex=0;
+  const candidate=candidates.splice(candidateIndex,1)[0];
+  if(!candidates.length)byId.delete(key);
   if(!workLotUserCanTask(user,username,old))throw new Error('No tienes permiso para modificar este puesto.');
-  if(stableWorkString(withoutWork(old,[...WORK_LOT_DELIVERY_FIELDS,...WORK_LOT_CAPACITY_FIELDS,...WORK_LOT_OPERATION_FIELDS]))!==stableWorkString(withoutWork(candidate,[...WORK_LOT_DELIVERY_FIELDS,...WORK_LOT_CAPACITY_FIELDS,...WORK_LOT_OPERATION_FIELDS])))throw new Error('No puedes modificar las referencias ni sus cantidades originales.');
+  if(stableWorkString(withoutWork(old,protectedFields))!==stableWorkString(withoutWork(candidate,protectedFields)))throw new Error('No puedes modificar las referencias ni sus cantidades originales.');
   const target=workLotTarget(old),oldDelivered=workLotNumber(old.entregado),newDelivered=workLotNumber(candidate.entregado);
   const oldEvents=Array.isArray(old.entregas)?old.entregas:[],newEvents=Array.isArray(candidate.entregas)?candidate.entregas:[];
   const oldConf=Array.isArray(old.confirmacionesCanastas)?old.confirmacionesCanastas:[],newConf=Array.isArray(candidate.confirmacionesCanastas)?candidate.confirmacionesCanastas:[];
@@ -248,7 +257,7 @@ function validateWorkLot(saved,incoming,user,username){
   }
   result.push(merged);
  }
- if(byId.size)throw new Error('La lista contiene referencias que no pertenecen a este lote.');
+ if([...byId.values()].some(tasks=>tasks.length))throw new Error('La lista contiene referencias que no pertenecen a este lote.');
  return result;
 }
 function withoutWork(value,fields){const copy={...(value||{})};for(const f of fields)delete copy[f];return copy;}
