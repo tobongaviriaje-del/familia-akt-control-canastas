@@ -530,6 +530,54 @@ if(p==='/api/work-lots/overview'&&req.method==='GET'){
  }catch(e){console.error('Error consultando lote en modo lectura:',e);return sendJson(res,500,{ok:false,error:'No se pudo consultar el lote.'});}
 }
 
+if(p==='/api/admin/work-lots/diagnostic-cr4'&&req.method==='GET'){
+ const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token);
+ if(!authorized(req)||!session)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
+ let state;
+ try{state=JSON.parse(fs.readFileSync(STATE_FILE,'utf8'));}catch(e){return sendJson(res,503,{ok:false,error:'No se pudo verificar el acceso administrativo.'});}
+ const viewer=state.users&&state.users[session.username];
+ if(!viewer||viewer.role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo Admin puede consultar este diagnóstico.'});
+ const model=workLotModel(url.searchParams.get('model')),code=String(url.searchParams.get('code')||'').trim().toUpperCase();
+ if(model!=='CR4 150'||code!=='KK848A')return sendJson(res,400,{ok:false,error:'Este diagnóstico está limitado a CR4 150 / KK848A.'});
+ try{
+  const rows=readWorkLots().filter(x=>x&&workLotModel(x.model)==='CR4 150');
+  const matches=rows.filter(row=>{
+   const header=String(row.codigoLoteOperacion||'').trim().toUpperCase();
+   const codes=(Array.isArray(row.tasks)?row.tasks:[]).map(t=>String(t&&(t.codigoLoteOperacion||t.loteCodigo||t.codigoLote)||'').trim().toUpperCase());
+   return header===code||codes.includes(code);
+  });
+  if(!matches.length)return sendJson(res,404,{ok:false,error:'No se encontró CR4 150 / KK848A en los lotes guardados.'});
+  const summaries=[];
+  for(const row of matches){
+   const tasks=Array.isArray(row.tasks)?row.tasks:[];
+   const ids=new Map(),referenceKeys=new Map(),positions={},eventMismatches=[];
+   const totals={references:tasks.length,targetUnits:0,deliveredUnits:0,pendingUnits:0,deliveryEvents:0,deliveryEventUnits:0,correctionUnits:0,netEventUnits:0,overTarget:0,missingIds:0,eventMismatches:0};
+   for(const task of tasks){
+    const id=String(task&&task.id||'').trim();
+    if(!id)totals.missingIds++;
+    else ids.set(id,(ids.get(id)||0)+1);
+    const key=workLotReferenceKey(task);referenceKeys.set(key,(referenceKeys.get(key)||0)+1);
+    const position=String(task&&task.puesto||'Sin puesto').trim()||'Sin puesto';
+    if(!positions[position])positions[position]={references:0,targetUnits:0,deliveredUnits:0,pendingUnits:0};
+    const target=Math.max(0,workLotTarget(task)),delivered=workLotNumber(task&&task.entregado);
+    const events=Array.isArray(task&&task.entregas)?task.entregas:[];
+    const corrections=Array.isArray(task&&task.correcciones)?task.correcciones:[];
+    const eventUnits=events.reduce((n,event)=>n+Math.max(0,workLotNumber(event&&event.cantidad)),0);
+    const correctionUnits=corrections.reduce((n,event)=>n+Math.max(0,workLotNumber(event&&event.unidades)),0);
+    totals.targetUnits+=target;totals.deliveredUnits+=delivered;totals.pendingUnits+=Math.max(0,target-delivered);
+    totals.deliveryEvents+=events.length;totals.deliveryEventUnits+=eventUnits;totals.correctionUnits+=correctionUnits;totals.netEventUnits+=eventUnits-correctionUnits;
+    if(delivered>target)totals.overTarget++;
+    if(delivered!==eventUnits-correctionUnits||delivered>target){totals.eventMismatches++;if(eventMismatches.length<25)eventMismatches.push({referenceId:id,position,target,delivered,eventUnits,correctionUnits,netEventUnits:eventUnits-correctionUnits});}
+    positions[position].references++;positions[position].targetUnits+=target;positions[position].deliveredUnits+=delivered;positions[position].pendingUnits+=Math.max(0,target-delivered);
+   }
+   const duplicateIds=[...ids.entries()].filter(([,count])=>count>1).map(([id,count])=>({id,count}));
+   const duplicateReferenceKeys=[...referenceKeys.entries()].filter(([key,count])=>count>1).map(([key,count])=>({key,count}));
+   summaries.push({lot:{id:row.id,number:row.number,headerCode:String(row.codigoLoteOperacion||''),references:tasks.length},totals,positions,duplicateIds,duplicateReferenceKeys,eventMismatches});
+  }
+  return sendJson(res,200,{ok:true,soloLectura:true,model:'CR4 150',requestedCode:code,lots:summaries});
+ }catch(e){console.error('Error en diagnóstico de solo lectura CR4 150 KK848A:',e);return sendJson(res,500,{ok:false,error:'No se pudo consultar el diagnóstico del lote.'});}
+}
+
 if(p==='/api/admin/work-lots/diagnostic'&&req.method==='GET'){
  const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token);
  if(!authorized(req)||!session)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
