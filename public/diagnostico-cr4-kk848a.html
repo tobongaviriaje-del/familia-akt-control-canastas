@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Diagnóstico AKT · CR4 150 / KK848A</title>
+<style>
+body{font:16px system-ui,sans-serif;max-width:900px;margin:32px auto;padding:0 16px;color:#17202a}
+button{padding:12px 18px;border:0;border-radius:8px;background:#174ea6;color:white;font-weight:600}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f3f5f7;padding:16px;border-radius:8px;min-height:80px}
+.note{color:#555}
+</style></head>
+<body>
+<h1>Diagnóstico AKT · CR4 150 / KK848A</h1>
+<p class="note">Consulta protegida de solo lectura. No modifica referencias, cantidades ni entregas.</p>
+<button id="run">Consultar diagnóstico</button>
+<p id="status" role="status"></p><pre id="result">Pulsa “Consultar diagnóstico”.</pre>
+<script>
+const button=document.getElementById('run'),status=document.getElementById('status'),output=document.getElementById('result');
+button.addEventListener('click',async()=>{
+ const token=sessionStorage.getItem('cc_session_token');
+ if(!token){status.textContent='No se encontró una sesión activa en esta pestaña. Inicia sesión en AKT en esta misma pestaña y vuelve a esta página.';return;}
+ button.disabled=true;status.textContent='Consultando lote…';output.textContent='';
+ try{
+  const response=await fetch('/api/admin/work-lots/diagnostic-cr4?model=CR4%20150&code=KK848A',{method:'GET',cache:'no-store',headers:{Authorization:'Bearer '+token,Accept:'application/json'}});
+  const data=await response.json().catch(()=>({ok:false,error:'El servidor no devolvió JSON.'}));
+  output.textContent=JSON.stringify(data,null,2);
+  status.textContent=response.ok&&data.ok?'Diagnóstico recibido. Copia el resultado y envíalo para revisar los tres puestos.':'No se pudo completar la consulta: '+(data.error||('HTTP '+response.status));
+ }catch(error){status.textContent='Error de conexión. Intenta nuevamente desde la aplicación AKT.';output.textContent=String(error);}
+ finally{button.disabled=false;}
+});
+</script></body></html>
