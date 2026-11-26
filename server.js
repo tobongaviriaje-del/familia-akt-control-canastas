@@ -550,8 +550,8 @@ if(p==='/api/admin/work-lots/diagnostic-cr4'&&req.method==='GET'){
   const summaries=[];
   for(const row of matches){
    const tasks=Array.isArray(row.tasks)?row.tasks:[];
-   const ids=new Map(),referenceKeys=new Map(),positions={};
-   const totals={references:tasks.length,targetUnits:0,deliveredUnits:0,pendingUnits:0,deliveryEvents:0,deliveryEventUnits:0,correctionUnits:0,netEventUnits:0,overTarget:0,missingIds:0};
+   const ids=new Map(),referenceKeys=new Map(),positions={},eventMismatches=[];
+   const totals={references:tasks.length,targetUnits:0,deliveredUnits:0,pendingUnits:0,deliveryEvents:0,deliveryEventUnits:0,correctionUnits:0,netEventUnits:0,overTarget:0,missingIds:0,eventMismatches:0};
    for(const task of tasks){
     const id=String(task&&task.id||'').trim();
     if(!id)totals.missingIds++;
@@ -567,11 +567,12 @@ if(p==='/api/admin/work-lots/diagnostic-cr4'&&req.method==='GET'){
     totals.targetUnits+=target;totals.deliveredUnits+=delivered;totals.pendingUnits+=Math.max(0,target-delivered);
     totals.deliveryEvents+=events.length;totals.deliveryEventUnits+=eventUnits;totals.correctionUnits+=correctionUnits;totals.netEventUnits+=eventUnits-correctionUnits;
     if(delivered>target)totals.overTarget++;
+    if(delivered!==eventUnits-correctionUnits||delivered>target){totals.eventMismatches++;if(eventMismatches.length<25)eventMismatches.push({referenceId:id,position,target,delivered,eventUnits,correctionUnits,netEventUnits:eventUnits-correctionUnits});}
     positions[position].references++;positions[position].targetUnits+=target;positions[position].deliveredUnits+=delivered;positions[position].pendingUnits+=Math.max(0,target-delivered);
    }
    const duplicateIds=[...ids.entries()].filter(([,count])=>count>1).map(([id,count])=>({id,count}));
    const duplicateReferenceKeys=[...referenceKeys.entries()].filter(([key,count])=>count>1).map(([key,count])=>({key,count}));
-   summaries.push({lot:{id:row.id,number:row.number,headerCode:String(row.codigoLoteOperacion||''),references:tasks.length},totals,positions,duplicateIds,duplicateReferenceKeys});
+   summaries.push({lot:{id:row.id,number:row.number,headerCode:String(row.codigoLoteOperacion||''),references:tasks.length},totals,positions,duplicateIds,duplicateReferenceKeys,eventMismatches});
   }
   return sendJson(res,200,{ok:true,soloLectura:true,model:'CR4 150',requestedCode:code,lots:summaries});
  }catch(e){console.error('Error en diagnóstico de solo lectura CR4 150 KK848A:',e);return sendJson(res,500,{ok:false,error:'No se pudo consultar el diagnóstico del lote.'});}
