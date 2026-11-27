@@ -161,7 +161,7 @@ function stableWorkValue(v){if(Array.isArray(v))return v.map(stableWorkValue);if
 function stableWorkString(v){return JSON.stringify(stableWorkValue(v));}
 function workLotNumber(v){const n=Number(v);return Number.isFinite(n)?n:0;}
 function workLotModel(v){return String(v||'').trim().toUpperCase().replace(/VOGUE 180/g,'VOGE 180').replace(/VOGI 180/g,'VOGE 180').replace(/^CH$/,'CHR').replace(/^CR4[-_ ]?150$/,'CR4 150').replace(/^CR4[-_ ]?125$/,'CR4 125').replace(/^XRS[ _]?180$/,'XRS-180');}
-function workLotTarget(t){const lot=workLotNumber(t.lote),qty=workLotNumber(t.cantidad),cap=workLotNumber(t.cantidadCanasta),baskets=workLotNumber(t.numCanastas),unit=workLotNumber(t.cantidadUnidad);if(lot>1)return lot;if(qty>1)return qty;if(cap>0&&baskets>0)return cap*baskets;return unit>0?unit:(lot>0?lot:(cap>0?cap:qty));}
+function workLotTarget(t){if(t&&t.continuidadDeTareaId)return Math.max(0,workLotNumber(t.cantidad));const lot=workLotNumber(t.lote),qty=workLotNumber(t.cantidad),cap=workLotNumber(t.cantidadCanasta),baskets=workLotNumber(t.numCanastas),unit=workLotNumber(t.cantidadUnidad);if(lot>1)return lot;if(qty>1)return qty;if(cap>0&&baskets>0)return cap*baskets;return unit>0?unit:(lot>0?lot:(cap>0?cap:qty));}
 function readWorkLots(){try{if(!fs.existsSync(WORK_LOTS_FILE))return [];const data=JSON.parse(fs.readFileSync(WORK_LOTS_FILE,'utf8'));return Array.isArray(data)?data:[];}catch(e){console.error('No se pudieron leer los lotes de trabajo:',e.message);throw new Error('No se pudieron leer los lotes de trabajo.');}}
 function writeWorkLots(rows){fs.mkdirSync(DATA_DIR,{recursive:true});const tmp=WORK_LOTS_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(rows,null,2),{mode:0o600});fs.renameSync(tmp,WORK_LOTS_FILE);}
 function workLotNorm(v){return String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');}
@@ -172,6 +172,9 @@ function workLotBogotaDate(value){
  if(!Number.isFinite(timestamp))return '';
  return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(timestamp));
 }
+function workLotBogotaDateOffset(dateString,offset){const parts=String(dateString||'').split('-').map(Number);if(parts.length!==3||parts.some(x=>!Number.isFinite(x)))return '';return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(Date.UTC(parts[0],parts[1]-1,parts[2]+offset,12)));}
+function workLotIsCompleted(row){const tasks=Array.isArray(row&&row.tasks)?row.tasks:[];return tasks.length>0&&tasks.every(task=>workLotTarget(task)>0&&workLotNumber(task.entregado)>=workLotTarget(task));}
+function workLotRecentlyCompleted(row){if(!workLotIsCompleted(row))return false;const date=workLotBogotaDate(row.completedAt||row.updatedAt||''),today=workLotBogotaDate(new Date().toISOString());return !!date&&(date===today||date===workLotBogotaDateOffset(today,-1));}
 function workLotVisibleRows(row,rows){
  const sameModel=rows.filter(x=>x&&x.model===row.model);
  const today=workLotBogotaDate(new Date().toISOString());
@@ -537,20 +540,28 @@ if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
    entry.patinadores.add(String(patinador.name||username));
    if(selection.startedAt&&(!entry.startedAt||String(selection.startedAt)<String(entry.startedAt)))entry.startedAt=selection.startedAt;
   }
-  const lots=[...activeByLot.values()].map(({row,model,patinadores,startedAt})=>{
-   const activeCodes=activeCodesByModel.get(model)||new Set(),activeRefs=activeRefsByModel.get(model)||new Set();
-   const rowCode=String(row.codigoLoteOperacion||'').trim().toUpperCase();
-   const tasks=(Array.isArray(row.tasks)?row.tasks:[]).filter(task=>{
-    const code=String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase();
-    if(activeCodes.size)return rowCode&&activeCodes.has(rowCode)?(!code||activeCodes.has(code)):activeCodes.has(code);
-    const ean=String(task&&task.ean||'').trim().toUpperCase().replace(/\s+/g,''),position=workLotPosition(task&&task.puesto);
-    return !!(ean&&position&&activeRefs.has(ean+'|'+position));
-   }).map(task=>({...task,standardNKD:true,standardMoto:model}));
-   const taskCodes=[...new Set(tasks.map(task=>String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase()).filter(Boolean))];
-   const code=String(row.codigoLoteOperacion||'').trim().toUpperCase()||(taskCodes.length===1?taskCodes[0]:'');
-   return {id:String(row.id),model,number:workLotNumber(row.number),codigoLoteOperacion:code,createdAt:row.createdAt||null,updatedAt:row.updatedAt||null,startedAt,active:true,activePatinadores:[...patinadores].sort((a,b)=>a.localeCompare(b,'es')),tasks};
-  }).sort((a,b)=>a.model.localeCompare(b.model,'es')||a.number-b.number);
-  if(viewer.role==='Supervisor'){
+  for(const row of savedLots){
+    const model=workLotModel(row&&row.model),id=String(row&&row.id||'');
+    if(!id||!['NKD','CR4 150','CR4 125','XRS-180','CHR'].includes(model)||!workLotRecentlyCompleted(row)||activeByLot.has(id))continue;
+    const assigned=new Set();
+    for(const [username,user] of Object.entries(users))if(user&&user.role==='Patinador'&&(row.tasks||[]).some(task=>workLotUserCanTask(user,username,task)))assigned.add(String(user.name||username));
+    activeByLot.set(id,{row,model,patinadores:assigned,startedAt:row.createdAt||row.updatedAt||null,completed:true});
+   }
+   const lots=[...activeByLot.values()].map(({row,model,patinadores,startedAt,completed})=>{
+    const activeCodes=activeCodesByModel.get(model)||new Set(),activeRefs=activeRefsByModel.get(model)||new Set();
+    const rowCode=String(row.codigoLoteOperacion||'').trim().toUpperCase();
+    const sourceTasks=Array.isArray(row.tasks)?row.tasks:[];
+    const tasks=(completed?sourceTasks:sourceTasks.filter(task=>{
+     const code=String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase();
+     if(activeCodes.size)return rowCode&&activeCodes.has(rowCode)?(!code||activeCodes.has(code)):activeCodes.has(code);
+     const ean=String(task&&task.ean||'').trim().toUpperCase().replace(/\\s+/g,''),position=workLotPosition(task&&task.puesto);
+     return !!(ean&&position&&activeRefs.has(ean+'|'+position));
+    })).map(task=>({...task,standardNKD:true,standardMoto:model}));
+    const taskCodes=[...new Set(tasks.map(task=>String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase()).filter(Boolean))];
+    const code=String(row.codigoLoteOperacion||'').trim().toUpperCase()||(taskCodes.length===1?taskCodes[0]:'');
+    return {id:String(row.id),model,number:workLotNumber(row.number),codigoLoteOperacion:code,createdAt:row.createdAt||null,updatedAt:row.updatedAt||null,completedAt:row.completedAt||null,startedAt,active:!completed,completed:!!completed,activePatinadores:[...patinadores].sort((a,b)=>a.localeCompare(b,'es')),tasks};
+   }).sort((a,b)=>a.model.localeCompare(b.model,'es')||a.number-b.number);
+   if(viewer.role==='Supervisor'){
    const summaries=lots.map(lot=>{
     const tasks=Array.isArray(lot.tasks)?lot.tasks:[];
     const total=tasks.reduce((sum,task)=>sum+Math.max(0,workLotTarget(task)),0);
@@ -740,7 +751,7 @@ if(p==='/api/work-lots'&&['GET','POST','PUT'].includes(req.method)){
    const selected=rows.find(x=>x.model===model&&x.id===String(body.lotId));if(!selected)return sendJson(res,404,{ok:false,error:'El lote ya no existe. Actualiza la pantalla.'});
    if(selected.updatedAt!==body.version)return sendJson(res,409,{ok:false,error:'Otro usuario guardó cambios en este lote. Actualiza antes de continuar.'});
    let merged;try{merged=validateWorkLot(selected.tasks||[],body.tasks,user,actor);}catch(e){return sendJson(res,403,{ok:false,error:e.message||'No se pudo validar el cambio.'});}
-   selected.tasks=merged;selected.updatedAt=new Date().toISOString()+'#'+require('crypto').randomUUID();writeWorkLots(rows);
+   selected.tasks=merged;const savedAt=new Date().toISOString();if(workLotIsCompleted(selected)){if(!selected.completedAt)selected.completedAt=savedAt;}else delete selected.completedAt;selected.updatedAt=savedAt+'#'+require('crypto').randomUUID();writeWorkLots(rows);
    rememberWorkLotSelection(actor,model,selected,true);
    return sendJson(res,200,workLotResponse(selected,user,actor,rows));
   }
@@ -1002,12 +1013,14 @@ if(p==='/api/assistant/production-summary'&&req.method==='GET'){
    const previous=activeByModel.get(model);
    if(!previous||matches>previous.matches||(matches===previous.matches&&workLotNumber(candidate.number)>workLotNumber(previous.row.number)))activeByModel.set(model,{row:candidate,matches});
   }
-  const lots=[...activeByModel.values()].map(({row})=>{
-   const tasks=Array.isArray(row.tasks)?row.tasks:[];
-   const taskCodes=[...new Set(tasks.map(t=>String(t&&(t.codigoLoteOperacion||t.loteCodigo||t.codigoLote)||'').trim().toUpperCase()).filter(Boolean))];
-   const code=String(row.codigoLoteOperacion||'').trim().toUpperCase()||(taskCodes.length===1?taskCodes[0]:'');
-   return {id:String(row.id||''),model:workLotModel(row.model),number:workLotNumber(row.number),code,tasks};
-  }).sort((a,b)=>a.model.localeCompare(b.model,'es')||a.number-b.number);
+  const activeRows=[...activeByModel.values()].map(({row})=>row);
+   const recentCompleted=readWorkLots().filter(row=>workLotRecentlyCompleted(row)&&!activeRows.some(active=>String(active.id)===String(row.id)));
+   const lots=[...activeRows,...recentCompleted].map(row=>{
+    const tasks=(Array.isArray(row.tasks)?row.tasks:[]).map(task=>({...task,standardNKD:true,standardMoto:workLotModel(row.model)}));
+    const taskCodes=[...new Set(tasks.map(t=>String(t&&(t.codigoLoteOperacion||t.loteCodigo||t.codigoLote)||'').trim().toUpperCase()).filter(Boolean))];
+    const code=String(row.codigoLoteOperacion||'').trim().toUpperCase()||(taskCodes.length===1?taskCodes[0]:'');
+    return {id:String(row.id||''),model:workLotModel(row.model),number:workLotNumber(row.number),code,tasks,completed:workLotIsCompleted(row),completedAt:row.completedAt||null};
+   }).sort((a,b)=>a.model.localeCompare(b.model,'es')||a.number-b.number);
   const norm=v=>workLotNorm(v);
   const eventSignature=e=>String(e&&e.id||'')||JSON.stringify([e&&(e.patinador||e.username||e.usuario||e.nombrePatinador||e.nombre),e&&e.cantidad,e&&e.fechaHora,e&&e.metodo,e&&e.numeroOperacion,e&&e.observaciones,e&&e.canastasFisicas,e&&e.turno]);
   const taskEvents=task=>{
