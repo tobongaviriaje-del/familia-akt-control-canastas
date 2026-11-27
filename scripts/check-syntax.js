@@ -13,12 +13,12 @@ for (const file of files) {
 }
 
 const html = fs.readFileSync('public/index.html', 'utf8');
-const blocks = [...html.matchAll(/<script\\b([^>]*)>([\\s\\S]*?)<\\/script\\s*>/gi)];
+const blocks = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)];
 let inlineCount = 0;
 for (const [index, match] of blocks.entries()) {
   const attributes = match[1] || '';
   const source = match[2] || '';
-  if (/\\bsrc\\s*=/.test(attributes) || !source.trim()) continue;
+  if (/\bsrc\s*=/.test(attributes) || !source.trim()) continue;
   new vm.Script(source, { filename: 'public/index.html:inline-script-' + (index + 1) });
   inlineCount++;
 }
