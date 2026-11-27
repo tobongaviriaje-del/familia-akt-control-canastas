@@ -139,9 +139,10 @@ test('protege credenciales, cambios administrativos y cierre de jornada', async 
     token: patinadorToken, method: 'PUT',
     body: { users: { admin: { role: 'Patinador', pass: 'ROBBED' }, intruso: { role: 'Admin', pass: 'x' } } }
   });
-  assert.equal(patinadorProtectedWrite.status, 200);
-  assert.equal(patinadorProtectedWrite.data.users.admin.role, 'Admin');
-  assert.equal(patinadorProtectedWrite.data.users.intruso, undefined);
+  assert.equal(patinadorProtectedWrite.status, 403, 'un Patinador no debe escribir en el estado global');
+  const stateAfterPatinadorProtectedWrite = await request(baseUrl, '/api/state', { token: adminToken });
+  assert.equal(stateAfterPatinadorProtectedWrite.data.users.admin.role, 'Admin');
+  assert.equal(stateAfterPatinadorProtectedWrite.data.users.intruso, undefined);
 
   const patinadorTaskWrite = await request(baseUrl, '/api/state', {
     token: patinadorToken, method: 'PUT',
