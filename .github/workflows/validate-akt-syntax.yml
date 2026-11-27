@@ -1,4 +1,4 @@
-name: Validate AKT syntax
+name: Validate AKT code and lot dates
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
       - main
 
 jobs:
-  syntax:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -19,5 +19,5 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Validate server and browser JavaScript
-        run: node scripts/check-syntax.js
+      - name: Run syntax and production date tests
+        run: npm test
