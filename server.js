@@ -516,7 +516,7 @@ if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
    let currentTasks=[];
    if(activeCodes.size){
     const matchingCodes=new Set([...rowTaskCodes].filter(code=>activeCodes.has(code)));
-    if(rowCode&&activeCodes.has(rowCode))currentTasks=row.tasks;
+    if(rowCode&&activeCodes.has(rowCode))currentTasks=row.tasks.filter(task=>{const code=String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase();return !code||activeCodes.has(code);});
     else if(matchingCodes.size)currentTasks=row.tasks.filter(task=>matchingCodes.has(String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase()));
     else continue;
    }else{
@@ -542,7 +542,7 @@ if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
    const rowCode=String(row.codigoLoteOperacion||'').trim().toUpperCase();
    const tasks=(Array.isArray(row.tasks)?row.tasks:[]).filter(task=>{
     const code=String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase();
-    if(activeCodes.size)return rowCode&&activeCodes.has(rowCode)?true:activeCodes.has(code);
+    if(activeCodes.size)return rowCode&&activeCodes.has(rowCode)?(!code||activeCodes.has(code)):activeCodes.has(code);
     const ean=String(task&&task.ean||'').trim().toUpperCase().replace(/\s+/g,''),position=workLotPosition(task&&task.puesto);
     return !!(ean&&position&&activeRefs.has(ean+'|'+position));
    }).map(task=>({...task,standardNKD:true,standardMoto:model}));
