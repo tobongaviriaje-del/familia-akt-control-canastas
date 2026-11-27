@@ -9,8 +9,12 @@ assert(start >= 0 && end > start, 'No se encontraron las funciones de cálculo y
 
 const context = {};
 vm.createContext(context);
-vm.runInContext(source.slice(start, end) + '\nthis.logic = { workLotNumber, workLotTarget, workLotBogotaDate, workLotBogotaDateOffset, workLotIsCompleted, workLotRecentlyCompleted };', context);
+vm.runInContext(source.slice(start, end) + '\nthis.logic = { workLotNumber, workLotTarget, workLotBogotaDate, workLotBogotaDateOffset, workLotIsCompleted, workLotRecentlyCompleted, workLotModel, workLotActiveModels };', context);
 const logic = context.logic;
+
+const activeModels = logic.workLotActiveModels([{ standardMoto: 'NKD' }, { modelo: 'VOGE 180BES' }, { modeloMoto: 'CHR' }, {}]);
+assert.deepEqual([...activeModels].sort(), ['CHR', 'NKD', 'VOGE 180BES'].sort(), 'La inteligencia debe reconocer dinámicamente todos los modelos presentes en tareas activas');
+assert.equal(logic.workLotModel('VOGUE 180BES'), 'VOGE 180BES', 'Debe normalizar variantes de escritura de VOGE sin limitar el catálogo');
 
 const rowAt = (date, delivered = 10) => ({
   completedAt: date,
