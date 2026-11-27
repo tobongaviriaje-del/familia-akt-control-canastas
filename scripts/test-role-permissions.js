@@ -38,6 +38,43 @@ function fixture() {
   }, null, 2));
 }
 
+
+function multiFixture() {
+  const makeTask = (id, model, code, ean, position, skater, target, delivered) => {
+    const event = { patinador: skater, cantidad: delivered, fechaHora: '27/11/2026 08:00', metodo: 'manual', numeroOperacion: code, turno: 'Día' };
+    return { id, standardNKD: true, standardMoto: model, codigoLoteOperacion: code, ean,
+      producto: 'Referencia ' + id, puesto: position, cantidad: target, entregado: delivered,
+      estado: delivered >= target ? 'Entregada' : 'En proceso', entregas: [event], entrega: { ...event }, canastasEntregadas: 0 };
+  };
+  const nkdTasks = [
+    makeTask('nkd-1', 'NKD', 'KK711', '770000000101', 'PRE 1', 'Ana', 100, 50),
+    makeTask('nkd-2', 'NKD', 'KK711', '770000000102', 'PRE 2', 'Beto', 100, 20),
+  ];
+  const chrTasks = [
+    makeTask('chr-1', 'CHR', 'CH900', '770000000201', 'PRE 1', 'Ana', 200, 100),
+    makeTask('chr-2', 'CHR', 'CH900', '770000000202', 'PRE 2', 'Beto', 100, 25),
+  ];
+  const users = {
+    admin: { pass: 'Admin-test-2026!', role: 'Admin', name: 'Admin de prueba' },
+    coord: { pass: 'Coord-test-2026!', role: 'Coordinador', name: 'Coordinación' },
+    supervisor: { pass: 'Super-test-2026!', role: 'Supervisor', name: 'Supervisión' },
+    ana: { pass: 'Ana-test-2026!', role: 'Patinador', name: 'Ana', puestos: ['PRE 1'], areas: ['PRE'] },
+    beto: { pass: 'Beto-test-2026!', role: 'Patinador', name: 'Beto', puestos: ['PRE 2'], areas: ['PRE'] },
+  };
+  fs.writeFileSync(path.join(tempDir, 'state.json'), JSON.stringify({
+    users, tasks: [...nkdTasks, ...chrTasks], lpnCatalog: [], freeDeliveries: [],
+    estibasRecibidas: [], queuedStandardBatches: [], tareasArchivadas: [],
+  }, null, 2));
+  fs.writeFileSync(path.join(tempDir, 'work-lots.json'), JSON.stringify([
+    { id: 'lot-nkd', model: 'NKD', number: 711, codigoLoteOperacion: 'KK711', createdAt: '2026-11-27T12:00:00.000Z', updatedAt: '2026-11-27T12:00:00.000Z', tasks: nkdTasks },
+    { id: 'lot-chr', model: 'CHR', number: 900, codigoLoteOperacion: 'CH900', createdAt: '2026-11-27T12:00:00.000Z', updatedAt: '2026-11-27T12:00:00.000Z', tasks: chrTasks },
+  ], null, 2));
+  fs.writeFileSync(path.join(tempDir, 'work-lot-selections.json'), JSON.stringify({
+    'ana|NKD': { lotId: 'lot-nkd', startedAt: '2026-11-27T12:00:00.000Z', updatedAt: '2026-11-27T12:00:00.000Z' },
+    'beto|CHR': { lotId: 'lot-chr', startedAt: '2026-11-27T12:00:00.000Z', updatedAt: '2026-11-27T12:00:00.000Z' },
+  }, null, 2));
+}
+
 async function freePort() {
   return await new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -182,6 +219,50 @@ async function main() {
     method: 'POST', token: admin, body: { passDia: 'test-dia', passNoche: 'test-noche' },
   });
   assert.equal(adminAction.status, 200, 'Admin conserva funciones administrativas');
+
+
+  // Fixture aislado multi-lote: NKD + CHR, dos tareas y dos patinadores por lote.
+  // Los eventos se reflejan en entregas y entrega; deben contarse una sola vez.
+  multiFixture();
+  const beto = await login(base, 'beto', 'Beto-test-2026!');
+  const multiSupervisor = await request(base, '/api/admin/work-lots/progress', { token: supervisor });
+  assert.equal(multiSupervisor.status, 200);
+  assert.equal(multiSupervisor.data.lots.length, 2, 'Supervisor debe ver ambos lotes activos, incluido CHR');
+  const nkdSummary = multiSupervisor.data.lots.find(lot => lot.model === 'NKD');
+  const chrSummary = multiSupervisor.data.lots.find(lot => lot.model === 'CHR');
+  assert.ok(nkdSummary && chrSummary, 'Deben aparecer NKD y CHR');
+  assert.equal(nkdSummary.percentage, 35, 'NKD debe sumar dos tareas: 70/200');
+  assert.equal(chrSummary.percentage, 125 / 300 * 100, 'CHR debe sumar dos tareas: 125/300');
+  assert.deepEqual(nkdSummary.skaters.map(x => [x.name, x.percentage]), [['Ana', 50], ['Beto', 20]]);
+  assert.deepEqual(chrSummary.skaters.map(x => [x.name, x.percentage]), [['Ana', 50], ['Beto', 25]]);
+  for (const lot of multiSupervisor.data.lots) {
+    assert.equal(lot.totalUnits, undefined, 'Supervisor no recibe cantidades');
+    assert.equal(lot.tasks, undefined, 'Supervisor no recibe referencias ni tareas');
+  }
+
+  const multiAssistantSupervisor = await request(base, '/api/assistant/production-summary', { token: supervisor });
+  assert.equal(multiAssistantSupervisor.status, 200);
+  assert.equal(multiAssistantSupervisor.data.lots.length, 2, 'Asistente debe incluir ambos modelos');
+  assert.ok(multiAssistantSupervisor.data.lots.some(lot => lot.model === 'CHR'));
+  assert.ok(multiAssistantSupervisor.data.lots.every(lot => lot.totalUnits === undefined && lot.deliveredUnits === undefined));
+  assert.equal(multiAssistantSupervisor.data.skaters.length, 4, 'Asistente debe incluir ambos patinadores por modelo');
+  assert.ok(multiAssistantSupervisor.data.skaters.every(row => row.totalUnits === undefined && row.deliveredUnits === undefined));
+
+  const multiAnaAssistant = await request(base, '/api/assistant/production-summary', { token: skater });
+  assert.equal(multiAnaAssistant.status, 200);
+  assert.equal(multiAnaAssistant.data.summary.totalUnits, 300, 'Ana suma NKD y CHR en sus puestos');
+  assert.equal(multiAnaAssistant.data.summary.deliveredUnits, 150, 'Ana no duplica eventos');
+  assert.equal(multiAnaAssistant.data.summary.percentage, 50);
+  const multiBetoAssistant = await request(base, '/api/assistant/production-summary', { token: beto });
+  assert.equal(multiBetoAssistant.status, 200);
+  assert.equal(multiBetoAssistant.data.summary.totalUnits, 200);
+  assert.equal(multiBetoAssistant.data.summary.deliveredUnits, 45);
+  assert.equal(multiBetoAssistant.data.summary.percentage, 22.5);
+
+  const multiCoordinator = await request(base, '/api/admin/work-lots/progress', { token: coordinator });
+  assert.equal(multiCoordinator.status, 200);
+  assert.equal(multiCoordinator.data.lots.length, 2, 'Coordinación ve ambos lotes');
+  assert.ok(multiCoordinator.data.lots.every(lot => Array.isArray(lot.tasks)), 'Coordinación conserva detalle operativo');
 
   process.stdout.write('OK: integración HTTP, sesiones, permisos Admin/Coordinador/Supervisor/Patinador, porcentajes, asistente, fotos y escrituras restringidas.\n');
 }
