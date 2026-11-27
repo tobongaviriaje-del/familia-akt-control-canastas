@@ -1037,8 +1037,7 @@ if(p==='/api/state'&&req.method==='GET'){
  delete safe.patinadoresAuth;
  for(const user of Object.values(safe.users||{})){if(!user||typeof user!=='object')continue;delete user.pass;delete user.passDia;delete user.passNoche;}
  if(viewer.role==='Supervisor'){
-  const skaters=Object.fromEntries(Object.entries(safe.users||{}).filter(([,user])=>user&&user.role==='Patinador').map(([key,user])=>[key,{name:user.name||key,role:'Patinador'}]));
-  return sendJson(res,200,{users:skaters,tasks:[],lpnCatalog:[],queuedStandardBatches:[],freeDeliveries:[],estibasRecibidas:[],tareasArchivadas:[]});
+  return sendJson(res,200,{users:{},tasks:[],lpnCatalog:[],queuedStandardBatches:[],freeDeliveries:[],estibasRecibidas:[],tareasArchivadas:[]});
  }
  if(viewer.role==='Coordinador'){
   safe.users=Object.fromEntries(Object.entries(safe.users||{}).filter(([,user])=>user&&user.role==='Patinador').map(([key,user])=>[key,{name:user.name||key,role:'Patinador',puestos:Array.isArray(user.puestos)?user.puestos:[],areas:Array.isArray(user.areas)?user.areas:[],turno:user.turno||'Todos'}]));
