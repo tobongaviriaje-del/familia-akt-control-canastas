@@ -161,6 +161,7 @@ function stableWorkValue(v){if(Array.isArray(v))return v.map(stableWorkValue);if
 function stableWorkString(v){return JSON.stringify(stableWorkValue(v));}
 function workLotNumber(v){const n=Number(v);return Number.isFinite(n)?n:0;}
 function workLotModel(v){return String(v||'').trim().toUpperCase().replace(/VOGUE 180/g,'VOGE 180').replace(/VOGI 180/g,'VOGE 180').replace(/^CH$/,'CHR').replace(/^CR4[-_ ]?150$/,'CR4 150').replace(/^CR4[-_ ]?125$/,'CR4 125').replace(/^XRS[ _]?180$/,'XRS-180');}
+function workLotActiveModels(tasks){return new Set((Array.isArray(tasks)?tasks:[]).map(task=>workLotModel(task&&(task.standardMoto||task.modeloMoto||task.modeloEstandar||task.modelo||(task.standardNKD?'NKD':'')))).filter(Boolean));}
 function workLotTarget(t){if(t&&t.continuidadDeTareaId)return Math.max(0,workLotNumber(t.cantidad));const lot=workLotNumber(t.lote),qty=workLotNumber(t.cantidad),cap=workLotNumber(t.cantidadCanasta),baskets=workLotNumber(t.numCanastas),unit=workLotNumber(t.cantidadUnidad);if(lot>1)return lot;if(qty>1)return qty;if(cap>0&&baskets>0)return cap*baskets;return unit>0?unit:(lot>0?lot:(cap>0?cap:qty));}
 function readWorkLots(){try{if(!fs.existsSync(WORK_LOTS_FILE))return [];const data=JSON.parse(fs.readFileSync(WORK_LOTS_FILE,'utf8'));return Array.isArray(data)?data:[];}catch(e){console.error('No se pudieron leer los lotes de trabajo:',e.message);throw new Error('No se pudieron leer los lotes de trabajo.');}}
 function writeWorkLots(rows){fs.mkdirSync(DATA_DIR,{recursive:true});const tmp=WORK_LOTS_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(rows,null,2),{mode:0o600});fs.renameSync(tmp,WORK_LOTS_FILE);}
@@ -184,7 +185,8 @@ function workLotBogotaDateOffset(dateString,offset){
 function workLotIsCompleted(row){const tasks=Array.isArray(row&&row.tasks)?row.tasks:[];return tasks.length>0&&tasks.every(task=>workLotTarget(task)>0&&workLotNumber(task.entregado)>=workLotTarget(task));}
 function workLotRecentlyCompleted(row,now=new Date()){
  if(!workLotIsCompleted(row))return false;
- const date=workLotBogotaDate(row.completedAt||row.updatedAt||''),today=workLotBogotaDate(now.toISOString());
+ // updatedAt cambia con cualquier edición y no demuestra cuándo se completó un lote legado.
+ const date=workLotBogotaDate(row.completedAt||''),today=workLotBogotaDate(now.toISOString());
  return !!date&&(date===today||date===workLotBogotaDateOffset(today,-1));
 }
 function workLotVisibleRows(row,rows){
@@ -505,10 +507,10 @@ if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
   const users=state.users&&typeof state.users==='object'?state.users:{};
   // Limitar el tablero a códigos de lote que siguen activos en state.tasks.
   // Las instantáneas de work-lots pueden tener IDs distintos a las tareas activas.
-  const activeModels=new Set(['NKD','CR4 150','CR4 125','XRS-180','CHR']),activeCodesByModel=new Map(),activeRefsByModel=new Map();
+  const activeModels=workLotActiveModels(state.tasks),activeCodesByModel=new Map(),activeRefsByModel=new Map();
   for(const task of Array.isArray(state.tasks)?state.tasks:[]){
    const model=workLotModel(task&&(task.standardMoto||task.modeloMoto||task.modeloEstandar||task.modelo||(task.standardNKD?'NKD':'')));
-   if(!task||!activeModels.has(model))continue;
+   if(!task||!model)continue;
    const code=String(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote||'').trim().toUpperCase();
    if(code){if(!activeCodesByModel.has(model))activeCodesByModel.set(model,new Set());activeCodesByModel.get(model).add(code);}
    const ean=String(task.ean||'').trim().toUpperCase().replace(/\s+/g,'');
@@ -520,7 +522,7 @@ if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
    const split=selectionKey.lastIndexOf('|');
    if(split<=0)continue;
    const actorKey=workLotNorm(selectionKey.slice(0,split)),model=workLotModel(selectionKey.slice(split+1));
-   if(!actorKey||!['NKD','CR4 150','CR4 125','XRS-180','CHR'].includes(model))continue;
+   if(!actorKey||!activeModels.has(model))continue;
    const username=Object.keys(users).find(key=>workLotNorm(key)===actorKey),patinador=username&&users[username];
    if(!patinador||patinador.role!=='Patinador')continue;
    const row=savedLots.find(candidate=>candidate&&workLotModel(candidate.model)===model&&String(candidate.id)===String(selection.lotId));
