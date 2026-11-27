@@ -515,6 +515,36 @@ if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
    const code=String(row.codigoLoteOperacion||'').trim().toUpperCase()||(taskCodes.length===1?taskCodes[0]:'');
    return {id:String(row.id),model,number:workLotNumber(row.number),codigoLoteOperacion:code,createdAt:row.createdAt||null,updatedAt:row.updatedAt||null,startedAt,active:true,activePatinadores:[...patinadores].sort((a,b)=>a.localeCompare(b,'es')),tasks};
   }).sort((a,b)=>a.model.localeCompare(b.model,'es')||a.number-b.number);
+  if(viewer.role==='Supervisor'){
+   const summaries=lots.map(lot=>{
+    const tasks=Array.isArray(lot.tasks)?lot.tasks:[];
+    const total=tasks.reduce((sum,task)=>sum+Math.max(0,workLotTarget(task)),0);
+    const delivered=tasks.reduce((sum,task)=>sum+Math.min(Math.max(0,workLotTarget(task)),Math.max(0,workLotNumber(task&&task.entregado))),0);
+    const skaters=Object.entries(users).filter(([,user])=>user&&user.role==='Patinador').map(([username,user])=>{
+     const assigned=tasks.filter(task=>workLotUserCanTask(user,username,task));
+     if(!assigned.length)return null;
+     const identities=new Set([username,user.name,user.nombre].map(workLotNorm).filter(Boolean));
+     let assignedTotal=0,ownDelivered=0;
+     for(const task of assigned){
+      const target=Math.max(0,workLotTarget(task));
+      assignedTotal+=target;
+      const seen=new Set(),events=[...(Array.isArray(task.entregas)?task.entregas:[]),...(task.entrega&&typeof task.entrega==='object'?[task.entrega]:[])];
+      const ownUnits=events.filter(event=>{
+       if(!event||typeof event!=='object')return false;
+       const signature=String(event.id||'')||stableWorkString(event);
+       if(seen.has(signature))return false;
+       seen.add(signature);
+       const responsible=workLotNorm(event.patinador||event.username||event.usuario||event.nombrePatinador||event.nombre);
+       return identities.has(responsible);
+      }).reduce((sum,event)=>sum+Math.max(0,workLotNumber(event.cantidad)),0);
+      ownDelivered+=Math.min(target,ownUnits);
+     }
+     return {name:String(user.name||user.nombre||username),percentage:assignedTotal?Math.min(100,ownDelivered/assignedTotal*100):0};
+    }).filter(Boolean).sort((a,b)=>a.name.localeCompare(b.name,'es'));
+    return {model:lot.model,number:lot.number,code:lot.codigoLoteOperacion||'',percentage:total?Math.min(100,delivered/total*100):0,skaters};
+   });
+   return sendJson(res,200,{ok:true,soloLectura:true,source:'aggregated-supervisor-dashboard',lots:summaries});
+  }
   return sendJson(res,200,{ok:true,soloLectura:true,source:'patinador-selections+work-lots',lots});
  }catch(e){console.error('Error consultando avance de patinadores:',e);return sendJson(res,503,{ok:false,error:'No se pudieron leer los lotes de trabajo. No se modificó ningún dato.'});}
 }
@@ -523,6 +553,7 @@ if(p==='/api/work-lots/overview'&&req.method==='GET'){
  if(!authorized(req)||!session)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
  const state=readState(),viewer=state.users&&state.users[session.username],allowed=['Admin','Supervisor','Coordinador'];
  if(!viewer||!allowed.includes(viewer.role))return sendJson(res,403,{ok:false,error:'No tienes permiso para consultar el detalle de lotes.'});
+ if(viewer.role==='Supervisor')return sendJson(res,403,{ok:false,error:'El perfil Supervisor solo puede consultar porcentajes de avance y entrega.'});
  const model=workLotModel(url.searchParams.get('model')),code=String(url.searchParams.get('code')||'').trim().toUpperCase();
  if(!model)return sendJson(res,400,{ok:false,error:'Selecciona un modelo válido.'});
  try{
@@ -1005,6 +1036,15 @@ if(p==='/api/state'&&req.method==='GET'){
  if(!viewer)return sendJson(res,403,{ok:false,error:'La cuenta no tiene acceso al estado de la aplicación.'});
  delete safe.patinadoresAuth;
  for(const user of Object.values(safe.users||{})){if(!user||typeof user!=='object')continue;delete user.pass;delete user.passDia;delete user.passNoche;}
+ if(viewer.role==='Supervisor'){
+  const skaters=Object.fromEntries(Object.entries(safe.users||{}).filter(([,user])=>user&&user.role==='Patinador').map(([key,user])=>[key,{name:user.name||key,role:'Patinador'}]));
+  return sendJson(res,200,{users:skaters,tasks:[],lpnCatalog:[],queuedStandardBatches:[],freeDeliveries:[],estibasRecibidas:[],tareasArchivadas:[]});
+ }
+ if(viewer.role==='Coordinador'){
+  safe.users=Object.fromEntries(Object.entries(safe.users||{}).filter(([,user])=>user&&user.role==='Patinador').map(([key,user])=>[key,{name:user.name||key,role:'Patinador',puestos:Array.isArray(user.puestos)?user.puestos:[],areas:Array.isArray(user.areas)?user.areas:[],turno:user.turno||'Todos'}]));
+  delete safe.tareasArchivadas;
+  delete safe.adminRecoveryUsed;
+ }
  return sendJson(res,200,safe);
 }
 if(p==='/api/jornada/cerrar'&&req.method==='POST'){
@@ -1162,6 +1202,7 @@ const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(r
 if(!session||!actor)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
 let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{
 const incoming=JSON.parse(body||'{}'),current=readState(),isAdmin=actor.role==='Admin';
+if(!['Admin','Coordinador'].includes(actor.role))return sendJson(res,403,{ok:false,error:'Este perfil no tiene permiso para modificar el estado general de producción.'});
 if(actor.role==='Patinador'&&Array.isArray(incoming.tasks)&&stableWorkString(incoming.tasks)!==stableWorkString(current.tasks))return sendJson(res,403,{ok:false,error:'Los Patinadores deben registrar sus entregas desde los lotes de trabajo.'});
 const nextUsers=isAdmin&&incoming.users&&typeof incoming.users==='object'?incoming.users:current.users;delete nextUsers.mesanin;
 if(isAdmin){for(const [key,user] of Object.entries(nextUsers)){const previous=current.users&&current.users[key];if(!user||typeof user!=='object')continue;for(const field of ['pass','passDia','passNoche'])if(!Object.prototype.hasOwnProperty.call(user,field)&&previous&&Object.prototype.hasOwnProperty.call(previous,field))user[field]=previous[field];}}
