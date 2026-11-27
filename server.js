@@ -488,6 +488,15 @@ if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
   // guardados pueden tener instantáneas válidas con IDs distintos.
   const savedLots=readWorkLots(),selections=readWorkLotSelections(),activeByLot=new Map();
   const users=state.users&&typeof state.users==='object'?state.users:{};
+  // Limitar el tablero a referencias que siguen activas en state.tasks.
+  // Una selección antigua puede persistir en disco después de cerrar un lote.
+  const activeModels=new Set(['NKD','CR4 150','CR4 125','XRS-180','CHR']),activeIdsByModel=new Map();
+  for(const task of Array.isArray(state.tasks)?state.tasks:[]){
+   const model=workLotModel(task&&(task.standardMoto||task.modeloMoto||task.modeloEstandar||task.modelo||(task.standardNKD?'NKD':'')));
+   if(!task||task.id==null||!activeModels.has(model))continue;
+   if(!activeIdsByModel.has(model))activeIdsByModel.set(model,new Set());
+   activeIdsByModel.get(model).add(String(task.id));
+  }
   for(const [selectionKey,selection] of Object.entries(selections)){
    if(!selection||!selection.lotId)continue;
    const split=selectionKey.lastIndexOf('|');
@@ -497,8 +506,11 @@ if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
    const username=Object.keys(users).find(key=>workLotNorm(key)===actorKey),patinador=username&&users[username];
    if(!patinador||patinador.role!=='Patinador')continue;
    const row=savedLots.find(candidate=>candidate&&workLotModel(candidate.model)===model&&String(candidate.id)===String(selection.lotId));
-   if(!row||!Array.isArray(row.tasks)||!row.tasks.length)continue;
-   const pending=row.tasks.reduce((sum,task)=>sum+Math.max(0,workLotTarget(task)-workLotNumber(task&&task.entregado)),0);
+   const activeIds=activeIdsByModel.get(model);
+   if(!row||!Array.isArray(row.tasks)||!row.tasks.length||!activeIds||!activeIds.size)continue;
+   const currentTasks=row.tasks.filter(task=>task&&task.id!=null&&activeIds.has(String(task.id)));
+   if(!currentTasks.length)continue;
+   const pending=currentTasks.reduce((sum,task)=>sum+Math.max(0,workLotTarget(task)-workLotNumber(task&&task.entregado)),0);
    // GET solo recuerda la pantalla abierta: no inicia un lote.
    // Solo una selección explícita o un guardado de trabajo marca el inicio.
    if(!selection.startedAt)continue;
@@ -510,7 +522,8 @@ if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
    if(selection.startedAt&&(!entry.startedAt||String(selection.startedAt)<String(entry.startedAt)))entry.startedAt=selection.startedAt;
   }
   const lots=[...activeByLot.values()].map(({row,model,patinadores,startedAt})=>{
-   const tasks=(Array.isArray(row.tasks)?row.tasks:[]).map(task=>({...task,standardNKD:true,standardMoto:model}));
+   const activeIds=activeIdsByModel.get(model)||new Set();
+   const tasks=(Array.isArray(row.tasks)?row.tasks:[]).filter(task=>task&&task.id!=null&&activeIds.has(String(task.id))).map(task=>({...task,standardNKD:true,standardMoto:model}));
    const taskCodes=[...new Set(tasks.map(task=>String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase()).filter(Boolean))];
    const code=String(row.codigoLoteOperacion||'').trim().toUpperCase()||(taskCodes.length===1?taskCodes[0]:'');
    return {id:String(row.id),model,number:workLotNumber(row.number),codigoLoteOperacion:code,createdAt:row.createdAt||null,updatedAt:row.updatedAt||null,startedAt,active:true,activePatinadores:[...patinadores].sort((a,b)=>a.localeCompare(b,'es')),tasks};
