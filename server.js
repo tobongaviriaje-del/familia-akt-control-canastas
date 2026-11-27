@@ -488,14 +488,17 @@ if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
   // guardados pueden tener instantáneas válidas con IDs distintos.
   const savedLots=readWorkLots(),selections=readWorkLotSelections(),activeByLot=new Map();
   const users=state.users&&typeof state.users==='object'?state.users:{};
-  // Limitar el tablero a referencias que siguen activas en state.tasks.
-  // Una selección antigua puede persistir en disco después de cerrar un lote.
-  const activeModels=new Set(['NKD','CR4 150','CR4 125','XRS-180','CHR']),activeIdsByModel=new Map();
+  // Limitar el tablero a códigos de lote que siguen activos en state.tasks.
+  // Las instantáneas de work-lots pueden tener IDs distintos a las tareas activas.
+  const activeModels=new Set(['NKD','CR4 150','CR4 125','XRS-180','CHR']),activeCodesByModel=new Map(),activeRefsByModel=new Map();
   for(const task of Array.isArray(state.tasks)?state.tasks:[]){
    const model=workLotModel(task&&(task.standardMoto||task.modeloMoto||task.modeloEstandar||task.modelo||(task.standardNKD?'NKD':'')));
-   if(!task||task.id==null||!activeModels.has(model))continue;
-   if(!activeIdsByModel.has(model))activeIdsByModel.set(model,new Set());
-   activeIdsByModel.get(model).add(String(task.id));
+   if(!task||!activeModels.has(model))continue;
+   const code=String(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote||'').trim().toUpperCase();
+   if(code){if(!activeCodesByModel.has(model))activeCodesByModel.set(model,new Set());activeCodesByModel.get(model).add(code);}
+   const ean=String(task.ean||'').trim().toUpperCase().replace(/\\s+/g,'');
+   const position=workLotPosition(task.puesto);
+   if(ean&&position){if(!activeRefsByModel.has(model))activeRefsByModel.set(model,new Set());activeRefsByModel.get(model).add(ean+'|'+position);}
   }
   for(const [selectionKey,selection] of Object.entries(selections)){
    if(!selection||!selection.lotId)continue;
@@ -506,9 +509,22 @@ if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
    const username=Object.keys(users).find(key=>workLotNorm(key)===actorKey),patinador=username&&users[username];
    if(!patinador||patinador.role!=='Patinador')continue;
    const row=savedLots.find(candidate=>candidate&&workLotModel(candidate.model)===model&&String(candidate.id)===String(selection.lotId));
-   const activeIds=activeIdsByModel.get(model);
-   if(!row||!Array.isArray(row.tasks)||!row.tasks.length||!activeIds||!activeIds.size)continue;
-   const currentTasks=row.tasks.filter(task=>task&&task.id!=null&&activeIds.has(String(task.id)));
+   const activeCodes=activeCodesByModel.get(model)||new Set(),activeRefs=activeRefsByModel.get(model)||new Set();
+   if(!row||!Array.isArray(row.tasks)||!row.tasks.length)continue;
+   const rowCode=String(row.codigoLoteOperacion||'').trim().toUpperCase();
+   const rowTaskCodes=new Set(row.tasks.map(task=>String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase()).filter(Boolean));
+   let currentTasks=[];
+   if(activeCodes.size){
+    const matchingCodes=new Set([...rowTaskCodes].filter(code=>activeCodes.has(code)));
+    if(rowCode&&activeCodes.has(rowCode))currentTasks=row.tasks;
+    else if(matchingCodes.size)currentTasks=row.tasks.filter(task=>matchingCodes.has(String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase()));
+    else continue;
+   }else{
+    currentTasks=row.tasks.filter(task=>{
+     const ean=String(task&&task.ean||'').trim().toUpperCase().replace(/\\s+/g,''),position=workLotPosition(task&&task.puesto);
+     return !!(ean&&position&&activeRefs.has(ean+'|'+position));
+    });
+   }
    if(!currentTasks.length)continue;
    const pending=currentTasks.reduce((sum,task)=>sum+Math.max(0,workLotTarget(task)-workLotNumber(task&&task.entregado)),0);
    // GET solo recuerda la pantalla abierta: no inicia un lote.
@@ -522,8 +538,14 @@ if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
    if(selection.startedAt&&(!entry.startedAt||String(selection.startedAt)<String(entry.startedAt)))entry.startedAt=selection.startedAt;
   }
   const lots=[...activeByLot.values()].map(({row,model,patinadores,startedAt})=>{
-   const activeIds=activeIdsByModel.get(model)||new Set();
-   const tasks=(Array.isArray(row.tasks)?row.tasks:[]).filter(task=>task&&task.id!=null&&activeIds.has(String(task.id))).map(task=>({...task,standardNKD:true,standardMoto:model}));
+   const activeCodes=activeCodesByModel.get(model)||new Set(),activeRefs=activeRefsByModel.get(model)||new Set();
+   const rowCode=String(row.codigoLoteOperacion||'').trim().toUpperCase();
+   const tasks=(Array.isArray(row.tasks)?row.tasks:[]).filter(task=>{
+    const code=String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase();
+    if(activeCodes.size)return rowCode&&activeCodes.has(rowCode)?true:activeCodes.has(code);
+    const ean=String(task&&task.ean||'').trim().toUpperCase().replace(/\\s+/g,''),position=workLotPosition(task&&task.puesto);
+    return !!(ean&&position&&activeRefs.has(ean+'|'+position));
+   }).map(task=>({...task,standardNKD:true,standardMoto:model}));
    const taskCodes=[...new Set(tasks.map(task=>String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase()).filter(Boolean))];
    const code=String(row.codigoLoteOperacion||'').trim().toUpperCase()||(taskCodes.length===1?taskCodes[0]:'');
    return {id:String(row.id),model,number:workLotNumber(row.number),codigoLoteOperacion:code,createdAt:row.createdAt||null,updatedAt:row.updatedAt||null,startedAt,active:true,activePatinadores:[...patinadores].sort((a,b)=>a.localeCompare(b,'es')),tasks};
