@@ -556,7 +556,7 @@ if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
   }
   for(const row of savedLots){
     const model=workLotModel(row&&row.model),id=String(row&&row.id||'');
-    if(!id||!['NKD','CR4 150','CR4 125','XRS-180','CHR'].includes(model)||!workLotRecentlyCompleted(row)||activeByLot.has(id))continue;
+    if(!id||!model||!workLotRecentlyCompleted(row)||activeByLot.has(id))continue;
     const assigned=new Set();
     for(const [username,user] of Object.entries(users))if(user&&user.role==='Patinador'&&(row.tasks||[]).some(task=>workLotUserCanTask(user,username,task)))assigned.add(String(user.name||username));
     activeByLot.set(id,{row,model,patinadores:assigned,startedAt:row.createdAt||row.updatedAt||null,completed:true});
@@ -1010,7 +1010,7 @@ if(p==='/api/assistant/production-summary'&&req.method==='GET'){
   if(session.username==='patinadores')return sendJson(res,403,{ok:false,error:'Para consultar tu avance personal debes ingresar con tu cuenta individual de Patinador.'});
   const allowed=['Admin','Supervisor','Coordinador','Patinador'];
   if(!allowed.includes(role))return sendJson(res,403,{ok:false,error:'Tu perfil no tiene permiso para consultar el asistente de producción.'});
-  const standardModels=new Set(['NKD','CR4 150','CR4 125','XRS-180','CHR']),activeIdsByModel=new Map();
+  const standardModels=workLotActiveModels(state.tasks),activeIdsByModel=new Map();
   for(const task of Array.isArray(state.tasks)?state.tasks:[]){
    const model=workLotModel(task&&(task.standardMoto||task.modeloMoto||task.modeloEstandar||task.modelo||(task.standardNKD?'NKD':'')));
    if(!task||task.id==null||!standardModels.has(model))continue;
