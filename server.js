@@ -496,7 +496,7 @@ if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
    if(!task||!activeModels.has(model))continue;
    const code=String(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote||'').trim().toUpperCase();
    if(code){if(!activeCodesByModel.has(model))activeCodesByModel.set(model,new Set());activeCodesByModel.get(model).add(code);}
-   const ean=String(task.ean||'').trim().toUpperCase().replace(/\\s+/g,'');
+   const ean=String(task.ean||'').trim().toUpperCase().replace(/\s+/g,'');
    const position=workLotPosition(task.puesto);
    if(ean&&position){if(!activeRefsByModel.has(model))activeRefsByModel.set(model,new Set());activeRefsByModel.get(model).add(ean+'|'+position);}
   }
@@ -521,7 +521,7 @@ if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
     else continue;
    }else{
     currentTasks=row.tasks.filter(task=>{
-     const ean=String(task&&task.ean||'').trim().toUpperCase().replace(/\\s+/g,''),position=workLotPosition(task&&task.puesto);
+     const ean=String(task&&task.ean||'').trim().toUpperCase().replace(/\s+/g,''),position=workLotPosition(task&&task.puesto);
      return !!(ean&&position&&activeRefs.has(ean+'|'+position));
     });
    }
@@ -543,7 +543,7 @@ if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
    const tasks=(Array.isArray(row.tasks)?row.tasks:[]).filter(task=>{
     const code=String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase();
     if(activeCodes.size)return rowCode&&activeCodes.has(rowCode)?true:activeCodes.has(code);
-    const ean=String(task&&task.ean||'').trim().toUpperCase().replace(/\\s+/g,''),position=workLotPosition(task&&task.puesto);
+    const ean=String(task&&task.ean||'').trim().toUpperCase().replace(/\s+/g,''),position=workLotPosition(task&&task.puesto);
     return !!(ean&&position&&activeRefs.has(ean+'|'+position));
    }).map(task=>({...task,standardNKD:true,standardMoto:model}));
    const taskCodes=[...new Set(tasks.map(task=>String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase()).filter(Boolean))];
