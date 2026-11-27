@@ -162,12 +162,12 @@ test('protege credenciales, cambios administrativos y cierre de jornada', async 
       tasks: [{ id: 'T-1', cantidad: 10, entregado: 3, estado: 'Parcial', puesto: 'PRE 1' }]
     }
   });
-  assert.equal(protectedWrite.status, 200);
-  assert.equal(protectedWrite.data.users.admin.role, 'Admin');
-  assert.equal(protectedWrite.data.users.intruso, undefined);
-  assert.deepEqual(protectedWrite.data.lpnCatalog, [{ id: 'LPN-ORIGINAL' }]);
-  assert.deepEqual(protectedWrite.data.freeDeliveries, []);
-  assert.equal(protectedWrite.data.users.admin.pass, undefined);
+  assert.equal(protectedWrite.status, 403, 'Supervisor es de solo consulta y no debe escribir en el estado global');
+  const stateAfterSupervisorWrite = await request(baseUrl, '/api/state', { token: adminToken });
+  assert.equal(stateAfterSupervisorWrite.data.users.admin.role, 'Admin');
+  assert.equal(stateAfterSupervisorWrite.data.users.intruso, undefined);
+  assert.deepEqual(stateAfterSupervisorWrite.data.lpnCatalog, [{ id: 'LPN-ORIGINAL' }]);
+  assert.equal(stateAfterSupervisorWrite.data.tasks[0].entregado, 2, 'el intento de escritura Supervisor no debe alterar producción');
 
   const adminWrite = await request(baseUrl, '/api/state', {
     token: adminToken,
