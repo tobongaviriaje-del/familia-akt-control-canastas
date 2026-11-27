@@ -1203,6 +1203,14 @@ if(!session||!actor)return sendJson(res,401,{ok:false,error:'Sesión vencida. In
 let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{
 const incoming=JSON.parse(body||'{}'),current=readState(),isAdmin=actor.role==='Admin';
 if(!['Admin','Coordinador'].includes(actor.role))return sendJson(res,403,{ok:false,error:'Este perfil no tiene permiso para modificar el estado general de producción.'});
+if(actor.role==='Coordinador'){
+ if(!Array.isArray(incoming.tasks)||incoming.tasks.length!==current.tasks.length)return sendJson(res,403,{ok:false,error:'Coordinación solo puede operar sobre las tareas de producción existentes; no puede crear ni eliminar referencias.'});
+ const operationalFields=[...WORK_LOT_DELIVERY_FIELDS,...WORK_LOT_CAPACITY_FIELDS,'lote','lotePiezas','cantidad','codigoLoteOperacion','codigoOperacionActualizadoPor','codigoOperacionActualizadoEn'];
+ for(let i=0;i<current.tasks.length;i++){
+  const before=current.tasks[i],after=incoming.tasks[i];
+  if(!before||!after||String(before.id)!==String(after.id)||stableWorkString(withoutWork(before,operationalFields))!==stableWorkString(withoutWork(after,operationalFields)))return sendJson(res,403,{ok:false,error:'Coordinación solo puede modificar datos operativos autorizados; las referencias y la configuración permanecen protegidas.'});
+ }
+}
 if(actor.role==='Patinador'&&Array.isArray(incoming.tasks)&&stableWorkString(incoming.tasks)!==stableWorkString(current.tasks))return sendJson(res,403,{ok:false,error:'Los Patinadores deben registrar sus entregas desde los lotes de trabajo.'});
 const nextUsers=isAdmin&&incoming.users&&typeof incoming.users==='object'?incoming.users:current.users;delete nextUsers.mesanin;
 if(isAdmin){for(const [key,user] of Object.entries(nextUsers)){const previous=current.users&&current.users[key];if(!user||typeof user!=='object')continue;for(const field of ['pass','passDia','passNoche'])if(!Object.prototype.hasOwnProperty.call(user,field)&&previous&&Object.prototype.hasOwnProperty.call(previous,field))user[field]=previous[field];}}
