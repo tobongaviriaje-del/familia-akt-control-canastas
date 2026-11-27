@@ -72,7 +72,6 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script>
 const defaultUsers={admin:{role:'Admin',name:'Administrador'},hamilton:{role:'Patinador',name:'Hamilton',areas:['PRE','Izquierdo'],puestos:['PRE 21','PRE 22','PRE 23','PRE 24','PRE 25','PRE 26','PRE 27','PRE 28','PRE 29','PRE 30','PRE 31','PRE 32','Izquierdo 1','Izquierdo 2','Izquierdo 3','Izquierdo 4','Izquierdo 5','Izquierdo 6','Izquierdo 7','Izquierdo 8','Izquierdo 9','Izquierdo 10']},juanesteban:{role:'Patinador',name:'Juan Esteban',areas:['PRE','Derecho'],puestos:['PRE 1','PRE 2','PRE 3','PRE 4','PRE 5','PRE 6','PRE 7','PRE 8','PRE 9','PRE 10','PRE 33','Derecho 1','Derecho 2','Derecho 3','Derecho 4','Derecho 5','Derecho 6','Derecho 7','Derecho 8','Derecho 9','Derecho 10']},jorge:{role:'Patinador',name:'Jorge',areas:['PRE','Derecho','Izquierdo'],puestos:['PRE 11','PRE 12','PRE 13','PRE 14','PRE 15','PRE 16','PRE 17','PRE 18','PRE 19','PRE 20','PRE 21','PRE 22','PRE 35','Derecho 11','Derecho 12','Derecho 13','Derecho 14','Derecho 15','Derecho 16','Derecho 17','Derecho 18','Derecho 19','Derecho 20','Derecho 21','Derecho 22','Derecho 23','Izquierdo 18','Izquierdo 19','Izquierdo 20','Izquierdo 21','Izquierdo 22','Izquierdo 23']}};
 let current=null,stream=null;
-let continuidadXRS180Resumen=null;
 let users={};
 let cloudTasks=[];
 let lpnCatalog=[];
@@ -253,7 +252,7 @@ function guardarNumeroOperacion(){
  msg.className='pill';msg.textContent='Número de operación guardado: '+numero+'. Se añadirá a tus próximas entregas.';
 }
 function tareasAsignadasAUsuarioEstandar(task,user,username){
- if(!task||(!task.standardNKD&&!esContinuidadXRS180(task))||!user||user.role!=='Patinador')return false;
+ if(!task||(!task.standardNKD&&!esContinuidadEstandar(task))||!user||user.role!=='Patinador')return false;
  const clean=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
  // La asignación puede ser por puesto compartido o por responsable directo del estándar.
  const puestos=Array.isArray(user.puestos)?user.puestos.map(p=>clean(normalizarPuestoEstandar(p))):[];
@@ -297,7 +296,7 @@ function combinarTareasProgreso(tasks){
  const clean=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
  const eventKey=e=>String(e&&e.id||'')||JSON.stringify([e&&(e.patinador||e.username||e.usuario||e.nombrePatinador||e.nombre),e&&e.cantidad,e&&e.fechaHora,e&&e.metodo,e&&e.numeroOperacion,e&&e.observaciones,e&&e.canastasFisicas,e&&e.turno]);
  const groups=new Map();
- (Array.isArray(tasks)?tasks:[]).filter(x=>x&&(x.standardNKD||esContinuidadXRS180(x))).forEach(x=>{
+ (Array.isArray(tasks)?tasks:[]).filter(x=>x&&(x.standardNKD||esContinuidadEstandar(x))).forEach(x=>{
   const modelo=normalizarModeloContinuidad(modeloDeTareaEstandar(x)||'NKD');
   const codigo=String(x.codigoLoteOperacion||'').trim().toUpperCase();
   const ean=String(x.ean||'').replace(/\s+/g,'').toUpperCase();
@@ -321,7 +320,7 @@ function claveOperacionProgreso(task){
  return [modelo,codigo,lote?'LOTE:'+lote:''].join('|||');
 }
 function resumenEntregaPatinador(tasks,user,username){
- const assigned=tasks.filter(x=>(x.standardNKD||esContinuidadXRS180(x))&&tareasAsignadasAUsuarioEstandar(x,user,username));
+ const assigned=tasks.filter(x=>(x.standardNKD||esContinuidadEstandar(x))&&tareasAsignadasAUsuarioEstandar(x,user,username));
  const identidad=v=>String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');
  const nombres=new Set([identidad(username),identidad(user&&user.username),identidad(user&&user.name),identidad(user&&user.nombre)].filter(Boolean));
  let total=0,delivered=0;
@@ -404,7 +403,7 @@ function renderProgresoPatinadores(){
  if(current.role==='Patinador'){
   panel.classList.remove('hidden');
   const modelo=String($('modeloEstandarPatinador')?.value||localStorage.getItem('cc_modelo_moto')||'NKD');
-  const modelTasks=tasks.filter(x=>(x.standardNKD||esContinuidadXRS180(x))&&modeloDeTareaEstandar(x)===modelo&&esDeHoy(x));
+  const modelTasks=tasks.filter(x=>(x.standardNKD||esContinuidadEstandar(x))&&modeloDeTareaEstandar(x)===modelo&&esDeHoy(x));
   const activos=modelTasks.filter(x=>Math.max(0,Number(unidadesObjetivoEstandar(x))||0)-Math.max(0,Number(x.entregado)||0)>0);
   const codigoActivo=activos.sort((a,b)=>fechaDeTarea(b)-fechaDeTarea(a))[0]?.codigoLoteOperacion;
   const ownModel=(codigoActivo?modelTasks.filter(x=>String(x.codigoLoteOperacion||'').trim()===String(codigoActivo).trim()):modelTasks.filter(x=>Math.max(0,Number(unidadesObjetivoEstandar(x))||0)-Math.max(0,Number(x.entregado)||0)>0)),own=resumenEntregaPatinador(ownModel,current,current.username),r=ownModel.reduce((acc,x)=>{acc.entregado+=Math.min(Math.max(0,Number(x.entregado)||0),Math.max(0,Number(unidadesObjetivoEstandar(x))||0));acc.total+=Math.max(0,Number(unidadesObjetivoEstandar(x))||0);return acc;},{entregado:0,total:0});
@@ -455,7 +454,7 @@ function renderProgresoPatinadores(){
  // si la referencia/puesto ya existe en cualquier lote real, no volver a sumar su copia local,
  // aunque el código de operación antiguo no coincida.
  const legacyTasks=localTasks.filter(task=>
-  (task.standardNKD||esContinuidadXRS180(task))&&!workLotReferences.has(baseKey(task))
+  (task.standardNKD||esContinuidadEstandar(task))&&!workLotReferences.has(baseKey(task))
  );
  const reportTasks=combinarTareasProgreso([...legacyTasks,...lotTasks]);
  const skaters=Object.entries(users||{}).filter(([key,u])=>u&&u.role==='Patinador');
@@ -467,7 +466,7 @@ function renderProgresoPatinadores(){
  };
  // No filtrar por fecha de creación: los estándares pueden haberse cargado antes
  // de iniciar la jornada. El lote activo se determina por las unidades pendientes.
- reportTasks.filter(x=>(x.standardNKD||esContinuidadXRS180(x))).forEach(x=>{
+ reportTasks.filter(x=>(x.standardNKD||esContinuidadEstandar(x))).forEach(x=>{
   const modelo=modeloDeTareaEstandar(x),codigo=String(x.codigoLoteOperacion||'').trim(),key=claveOperacionProgreso(x);
   if(!activeMap.has(key))activeMap.set(key,{modelo,codigo,lotLabel:x.__progressLotLabel||codigo||'Sin código',tasks:[],latestAt:0,total:0,delivered:0,pending:0});
   const op=activeMap.get(key),objetivo=Math.max(0,Number(unidadesObjetivoEstandar(x))||0),entregado=Math.min(objetivo,Math.max(0,Number(x.entregado)||0));
@@ -892,12 +891,12 @@ function buscarTarea(){
  mostrarLpn(lpn);
 }
 
-function unidadesObjetivoEstandar(x){if(!x)return 0;if(esContinuidadXRS180(x))return Math.max(0,Number(String(x.cantidad??'').replace(',','.'))||0);const porCanasta=Number(String(x.cantidadCanasta??'').replace(',','.'))||0;const canastas=Number(String(x.numCanastas??'').replace(',','.'))||0;const lote=Number(String(x.lote??'').replace(',','.'))||0;const cantidad=Number(String(x.cantidad??'').replace(',','.'))||0;if(lote>1)return lote;if(cantidad>1)return cantidad;if(porCanasta>0&&canastas>0)return porCanasta*canastas;const unidad=Number(String(x.cantidadUnidad??'').replace(',','.'))||0;return unidad>0?unidad:(lote>0?lote:(porCanasta>0?porCanasta:cantidad));}
+function unidadesObjetivoEstandar(x){if(!x)return 0;if(esContinuidadEstandar(x))return Math.max(0,Number(String(x.cantidad??'').replace(',','.'))||0);const porCanasta=Number(String(x.cantidadCanasta??'').replace(',','.'))||0;const canastas=Number(String(x.numCanastas??'').replace(',','.'))||0;const lote=Number(String(x.lote??'').replace(',','.'))||0;const cantidad=Number(String(x.cantidad??'').replace(',','.'))||0;if(lote>1)return lote;if(cantidad>1)return cantidad;if(porCanasta>0&&canastas>0)return porCanasta*canastas;const unidad=Number(String(x.cantidadUnidad??'').replace(',','.'))||0;return unidad>0?unidad:(lote>0?lote:(porCanasta>0?porCanasta:cantidad));}
 function unidadesPorCanastaEstandar(x){if(!x)return 0;const porCanasta=Number(String(x.cantidadCanasta??'').replace(',','.'))||0;if(porCanasta>0)return porCanasta;const lote=Number(String(x.lote??'').replace(',','.'))||0;const canastas=Number(String(x.numCanastas??'').replace(',','.'))||0;return lote>0&&canastas>0?lote/canastas:0;}
 function canastasObjetivoEstandar(x){if(!x)return 0;const n=Number(String(x.numCanastas??'').replace(',','.'))||0;return n>0?n:0;}
 function canastasEquivalentesEntregadas(x){const cap=unidadesPorCanastaEstandar(x);if(!(cap>0))return '-';const n=(Number(x?.entregado)||0)/cap;return n.toLocaleString('es-CO',{maximumFractionDigits:2});}
 function claveLoteCompleto(x){if(!x||!x.standardNKD)return '';const lote=Number(String(x.lote??'').replace(',','.'))||0;if(lote<=0)return '';return String(x.id||'');}
-function resumenCantidadLote(x,tareas=getTasks()){if(!x||(!x.standardNKD&&!esContinuidadXRS180(x)))return {total:0,entregado:0,restante:0,aplica:false};const total=unidadesObjetivoEstandar(x);if(total<=0)return {total:0,entregado:0,restante:0,aplica:false};const entregado=Number(x.entregado)||0;return {total,entregado,restante:Math.max(0,total-entregado),aplica:true};}
+function resumenCantidadLote(x,tareas=getTasks()){if(!x||(!x.standardNKD&&!esContinuidadEstandar(x)))return {total:0,entregado:0,restante:0,aplica:false};const total=unidadesObjetivoEstandar(x);if(total<=0)return {total:0,entregado:0,restante:0,aplica:false};const entregado=Number(x.entregado)||0;return {total,entregado,restante:Math.max(0,total-entregado),aplica:true};}
 function celdaSaldoLote(x,tareas=getTasks()){const s=resumenCantidadLote(x,tareas);return s.aplica?'<b>'+s.restante+'</b><br><small>de '+s.total+' unidades</small>':(x?.lote||'-');}
 
 async function confirmarEntrega(id,qty,obs,canastasFisicas=0,targetIndex=null){const scrollAntes=window.scrollY;const zonaAntes=zonaEntregaActiva;const t=getTasks(),x=Number.isInteger(targetIndex)&&t[targetIndex]&&String(t[targetIndex].id)===String(id)?t[targetIndex]:t.find(a=>String(a.id)===String(id));if(!x)return;const objetivo=x.standardNKD?unidadesObjetivoEstandar(x):Number(x.cantidad||0);const restante=Math.max(0,objetivo-(Number(x.entregado)||0));if(!Number.isInteger(qty)||qty<1){alert('Ingresa una cantidad válida de unidades mayor que cero.');return}if(qty>restante){alert('La cantidad supera lo pendiente de esta referencia ('+restante+' unidades).');return}const anterior={entregado:x.entregado||0,estado:x.estado,entregas:Array.isArray(x.entregas)?[...x.entregas]:[],entrega:x.entrega,canastasEntregadas:x.canastasEntregadas,confirmacionesCanastas:Array.isArray(x.confirmacionesCanastas)?[...x.confirmacionesCanastas]:[]};x.entregado=(Number(x.entregado)||0)+qty;x.estado=x.entregado>=objetivo?'Entregada':'Parcial';x.entregas=x.entregas||[];const movimiento={patinador:current?.name||'Administrador',cantidad:qty,fechaHora:new Date().toLocaleString('es-CO'),metodo:canastasFisicas>0?'Entrega de canastas físicas':'Escáner o botón manual',numeroOperacion:String(x.codigoLoteOperacion||current?.numeroOperacion||'').trim(),observaciones:obs||''};if(canastasFisicas>0){movimiento.canastasFisicas=canastasFisicas;x.canastasEntregadas=(Number(x.canastasEntregadas)||0)+canastasFisicas;x.confirmacionesCanastas=Array.isArray(x.confirmacionesCanastas)?x.confirmacionesCanastas:[];x.confirmacionesCanastas.push({patinador:movimiento.patinador,cantidad:canastasFisicas,unidades:qty,fechaHora:movimiento.fechaHora,turno:current?.turno||'',observaciones:'Canastas físicas registradas y descontadas del lote.'});}x.entregas.push(movimiento);x.entrega=movimiento;deliverySaving=true;try{const isSkater=current&&current.role==='Patinador';if(isSkater&&!patinadorWorkLot)throw new Error('No hay un lote de trabajo cargado.');const r=await fetch(isSkater?'/api/work-lots':'/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:isSkater?JSON.stringify({username:current.username,model:patinadorWorkLot.model,lotId:patinadorWorkLot.id,version:patinadorWorkLot.updatedAt,tasks:t}):JSON.stringify({users,tasks:t,lpnCatalog}),cache:'no-store'});if(!r.ok)throw new Error('No se pudo guardar la entrega');const saved=await r.json();if(isSkater&&saved.lot)patinadorWorkLot={...patinadorWorkLot,...saved.lot};if(Array.isArray(saved.tasks))cloudTasks=saved.tasks;if(saved.users)users=saved.users;if(Array.isArray(saved.lpnCatalog))lpnCatalog=saved.lpnCatalog;localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));localStorage.setItem('cc_users',JSON.stringify(users));localStorage.setItem('cc_lpn_catalog',JSON.stringify(lpnCatalog));cloudReady=true;}catch(e){x.entregado=anterior.entregado;x.estado=anterior.estado;x.entregas=anterior.entregas;x.entrega=anterior.entrega;x.canastasEntregadas=anterior.canastasEntregadas;x.confirmacionesCanastas=anterior.confirmacionesCanastas;alert('No se pudo guardar la entrega. No se registró ningún cambio; revisa la conexión e intenta de nuevo.');deliverySaving=false;return}deliverySaving=false;render();if(zonaAntes){mostrarEntregasZona(zonaAntes);window.scrollTo(0,scrollAntes);}else{window.scrollTo(0,scrollAntes);if(x.standardNKD){const fila=$('stdRow'+id);if(fila)fila.scrollIntoView({behavior:'auto',block:'center'});const siguiente=$(Number.isInteger(targetIndex)?'stdQtyRow'+targetIndex:'stdQty'+id);if(siguiente)siguiente.focus({preventScroll:true});}}const falta=Math.max(0,(x.standardNKD?unidadesObjetivoEstandar(x):Number(x.cantidad||0))-Number(x.entregado||0));if(x.standardNKD){const msg=$('estandarNKDMsg');const rl=resumenCantidadLote(x);if(msg)msg.textContent='✅ '+(canastasFisicas>0?'Canastas y unidades registradas para ':'Unidades registradas para ')+x.producto+'. Total registrado: '+x.entregado+' unidades.'+(rl.aplica?' Saldo del lote: '+rl.restante+' de '+rl.total+' unidades.':'');}else{const lpn=($('scanLpn')?.value||'').trim();if(lpn&&lpn===x.lpn)mostrarLpn(lpn);else if($('foundTask'))$('foundTask').innerHTML='<p class="pill">✅ Entrega registrada. Entregado: '+x.entregado+' de '+x.cantidad+'. Falta: '+falta+' unidad(es).</p>';}}
@@ -1055,7 +1054,7 @@ function actualizarOperacionesContinuidad(){
  const modelo=normalizarModeloContinuidad($('continuidadModelo')?.value||'NKD'),sel=$('continuidadOperacion'),lista=$('continuidadOperacionesLista');if(!sel)return;
  const actual=String(sel.value||'').trim().toUpperCase(),ops=[...new Set(getTasks().filter(t=>modeloContinuidadDeTarea(t)===modelo).map(t=>String(t.codigoLoteOperacion||'').trim().toUpperCase()).filter(Boolean))].sort();
  if(lista)lista.innerHTML=ops.map(op=>'<option value="'+op.replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"></option>').join('');
- if(actual)sel.value=actual;else if(modelo==='NKD')sel.value='KK773';else if(modelo==='XRS-180'&&ops.includes('KK767A'))sel.value='KK767A';else if(ops.length===1)sel.value=ops[0];
+ if(actual)sel.value=actual;else if(modelo==='NKD')sel.value='KK773';else if(ops.length===1)sel.value=ops[0];
 }
 async function revisarContinuidadSeleccionada(){
  const box=$('continuidadSeleccionPreview'),btn=$('continuidadSeleccionApply'),msg=$('continuidadSeleccionMsg');
@@ -1089,35 +1088,7 @@ async function aplicarContinuidadSeleccionada(){
   await cloudLoad();render();actualizarOperacionesContinuidad();
  }catch(e){if(msg)msg.textContent='No se confirmó la continuidad: '+e.message;if(btn)btn.disabled=false;}
 }
-async function revisarContinuidadXRS180(){
- const box=$('xrsContinuidadPreview'),btn=$('xrsContinuidadApply'),msg=$('xrsContinuidadMsg');
- if(!current||current.role!=='Admin'){alert('Solo el administrador puede revisar esta continuidad.');return;}
- if(box)box.textContent='Consultando tareas activas...';if(btn)btn.classList.add('hidden');if(msg)msg.textContent='';
- try{
-  const r=await fetch('/api/jornada/continuar-xrs180',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'previsualizar'})});
-  const data=await r.json();if(!r.ok||!data.ok)throw new Error(data.error||'No se pudo consultar la operación.');
-  continuidadXRS180Resumen=data.resumen;
-  const x=data.resumen;
-  if(box)box.innerHTML='<b>Vista previa — sin cambios</b><br>Tareas encontradas: '+x.tareasEncontradas+'<br>Tareas con pendientes/parciales: '+x.tareasPendientes+'<br>Tareas completadas que pasarán al historial: '+x.tareasCompletadas+'<br>Unidades objetivo: '+x.unidadesObjetivo+'<br>Unidades ya entregadas: '+x.unidadesEntregadas+'<br><b>Unidades que pasarán al turno de noche: '+x.unidadesPendientes+'</b><br><small>'+data.mensaje+'</small>';
-  if(btn&&x.tareasPendientes>0)btn.classList.remove('hidden');
-  if(x.tareasEncontradas===0&&msg)msg.textContent='No se encontraron tareas activas con el código KK767A. No se ha cambiado nada.';
- }catch(e){if(box)box.textContent='Error: '+e.message;if(msg)msg.textContent='No se modificó ninguna tarea.';}
-}
-async function aplicarContinuidadXRS180(){
- const x=continuidadXRS180Resumen;if(!x||!x.tareasPendientes)return;
- const pregunta='Vas a pasar '+x.tareasPendientes+' tareas y '+x.unidadesPendientes+' unidades pendientes de XRS-180 / KK767A al turno de noche. Las entregas previas quedarán en el historial. Las demás motos y operaciones no se tocarán. ¿Confirmas?';
- if(!confirm(pregunta))return;
- const btn=$('xrsContinuidadApply'),msg=$('xrsContinuidadMsg');if(btn)btn.disabled=true;if(msg)msg.textContent='Preparando continuidad...';
- try{
-  const r=await fetch('/api/jornada/continuar-xrs180',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accion:'aplicar'})});
-  const data=await r.json();if(!r.ok||!data.ok)throw new Error(data.error||'No se pudo preparar la continuidad.');
-  if(msg)msg.textContent='Listo: '+data.tareasNuevas+' tareas y '+data.unidadesContinuadas+' unidades pendientes quedaron activas para el turno siguiente. Archivo de historial: '+data.archivo+'.';
-  if(btn)btn.classList.add('hidden');continuidadXRS180Resumen=null;
-  await cloudLoad();
- }catch(e){if(msg)msg.textContent='No se confirmó la continuidad: '+e.message;if(btn)btn.disabled=false;}
-}
-
-function esContinuidadXRS180(t){return !!(t&&t.continuidadDeTareaId&&String(t.standardMoto||'').trim().toUpperCase()==='XRS-180'&&String(t.codigoLoteOperacion||'').trim().toUpperCase()==='KK767A');}
+function esContinuidadEstandar(t){return !!(t&&t.continuidadDeTareaId&&String(t.standardMoto||'').trim());}
 function modeloDeTareaEstandar(x){return x.standardMoto||(x.standardNKD?'NKD':'');}
 function cambiarModeloEstandarAdmin(){
  const modelo=modeloEstandarSeleccionado();
@@ -1474,7 +1445,7 @@ function claveGrupoLoteArchivado(t){
 function gruposLotesArchivadosPatinador(modelo){
  const activos=getTasks(),idsActivos=new Set(activos.map(x=>String(x.id))),idsConContinuidad=new Set(activos.map(x=>String(x.continuidadDeTareaId||'')).filter(Boolean));
  const pendientes=(Array.isArray(tareasArchivadas)?tareasArchivadas:[]).filter(x=>
-  (x.standardNKD||esContinuidadXRS180(x))&&modeloDeTareaEstandar(x)===modelo&&tareaAsignadaAlPatinador(x)&&
+  (x.standardNKD||esContinuidadEstandar(x))&&modeloDeTareaEstandar(x)===modelo&&tareaAsignadaAlPatinador(x)&&
   !idsActivos.has(String(x.id))&&!idsConContinuidad.has(String(x.id))&&Math.max(0,unidadesObjetivoEstandar(x)-Math.max(0,Number(x.entregado)||0))>0
  );
  const groups=new Map();
@@ -1665,7 +1636,7 @@ function renderPatinadorChecklist(){
  const nav=$('patinadorWorkLotNav');if(nav)nav.style.display=patinadorWorkLot&&patinadorWorkLot.model===modelo?'block':'none';
  renderRetomarLotePatinador(modelo);
  cargarManifiestoFotos(modelo);
- const assigned=tareasSinDuplicadosEstandar(getTasks()).filter(x=>(x.standardNKD||esContinuidadXRS180(x))&&modeloDeTareaEstandar(x)===modelo&&tareaAsignadaAlPatinador(x));
+ const assigned=tareasSinDuplicadosEstandar(getTasks()).filter(x=>(x.standardNKD||esContinuidadEstandar(x))&&modeloDeTareaEstandar(x)===modelo&&tareaAsignadaAlPatinador(x));
  const total=assigned.length;
  const done=assigned.filter(x=>(Number(x.entregado)||0)>=unidadesObjetivoEstandar(x)).length;
  const units=assigned.reduce((n,x)=>n+(Number(x.entregado)||0),0);
@@ -1679,12 +1650,12 @@ function renderPatinadorChecklist(){
   const estadoColor=complete?'#e8f5e9':(del>0?'#fff3cd':'#fdecea');
   const estadoTexto=complete?'COMPLETA':(del>0?'PARCIAL':'PENDIENTE');
   const estadoBadge='<span style="display:inline-block;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:700;background:'+(complete?'#2e7d32':(del>0?'#f9a825':'#c62828'))+';color:'+(del>0&&!complete?'#222':'#fff')+'">'+estadoTexto+'</span>';
-  const loteCell=esContinuidadXRS180(x)?celdaSaldoLote(x,assigned)+'<br><small>Continuidad OPR KK767A</small>':(current&&current.role==='Patinador'?celdaSaldoLote(x,assigned):celdaSaldoLote(x,assigned)+'<br><input aria-label="Cantidad total del lote en unidades" id="stdLote'+x.id+'" type="number" min="1" step="1" value="'+(qty||'')+'" placeholder="Total piezas" style="width:95px;margin:2px 0"><button type="button" class="small secondary" onclick="guardarLoteEstandar(\''+x.id+'\')">Guardar lote</button>');
-  const canastasCell=esContinuidadXRS180(x)?'—':'<b>'+(Number(x.canastasEntregadas)||0)+'</b><br><input aria-label="Canastas entregadas ahora" id="stdCanastasQty'+x.id+'" type="number" min="1" step="1" value="1" style="width:90px;margin:2px 0"><button type="button" class="small secondary" onclick="confirmarCanastasEstandar(\''+x.id+'\')">Sumar canastas</button>';
+  const loteCell=esContinuidadEstandar(x)?celdaSaldoLote(x,assigned)+'<br><small>Continuidad del turno anterior</small>':(current&&current.role==='Patinador'?celdaSaldoLote(x,assigned):celdaSaldoLote(x,assigned)+'<br><input aria-label="Cantidad total del lote en unidades" id="stdLote'+x.id+'" type="number" min="1" step="1" value="'+(qty||'')+'" placeholder="Total piezas" style="width:95px;margin:2px 0"><button type="button" class="small secondary" onclick="guardarLoteEstandar(\''+x.id+'\')">Guardar lote</button>');
+  const canastasCell=esContinuidadEstandar(x)?'—':'<b>'+(Number(x.canastasEntregadas)||0)+'</b><br><input aria-label="Canastas entregadas ahora" id="stdCanastasQty'+x.id+'" type="number" min="1" step="1" value="1" style="width:90px;margin:2px 0"><button type="button" class="small secondary" onclick="confirmarCanastasEstandar(\''+x.id+'\')">Sumar canastas</button>';
   const foto=fotoReferenciaHtml(x,modelo);
   const capCanasta=Number(String(x.cantidadCanasta??'').replace(',','.'))||0,tipoCanasta=String(x.canasta||'').trim(),nCanastas=Number(String(x.numCanastas??'').replace(',','.'))||0;
   const canastaStd=capCanasta>0?(capCanasta+' u'+(tipoCanasta?' · '+tipoCanasta:'')+(nCanastas>0?' · '+nCanastas.toLocaleString('es-CO',{maximumFractionDigits:2})+' canastas':'')):String(x.cantidadCanastaRaw||'').trim()||'—';
-  return '<tr id="stdRow'+x.id+'" style="background:'+estadoColor+'"><td><div style="display:flex;align-items:center;gap:10px;min-width:210px"><div style="flex:0 0 76px">'+foto+'</div><div style="min-width:0"><b>'+x.producto+'</b><br>'+estadoBadge+(esContinuidadXRS180(x)?'<br><small>Continuidad del turno anterior</small>':'')+'<br><small>EAN: '+(x.ean||'-')+'</small></div></div></td><td>'+x.puesto+'</td><td>'+(x.cantidadUnidad||'-')+'</td><td><small>'+canastaStd+'</small></td><td>'+loteCell+'</td><td>'+del+'</td><td><b>'+(qty>0?rest:'Por definir')+'</b></td><td>'+registro+'</td><td>'+canastasCell+'</td><td>'+corregir+'</td></tr>';
+  return '<tr id="stdRow'+x.id+'" style="background:'+estadoColor+'"><td><div style="display:flex;align-items:center;gap:10px;min-width:210px"><div style="flex:0 0 76px">'+foto+'</div><div style="min-width:0"><b>'+x.producto+'</b><br>'+estadoBadge+(esContinuidadEstandar(x)?'<br><small>Continuidad del turno anterior</small>':'')+'<br><small>EAN: '+(x.ean||'-')+'</small></div></div></td><td>'+x.puesto+'</td><td>'+(x.cantidadUnidad||'-')+'</td><td><small>'+canastaStd+'</small></td><td>'+loteCell+'</td><td>'+del+'</td><td><b>'+(qty>0?rest:'Por definir')+'</b></td><td>'+registro+'</td><td>'+canastasCell+'</td><td>'+corregir+'</td></tr>';
  }).join('');
  wrap.innerHTML='<div class="grid" style="margin:8px 0"><button type="button" class="secondary" onclick="mostrarEntregasZona(\'PRE\')">📍 PRE</button><button type="button" class="secondary" onclick="mostrarEntregasZona(\'Izquierdo\')">📍 IZQUIERDO</button><button type="button" class="secondary" onclick="mostrarEntregasZona(\'Derecho\')">📍 DERECHO</button></div><p class="muted">La foto aparece al lado del nombre y EAN de cada referencia. Tócala para ampliarla. Registra las unidades entregadas por separado; las canastas se cuentan manualmente.</p><div class="scroll"><table><thead><tr><th>Referencia / EAN</th><th>Puesto</th><th>Cant. unitaria</th><th>Estándar de canasta</th><th>Lote total (unidades)</th><th>Unidades entregadas</th><th>Unidades pendientes</th><th>Registrar unidades</th><th>Canastas entregadas</th><th>Corregir saldo</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
