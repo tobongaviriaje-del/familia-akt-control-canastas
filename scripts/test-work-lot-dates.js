@@ -34,4 +34,10 @@ assert.equal(logic.workLotRecentlyCompleted({ tasks: [] }, today), false, 'Lote 
 assert.equal(logic.workLotTarget({ lote: 500, cantidad: 5, continuidadDeTareaId: 'continuidad-1' }), 5, 'La continuidad debe tomar las unidades pendientes');
 assert.equal(logic.workLotTarget({ lote: 500, cantidad: 500 }), 500, 'El objetivo de lote normal debe conservarse');
 
+assert.equal(logic.workLotRecentlyCompleted({ ...rowAt('2026-11-26T17:00:00.000Z'), updatedAt: '2026-11-24T17:00:00.000Z' }, today), true, 'La fecha explícita de finalización debe prevalecer sobre updatedAt');
+assert.equal(logic.workLotRecentlyCompleted({ ...rowAt('2026-11-24T17:00:00.000Z'), updatedAt: '2026-11-26T17:00:00.000Z' }, today), false, 'Una finalización antigua no debe rejuvenecerse por una actualización posterior');
+assert.equal(logic.workLotRecentlyCompleted({ tasks: [{ cantidad: 10, entregado: 10 }], updatedAt: '2026-11-25T17:00:00.000Z' }, today), true, 'Los registros antiguos sin completedAt usan updatedAt como referencia provisional');
+assert.equal(logic.workLotRecentlyCompleted({ ...rowAt('2026-11-26T17:00:00.000Z', 9), updatedAt: '2026-11-26T18:00:00.000Z' }, today), false, 'Un lote reabierto debe dejar de figurar como completado aunque conserve una fecha anterior');
+assert.equal(logic.workLotRecentlyCompleted({ completedAt: '2026-11-26T17:00:00.000Z', tasks: [{ cantidad: 0, entregado: 0 }] }, today), false, 'Un lote sin objetivo positivo no se considera completado');
+
 process.stdout.write('OK: fechas Bogotá, límites de día, mes/año, bisiesto, ventana ayer-hoy y objetivos de continuidad.\n');
