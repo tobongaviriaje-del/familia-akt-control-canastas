@@ -359,7 +359,7 @@ if(p==='/api/admin/change-password'&&req.method==='POST'){
 }
 if(p==='/api/admin/patinadores-credentials'&&req.method==='POST'){
  const token=String(req.headers.authorization||'').slice(7),session=sessions.get(token),state=readState();
- if(!session||session.username!=='admin'||!state.users.admin||state.users.admin.role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede configurar estas claves.'});
+ if(!authorized(req)||!session||session.username!=='admin'||!state.users.admin||state.users.admin.role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede configurar estas claves.'});
  let body='';req.on('data',c=>{body+=c;if(body.length>10000)req.destroy();});req.on('end',()=>{try{
   const incoming=JSON.parse(body||'{}'),passDia=String(incoming.passDia||''),passNoche=String(incoming.passNoche||'');
   if(passDia.length<4||passNoche.length<4)return sendJson(res,400,{ok:false,error:'Cada contraseña debe tener mínimo 4 caracteres.'});
@@ -795,7 +795,7 @@ if(p==='/api/admin/activate-work-lot'&&req.method==='POST'){
 if(p.startsWith('/api/')&&p!=='/api/login'&&!authorized(req))return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
 if(p==='/api/admin/deduplicate-standard-tasks'&&req.method==='POST'){
  const sessionToken=String(req.headers.authorization||'').slice(7),session=sessions.get(sessionToken),state=readState();
- if(!session||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo administración puede limpiar duplicados.'});
+ if(!authorized(req)||!session||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo administración puede limpiar duplicados.'});
  let body='';req.on('data',c=>{body+=c;if(body.length>10000)req.destroy();});req.on('end',()=>{
   try{
    const incoming=JSON.parse(body||'{}');
@@ -831,7 +831,7 @@ if(p==='/api/admin/deduplicate-standard-tasks'&&req.method==='POST'){
 
 if(p.startsWith('/api/admin/reference-photos/')&&req.method==='POST'){
  const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),modelKey=p.split('/').pop(),model=safePhotoModel(modelKey);
- if(!session||session.username!=='admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede cargar fotos de referencias.'});
+ if(!authorized(req)||!session||session.username!=='admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede cargar fotos de referencias.'});
  if(!model)return sendJson(res,400,{ok:false,error:'Modelo de fotos no válido.'});
  const chunks=[];let size=0,tooLarge=false;
  req.on('data',chunk=>{size+=chunk.length;if(size>15*1024*1024){tooLarge=true;chunks.length=0;}else if(!tooLarge)chunks.push(chunk);});
@@ -915,7 +915,7 @@ if(p.startsWith('/api/admin/reference-photos/')&&req.method==='POST'){
 
 if(p==='/api/admin/archive-completed-lot'&&req.method==='POST'){
  const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),state=readState();
- if(!session||session.username!=='admin'||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede retirar lotes.'});
+ if(!authorized(req)||!session||session.username!=='admin'||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede retirar lotes.'});
  let body='';req.on('data',c=>{body+=c;if(body.length>10000)req.destroy();});req.on('end',()=>{
   try{
    const incoming=JSON.parse(body||'{}'),modelo=String(incoming.modelo||'').trim().toUpperCase(),codigo=String(incoming.codigo||'').trim().toUpperCase();
@@ -942,7 +942,7 @@ if(p==='/api/admin/archive-completed-lot'&&req.method==='POST'){
 
 if(p==='/api/admin/reference-photos/diagnostic'&&req.method==='GET'){
  const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),state=readState();
- if(!session||session.username!=='admin'||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede consultar este diagnóstico.'});
+ if(!authorized(req)||!session||session.username!=='admin'||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede consultar este diagnóstico.'});
  const models=[{key:'nkd',name:'NKD',match:t=>!!t.standardNKD&&String(t.standardMoto||t.modelo||'NKD').trim().toUpperCase()==='NKD'},{key:'cr4125',name:'CR4 125',match:t=>String(t.standardMoto||t.modelo||t.modeloMoto||'').trim().toUpperCase().replace(/[-_]/g,' ')==='CR4 125'},{key:'cr4150',name:'CR4-150',match:t=>['CR4 150','CR4-150'].includes(String(t.standardMoto||t.modelo||t.modeloMoto||'').trim().toUpperCase())},{key:'xrs180',name:'XRS-180',match:t=>String(t.standardMoto||t.modelo||t.modeloMoto||'').trim().toUpperCase().replace(/[-_ ]/g,'')==='XRS180'},{key:'chr',name:'CHR',match:t=>String(t.standardMoto||t.modelo||t.modeloMoto||'').trim().toUpperCase()==='CHR'}];
  const normPos=v=>{const x=String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');let m=x.match(/^pre\s*0*(\d+)$/);if(m)return 'pre '+Number(m[1]);m=x.match(/^0*(\d+)\s*(derecho|izquierdo)$/);if(m)return m[2]+' '+Number(m[1]);m=x.match(/^(derecho|izquierdo|final(?: de linea)?)\s*0*(\d+)$/);if(m)return (m[1].startsWith('final')?'final':m[1])+' '+Number(m[2]);return x;};
  const out=models.map(model=>{
@@ -965,7 +965,7 @@ if(p==='/api/admin/reference-photos/diagnostic'&&req.method==='GET'){
 
 if(p.startsWith('/api/reference-photos/')&&req.method==='GET'){
  const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',photoSession=sessions.get(token),photoState=readStateSnapshot(),photoViewer=photoSession&&photoState.users&&photoState.users[photoSession.username];
- if(!photoViewer||!['Admin','Coordinador','Patinador'].includes(photoViewer.role))return sendJson(res,403,{ok:false,error:'Este perfil no tiene permiso para consultar las fotos de referencias.'});
+ if(!authorized(req)||!photoSession||!photoViewer||!['Admin','Coordinador','Patinador'].includes(photoViewer.role))return sendJson(res,403,{ok:false,error:'Este perfil no tiene permiso para consultar las fotos de referencias.'});
  const parts=p.split('/'),modelKey=parts[3],model=safePhotoModel(modelKey);if(!model)return sendJson(res,404,{ok:false,error:'Modelo no encontrado.'});
  const dir=path.join(DATA_DIR,'reference-photos',modelKey);
  if(parts[4]==='manifest'&&parts.length===5){fs.readFile(path.join(dir,'manifest.json'),(err,data)=>{if(err)return sendJson(res,404,{ok:false,error:'Aún no hay fotos cargadas para este modelo.'});res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'private, max-age=300'});res.end(data);});return;}
@@ -1085,7 +1085,7 @@ if(p==='/api/state'&&req.method==='GET'){
 }
 if(p==='/api/jornada/cerrar'&&req.method==='POST'){
 const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),authState=readState();
-if(!session||!authState.users[session.username]||authState.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede cerrar la jornada.'});
+if(!authorized(req)||!session||!authState.users[session.username]||authState.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede cerrar la jornada.'});
 let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{
 const incoming=JSON.parse(body||'{}');const state=readState();
 if(!Array.isArray(state.tasks))state.tasks=[];
@@ -1100,7 +1100,7 @@ return sendJson(res,200,{ok:true,archived:archived.file,count:archived.count,rem
 }
 if(p==='/api/jornada/continuar-pendientes'&&req.method==='POST'){
 const token=String(req.headers.authorization||'').slice(7),session=sessions.get(token),state=readState();
-if(!session||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede preparar la continuidad de tareas.'});
+if(!authorized(req)||!session||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede preparar la continuidad de tareas.'});
 let body='';req.on('data',c=>{body+=c;if(body.length>10000)req.destroy();});req.on('end',()=>{
 try{
 const incoming=JSON.parse(body||'{}');
@@ -1150,7 +1150,7 @@ return sendJson(res,200,{ok:true,archived:archivedFile.file,archivedCount:snapsh
 }
 if(p==='/api/jornada/continuar-estandar'&&req.method==='POST'){
 const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),state=readState();
-if(!session||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede preparar esta continuidad.'});
+if(!authorized(req)||!session||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede preparar esta continuidad.'});
 let body='';req.on('data',c=>{body+=c;if(body.length>10000)req.destroy();});req.on('end',()=>{
 try{
  const incoming=JSON.parse(body||'{}'),accion=String(incoming.accion||'previsualizar');
@@ -1195,7 +1195,7 @@ try{
 }
 if(p==='/api/jornada/continuar-xrs180'&&req.method==='POST'){
 const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),state=readState();
-if(!session||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede preparar esta continuidad.'});
+if(!authorized(req)||!session||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede preparar esta continuidad.'});
 let body='';req.on('data',c=>{body+=c;if(body.length>10000)req.destroy();});req.on('end',()=>{
 try{
 const incoming=JSON.parse(body||'{}'),accion=String(incoming.accion||'previsualizar');
@@ -1235,7 +1235,7 @@ return sendJson(res,200,{ok:true,resumen,archivo:archivo.file,tareasNuevas:pendi
 }
 if(p==='/api/state'&&req.method==='PUT'){
 const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),actor=session&&readState().users[session.username];
-if(!session||!actor)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
+if(!authorized(req)||!session||!actor)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
 let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{
 const incoming=JSON.parse(body||'{}'),current=readState(),isAdmin=actor.role==='Admin';
 if(!['Admin','Coordinador'].includes(actor.role))return sendJson(res,403,{ok:false,error:'Este perfil no tiene permiso para modificar el estado general de producción.'});
