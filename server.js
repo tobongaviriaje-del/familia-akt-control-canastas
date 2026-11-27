@@ -964,6 +964,8 @@ if(p==='/api/admin/reference-photos/diagnostic'&&req.method==='GET'){
 }
 
 if(p.startsWith('/api/reference-photos/')&&req.method==='GET'){
+ const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',photoSession=sessions.get(token),photoState=readStateSnapshot(),photoViewer=photoSession&&photoState.users&&photoState.users[photoSession.username];
+ if(!photoViewer||!['Admin','Coordinador','Patinador'].includes(photoViewer.role))return sendJson(res,403,{ok:false,error:'Este perfil no tiene permiso para consultar las fotos de referencias.'});
  const parts=p.split('/'),modelKey=parts[3],model=safePhotoModel(modelKey);if(!model)return sendJson(res,404,{ok:false,error:'Modelo no encontrado.'});
  const dir=path.join(DATA_DIR,'reference-photos',modelKey);
  if(parts[4]==='manifest'&&parts.length===5){fs.readFile(path.join(dir,'manifest.json'),(err,data)=>{if(err)return sendJson(res,404,{ok:false,error:'Aún no hay fotos cargadas para este modelo.'});res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'private, max-age=300'});res.end(data);});return;}
