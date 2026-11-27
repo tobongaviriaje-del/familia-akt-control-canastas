@@ -112,9 +112,19 @@ test('el endpoint de avance entrega solo el lote vigente por modelo y no altera 
   assert.equal(login.status,200,JSON.stringify(login.data));tokens.push(login.data.token);
  }
  const before=fs.readFileSync(path.join(dataDir,'state.json'),'utf8');
- for(const token of tokens){
+ for(const [index,token] of tokens.entries()){
   const response=await request(baseUrl,'/api/admin/work-lots/progress',{token});
   assert.equal(response.status,200,JSON.stringify(response.data));
+  if(index===1){
+   assert.deepEqual(response.data.lots.map(x=>x.model).sort(),['CR4 125','CHR','NKD']);
+   for(const lot of response.data.lots){
+    assert.deepEqual(Object.keys(lot).sort(),['code','model','number','percentage','skaters']);
+    assert.equal(typeof lot.percentage,'number');
+    assert.ok(Array.isArray(lot.skaters));
+   }
+   assert.equal(JSON.stringify(response.data).includes('chr-active-1'),false,'Supervisor no debe recibir detalle de referencias');
+   continue;
+  }
   assert.deepEqual(response.data.lots.map(x=>x.id).sort(),['active-CR4 125','chr-current','nkd-current']);
   assert.equal(response.data.lots.find(x=>x.model==='NKD').tasks.length,2);
   assert.equal(response.data.lots.find(x=>x.model==='CHR').tasks[0].id,'chr-active-1');
