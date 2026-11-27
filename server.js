@@ -591,7 +591,7 @@ if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
       const seen=new Set(),events=[...(Array.isArray(task.entregas)?task.entregas:[]),...(task.entrega&&typeof task.entrega==='object'?[task.entrega]:[])];
       const ownUnits=events.filter(event=>{
        if(!event||typeof event!=='object')return false;
-       const signature=String(event.id||'')||stableWorkString(event);
+       const signature=String(event.id||'')||JSON.stringify([event.patinador||event.username||event.usuario||event.nombrePatinador||event.nombre,event.cantidad,event.fechaHora,event.metodo,event.numeroOperacion,event.observaciones,event.canastasFisicas,event.turno]);
        if(seen.has(signature))return false;
        seen.add(signature);
        const responsible=workLotNorm(event.patinador||event.username||event.usuario||event.nombrePatinador||event.nombre);
