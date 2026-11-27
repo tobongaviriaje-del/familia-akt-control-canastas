@@ -436,7 +436,7 @@ function renderProgresoPatinadores(){
   if(!skaterWorkLotProgressLoading&&!skaterWorkLotProgressError)cargarDatosProgresoPatinadores();
   return;
  }
- if(current.role==='Supervisor'&&skaterWorkLotProgress.every(lot=>lot&&Array.isArray(lot.skaters))){
+ if(current.role==='Supervisor'){\n  if(!Array.isArray(skaterWorkLotProgress)||!skaterWorkLotProgress.every(lot=>lot&&Array.isArray(lot.skaters))){box.innerHTML='<p class="error">El servidor no entregó el resumen protegido del Supervisor. No se mostrarán datos de detalle.</p>';return;}
   const cards=skaterWorkLotProgress.map(lot=>{
    const lotPct=Math.max(0,Math.min(100,Number(lot.percentage)||0));
    const name=String(lot.model||'Modelo')+' · '+(lot.code?String(lot.code)+' · ':'')+'Lote '+String(lot.number??'—');
