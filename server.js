@@ -554,7 +554,7 @@ if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
     const tasks=(completed?sourceTasks:sourceTasks.filter(task=>{
      const code=String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase();
      if(activeCodes.size)return rowCode&&activeCodes.has(rowCode)?(!code||activeCodes.has(code)):activeCodes.has(code);
-     const ean=String(task&&task.ean||'').trim().toUpperCase().replace(/\\s+/g,''),position=workLotPosition(task&&task.puesto);
+     const ean=String(task&&task.ean||'').trim().toUpperCase().replace(/\s+/g,''),position=workLotPosition(task&&task.puesto);
      return !!(ean&&position&&activeRefs.has(ean+'|'+position));
     })).map(task=>({...task,standardNKD:true,standardMoto:model}));
     const taskCodes=[...new Set(tasks.map(task=>String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase()).filter(Boolean))];
