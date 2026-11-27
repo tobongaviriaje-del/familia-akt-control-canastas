@@ -170,11 +170,23 @@ function workLotUserCanTask(user,username,task){const positions=new Set(Array.is
 function workLotBogotaDate(value){
  const raw=String(value||'').split('#')[0],timestamp=Date.parse(raw);
  if(!Number.isFinite(timestamp))return '';
- return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(timestamp));
+ const parts=new Intl.DateTimeFormat('en',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(timestamp));
+ const get=type=>parts.find(part=>part.type===type)?.value||'';
+ return get('year')+'-'+get('month')+'-'+get('day');
 }
-function workLotBogotaDateOffset(dateString,offset){const parts=String(dateString||'').split('-').map(Number);if(parts.length!==3||parts.some(x=>!Number.isFinite(x)))return '';return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(Date.UTC(parts[0],parts[1]-1,parts[2]+offset,12)));}
+function workLotBogotaDateOffset(dateString,offset){
+ const match=String(dateString||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!match||!Number.isFinite(Number(offset)))return '';
+ const date=new Date(Date.UTC(Number(match[1]),Number(match[2])-1,Number(match[3])+Number(offset),12));
+ const parts=new Intl.DateTimeFormat('en',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(date);
+ const get=type=>parts.find(part=>part.type===type)?.value||'';
+ return get('year')+'-'+get('month')+'-'+get('day');
+}
 function workLotIsCompleted(row){const tasks=Array.isArray(row&&row.tasks)?row.tasks:[];return tasks.length>0&&tasks.every(task=>workLotTarget(task)>0&&workLotNumber(task.entregado)>=workLotTarget(task));}
-function workLotRecentlyCompleted(row){if(!workLotIsCompleted(row))return false;const date=workLotBogotaDate(row.completedAt||row.updatedAt||''),today=workLotBogotaDate(new Date().toISOString());return !!date&&(date===today||date===workLotBogotaDateOffset(today,-1));}
+function workLotRecentlyCompleted(row,now=new Date()){
+ if(!workLotIsCompleted(row))return false;
+ const date=workLotBogotaDate(row.completedAt||row.updatedAt||''),today=workLotBogotaDate(now.toISOString());
+ return !!date&&(date===today||date===workLotBogotaDateOffset(today,-1));
+}
 function workLotVisibleRows(row,rows){
  const sameModel=rows.filter(x=>x&&x.model===row.model);
  const today=workLotBogotaDate(new Date().toISOString());
