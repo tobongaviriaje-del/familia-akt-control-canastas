@@ -116,7 +116,7 @@ test('el endpoint de avance entrega solo el lote vigente por modelo y no altera 
   const response=await request(baseUrl,'/api/admin/work-lots/progress',{token});
   assert.equal(response.status,200,JSON.stringify(response.data));
   if(index===1){
-   assert.deepEqual(response.data.lots.map(x=>x.model).sort(),['CR4 125','CHR','NKD']);
+   assert.deepEqual(response.data.lots.map(x=>x.model).sort(),['CHR','CR4 125','NKD']);
    for(const lot of response.data.lots){
     assert.deepEqual(Object.keys(lot).sort(),['code','model','number','percentage','skaters']);
     assert.equal(typeof lot.percentage,'number');
