@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "start": "node server.js",
-    "test": "node scripts/check-syntax.js && node scripts/test-work-lot-dates.js"
+    "test": "node scripts/check-syntax.js && node scripts/test-work-lot-dates.js && node scripts/test-role-permissions.js"
   },
   "engines": {
     "node": ">=18"
