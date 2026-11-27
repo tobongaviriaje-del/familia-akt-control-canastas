@@ -1012,6 +1012,7 @@ if(p==='/api/assistant/production-summary'&&req.method==='GET'){
   for(const task of Array.isArray(state.tasks)?state.tasks:[]){
    const model=workLotModel(task&&(task.standardMoto||task.modeloMoto||task.modeloEstandar||task.modelo||(task.standardNKD?'NKD':'')));
    if(!task||task.id==null||!standardModels.has(model))continue;
+   if(workLotTarget(task)<=workLotNumber(task.entregado))continue;
    if(!activeIdsByModel.has(model))activeIdsByModel.set(model,new Set());
    activeIdsByModel.get(model).add(String(task.id));
   }
