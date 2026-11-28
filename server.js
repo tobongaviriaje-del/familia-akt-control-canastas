@@ -1004,27 +1004,48 @@ if(p==='/api/assistant/production-summary'&&req.method==='GET'){
   if(session.username==='patinadores')return sendJson(res,403,{ok:false,error:'Para consultar tu avance personal debes ingresar con tu cuenta individual de Patinador.'});
   const allowed=['Admin','Supervisor','Coordinador','Patinador'];
   if(!allowed.includes(role))return sendJson(res,403,{ok:false,error:'Tu perfil no tiene permiso para consultar el asistente de producción.'});
-  const standardModels=workLotActiveModels(state.tasks),activeIdsByModel=new Map();
+  // Relacionar las instantáneas con las tareas activas igual que el tablero de avance:
+  // los IDs pueden cambiar al guardar/importar; usar código de lote y, si falta,
+  // la identidad estable EAN + puesto. Nunca seleccionar por número de lote solamente.
+  const activeModels=new Set(),activeCodesByModel=new Map(),activeRefsByModel=new Map();
   for(const task of Array.isArray(state.tasks)?state.tasks:[]){
-   const model=workLotModel(task&&(task.standardMoto||task.modeloMoto||task.modeloEstandar||task.modelo||(task.standardNKD?'NKD':'')));
-   if(!task||task.id==null||!standardModels.has(model))continue;
-   if(workLotTarget(task)<=workLotNumber(task.entregado))continue;
-   if(!activeIdsByModel.has(model))activeIdsByModel.set(model,new Set());
-   activeIdsByModel.get(model).add(String(task.id));
+   if(!task)continue;
+   const model=workLotModel(task.standardMoto||task.modeloMoto||task.modeloEstandar||task.modelo||(task.standardNKD?'NKD':''));
+   if(!model||workLotTarget(task)<=workLotNumber(task.entregado))continue;
+   activeModels.add(model);
+   const code=String(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote||'').trim().toUpperCase();
+   if(code){if(!activeCodesByModel.has(model))activeCodesByModel.set(model,new Set());activeCodesByModel.get(model).add(code);}
+   const ean=String(task.ean||'').trim().toUpperCase().replace(/\\s+/g,'');
+   const position=workLotPosition(task.puesto);
+   if(ean&&position){if(!activeRefsByModel.has(model))activeRefsByModel.set(model,new Set());activeRefsByModel.get(model).add(ean+'|'+position);}
   }
   const activeByModel=new Map();
   for(const candidate of readWorkLots()){
-   const model=workLotModel(candidate&&candidate.model),activeIds=activeIdsByModel.get(model);
-   if(!activeIds||!activeIds.size)continue;
+   const model=workLotModel(candidate&&candidate.model);
+   if(!activeModels.has(model))continue;
    const tasks=Array.isArray(candidate&&candidate.tasks)?candidate.tasks:[];
-   const matches=tasks.reduce((count,task)=>count+(task&&task.id!=null&&activeIds.has(String(task.id))?1:0),0);
-   if(!matches)continue;
-   const previous=activeByModel.get(model);
-   if(!previous||matches>previous.matches||(matches===previous.matches&&workLotNumber(candidate.number)>workLotNumber(previous.row.number)))activeByModel.set(model,{row:candidate,matches});
+   const activeCodes=activeCodesByModel.get(model)||new Set(),activeRefs=activeRefsByModel.get(model)||new Set();
+   const rowCode=String(candidate.codigoLoteOperacion||'').trim().toUpperCase();
+   let matchingTasks=[];
+   if(activeCodes.size){
+    if(rowCode&&activeCodes.has(rowCode)){
+     matchingTasks=tasks.filter(task=>{const code=String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase();return !code||activeCodes.has(code);});
+    }else{
+     matchingTasks=tasks.filter(task=>{const code=String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase();return !!code&&activeCodes.has(code);});
+    }
+   }else if(activeRefs.size){
+    matchingTasks=tasks.filter(task=>{
+     const ean=String(task&&task.ean||'').trim().toUpperCase().replace(/\\s+/g,''),position=workLotPosition(task&&task.puesto);
+     return !!(ean&&position&&activeRefs.has(ean+'|'+position));
+    });
+   }
+   if(!matchingTasks.length)continue;
+   const matches=matchingTasks.length,previous=activeByModel.get(model);
+   if(!previous||matches>previous.matches||(matches===previous.matches&&workLotNumber(candidate.number)>workLotNumber(previous.row.number)))activeByModel.set(model,{row:candidate,matches,tasks:matchingTasks});
   }
-  const activeRows=[...activeByModel.values()].map(({row})=>row);
-   const lots=activeRows.map(row=>{
-    const tasks=(Array.isArray(row.tasks)?row.tasks:[]).map(task=>({...task,standardNKD:true,standardMoto:workLotModel(row.model)}));
+  const activeRows=[...activeByModel.values()];
+   const lots=activeRows.map(({row, tasks:matchedTasks})=>{
+    const tasks=matchedTasks.map(task=>({...task,standardNKD:true,standardMoto:workLotModel(row.model)}));
     const taskCodes=[...new Set(tasks.map(t=>String(t&&(t.codigoLoteOperacion||t.loteCodigo||t.codigoLote)||'').trim().toUpperCase()).filter(Boolean))];
     const code=String(row.codigoLoteOperacion||'').trim().toUpperCase()||(taskCodes.length===1?taskCodes[0]:'');
     return {id:String(row.id||''),model:workLotModel(row.model),number:workLotNumber(row.number),code,tasks,completed:workLotIsCompleted(row),completedAt:row.completedAt||null};
@@ -1231,6 +1252,7 @@ const incoming=JSON.parse(body||'{}'),current=readState(),isAdmin=actor.role==='
 if(!['Admin','Coordinador'].includes(actor.role))return sendJson(res,403,{ok:false,error:'Este perfil no tiene permiso para modificar el estado general de producción.'});
 if(actor.role==='Coordinador'){
  if(!Array.isArray(incoming.tasks)||incoming.tasks.length!==current.tasks.length)return sendJson(res,403,{ok:false,error:'Coordinación solo puede operar sobre las tareas de producción existentes; no puede crear ni eliminar referencias.'});
+ if(Object.prototype.hasOwnProperty.call(incoming,'freeDeliveries')&&stableWorkString(incoming.freeDeliveries)!==stableWorkString(current.freeDeliveries||[]))return sendJson(res,403,{ok:false,error:'El registro de entregas sin estándar está reservado al Administrador. No se guardó ningún cambio.'});
  const operationalFields=[...WORK_LOT_DELIVERY_FIELDS,...WORK_LOT_CAPACITY_FIELDS,'lote','lotePiezas','cantidad','codigoLoteOperacion','codigoOperacionActualizadoPor','codigoOperacionActualizadoEn'];
  for(let i=0;i<current.tasks.length;i++){
   const before=current.tasks[i],after=incoming.tasks[i];
