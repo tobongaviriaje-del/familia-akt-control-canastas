@@ -239,7 +239,33 @@ async function main() {
     method: 'PUT', token: coordinator,
     body: { ...coordinatorState.data, tasks: [{ ...coordinatorState.data.tasks[0], entregado: 60, estado: 'En proceso' }] },
   });
+
   assert.equal(allowedCoordinatorWrite.status, 200, 'Coordinación puede guardar avance operativo');
+
+  // Coordinación no puede alterar objetivos, capacidad ni reasignar referencias a otro lote
+  // mediante el guardado general del estado. Esas modificaciones quedan fuera de la
+  // lista de campos operativos autorizados y requieren flujos específicos.
+  for (const [field, value] of [
+    ['cantidad', 999], ['lote', 999], ['lotePiezas', 999],
+    ['cantidadCanasta', 1], ['cantidadCanastaRaw', '1'],
+    ['numCanastas', 999], ['numCanastasRaw', '999'],
+    ['codigoLoteOperacion', 'KK999'],
+    ['codigoOperacionActualizadoPor', 'Coordinación'],
+    ['codigoOperacionActualizadoEn', '27/11/2026'],
+  ]) {
+    const fresh = await request(base, '/api/state', { token: coordinator });
+    assert.equal(fresh.status, 200);
+    const changedTask = { ...fresh.data.tasks[0], [field]: value };
+    const denied = await request(base, '/api/state', {
+      method: 'PUT', token: coordinator,
+      body: { ...fresh.data, tasks: [changedTask] },
+    });
+    assert.equal(denied.status, 403, 'Coordinación no puede modificar ' + field);
+    const afterDenied = await request(base, '/api/state', { token: coordinator });
+    assert.equal(afterDenied.data.tasks[0][field], fresh.data.tasks[0][field],
+      'El intento rechazado no debe modificar ' + field);
+  }
+
 
   const forbiddenSupervisorWrite = await request(base, '/api/state', {
     method: 'PUT', token: supervisor,
