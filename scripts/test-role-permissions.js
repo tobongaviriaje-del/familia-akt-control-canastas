@@ -28,6 +28,10 @@ function fixture() {
     users, tasks: [task], lpnCatalog: ['TEST'], freeDeliveries: [],
     estibasRecibidas: [], queuedStandardBatches: [],
     tareasArchivadas: [{ id: 'archive-1' }],
+    adminConfig: { maintenanceMode: true },
+    permissions: { canManageUsers: true },
+    systemSettings: { secretFlag: 'admin-only' },
+    auditLog: [{ id: 'audit-1' }],
   }, null, 2));
   fs.writeFileSync(path.join(tempDir, 'work-lots.json'), JSON.stringify([{
     id: 'lot-1', model: 'NKD', number: 711, codigoLoteOperacion: 'KK711',
@@ -144,12 +148,24 @@ async function main() {
   assert.ok(adminState.data.users.admin && adminState.data.users.coord && adminState.data.users.supervisor);
   assert.equal(adminState.data.users.admin.pass, undefined, 'Nunca debe devolver contraseñas');
   assert.equal(adminState.data.tasks.length, 1, 'Admin conserva el estado completo de producción');
+  assert.deepEqual(adminState.data.adminConfig, { maintenanceMode: true }, 'Admin conserva configuración administrativa');
+  assert.deepEqual(adminState.data.permissions, { canManageUsers: true }, 'Admin conserva permisos administrativos');
+  assert.deepEqual(adminState.data.systemSettings, { secretFlag: 'admin-only' }, 'Admin conserva ajustes del sistema');
+  assert.deepEqual(adminState.data.auditLog, [{ id: 'audit-1' }], 'Admin conserva auditoría');
 
   const coordinatorState = await request(base, '/api/state', { token: coordinator });
   assert.equal(coordinatorState.status, 200);
   assert.deepEqual(Object.keys(coordinatorState.data.users), ['ana'], 'Coordinación solo debe consultar perfiles Patinador');
   assert.equal(coordinatorState.data.tareasArchivadas, undefined, 'Coordinación no debe recibir el historial administrativo');
+  assert.deepEqual(Object.keys(coordinatorState.data).sort(), [
+    'estibasRecibidas', 'freeDeliveries', 'lpnCatalog', 'queuedStandardBatches', 'tasks', 'users',
+  ], 'Coordinación recibe únicamente la lista permitida de datos operativos');
+  for (const key of ['adminConfig', 'permissions', 'systemSettings', 'auditLog', 'adminRecoveryUsed', 'patinadoresAuth']) {
+    assert.equal(coordinatorState.data[key], undefined, 'Coordinación no debe recibir el campo administrativo ' + key);
+  }
   assert.equal(coordinatorState.data.tasks.length, 1, 'Coordinación puede consultar tareas operativas');
+  assert.deepEqual(coordinatorState.data.queuedStandardBatches, [], 'Coordinación conserva el flujo operativo de lotes en cola');
+  assert.deepEqual(coordinatorState.data.estibasRecibidas, [], 'Coordinación conserva la consulta operativa de estibas');
 
   const supervisorState = await request(base, '/api/state', { token: supervisor });
   assert.equal(supervisorState.status, 200);
