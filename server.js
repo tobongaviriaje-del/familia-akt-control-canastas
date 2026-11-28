@@ -1262,6 +1262,10 @@ if(actor.role==='Coordinador'){
   const capacityChanged=WORK_LOT_CAPACITY_FIELDS.some(k=>stableWorkString(before[k]??null)!==stableWorkString(after[k]??null));
   const deliveryChanged=WORK_LOT_DELIVERY_FIELDS.some(k=>stableWorkString(before[k]??null)!==stableWorkString(after[k]??null));
   if((targetChanged||capacityChanged)&&deliveryChanged)return sendJson(res,403,{ok:false,error:'Guarda los cambios de lote o capacidad por separado de las entregas.'});
+  if(deliveryChanged){
+   const target=workLotTarget(after),delivered=workLotNumber(after.entregado);
+   if(!Number.isInteger(delivered)||delivered<0||delivered>target)return sendJson(res,403,{ok:false,error:'Las unidades entregadas deben ser un entero entre cero y el objetivo vigente del lote.'});
+  }
   if(targetChanged||capacityChanged){
    const target=workLotTarget(after),delivered=workLotNumber(after.entregado);
    if(!Number.isInteger(target)||target<1||delivered>target)return sendJson(res,403,{ok:false,error:'El lote debe ser un entero positivo y no puede quedar por debajo de las unidades ya entregadas.'});
