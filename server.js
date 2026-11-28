@@ -5,7 +5,7 @@ const path=require('path');
 
 const PORT=process.env.PORT||8080;
 const ROOT=path.join(__dirname,'public');
-const DATA_DIR=path.join(__dirname,'data');
+const DATA_DIR=process.env.DATA_DIR?path.resolve(process.env.DATA_DIR):path.join(__dirname,'data');
 const STATE_FILE=path.join(DATA_DIR,'state.json');
 const HISTORY_DIR=path.join(DATA_DIR,'history');
 const SESSION_FILE=path.join(DATA_DIR,'sessions.json');
@@ -161,7 +161,8 @@ function stableWorkValue(v){if(Array.isArray(v))return v.map(stableWorkValue);if
 function stableWorkString(v){return JSON.stringify(stableWorkValue(v));}
 function workLotNumber(v){const n=Number(v);return Number.isFinite(n)?n:0;}
 function workLotModel(v){return String(v||'').trim().toUpperCase().replace(/VOGUE 180/g,'VOGE 180').replace(/VOGI 180/g,'VOGE 180').replace(/^CH$/,'CHR').replace(/^CR4[-_ ]?150$/,'CR4 150').replace(/^CR4[-_ ]?125$/,'CR4 125').replace(/^XRS[ _]?180$/,'XRS-180');}
-function workLotTarget(t){const lot=workLotNumber(t.lote),qty=workLotNumber(t.cantidad),cap=workLotNumber(t.cantidadCanasta),baskets=workLotNumber(t.numCanastas),unit=workLotNumber(t.cantidadUnidad);if(lot>1)return lot;if(qty>1)return qty;if(cap>0&&baskets>0)return cap*baskets;return unit>0?unit:(lot>0?lot:(cap>0?cap:qty));}
+function workLotActiveModels(tasks){return new Set((Array.isArray(tasks)?tasks:[]).map(task=>workLotModel(task&&(task.standardMoto||task.modeloMoto||task.modeloEstandar||task.modelo||(task.standardNKD?'NKD':'')))).filter(Boolean));}
+function workLotTarget(t){if(t&&t.continuidadDeTareaId)return Math.max(0,workLotNumber(t.cantidad));const lot=workLotNumber(t.lote),qty=workLotNumber(t.cantidad),cap=workLotNumber(t.cantidadCanasta),baskets=workLotNumber(t.numCanastas),unit=workLotNumber(t.cantidadUnidad);if(lot>1)return lot;if(qty>1)return qty;if(cap>0&&baskets>0)return cap*baskets;return unit>0?unit:(lot>0?lot:(cap>0?cap:qty));}
 function readWorkLots(){try{if(!fs.existsSync(WORK_LOTS_FILE))return [];const data=JSON.parse(fs.readFileSync(WORK_LOTS_FILE,'utf8'));return Array.isArray(data)?data:[];}catch(e){console.error('No se pudieron leer los lotes de trabajo:',e.message);throw new Error('No se pudieron leer los lotes de trabajo.');}}
 function writeWorkLots(rows){fs.mkdirSync(DATA_DIR,{recursive:true});const tmp=WORK_LOTS_FILE+'.tmp';fs.writeFileSync(tmp,JSON.stringify(rows,null,2),{mode:0o600});fs.renameSync(tmp,WORK_LOTS_FILE);}
 function workLotNorm(v){return String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');}
@@ -170,7 +171,23 @@ function workLotUserCanTask(user,username,task){const positions=new Set(Array.is
 function workLotBogotaDate(value){
  const raw=String(value||'').split('#')[0],timestamp=Date.parse(raw);
  if(!Number.isFinite(timestamp))return '';
- return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(timestamp));
+ const parts=new Intl.DateTimeFormat('en',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(timestamp));
+ const get=type=>parts.find(part=>part.type===type)?.value||'';
+ return get('year')+'-'+get('month')+'-'+get('day');
+}
+function workLotBogotaDateOffset(dateString,offset){
+ const match=String(dateString||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);if(!match||!Number.isFinite(Number(offset)))return '';
+ const date=new Date(Date.UTC(Number(match[1]),Number(match[2])-1,Number(match[3])+Number(offset),12));
+ const parts=new Intl.DateTimeFormat('en',{timeZone:'America/Bogota',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(date);
+ const get=type=>parts.find(part=>part.type===type)?.value||'';
+ return get('year')+'-'+get('month')+'-'+get('day');
+}
+function workLotIsCompleted(row){const tasks=Array.isArray(row&&row.tasks)?row.tasks:[];return tasks.length>0&&tasks.every(task=>workLotTarget(task)>0&&workLotNumber(task.entregado)>=workLotTarget(task));}
+function workLotRecentlyCompleted(row,now=new Date()){
+ if(!workLotIsCompleted(row))return false;
+ // updatedAt cambia con cualquier edición y no demuestra cuándo se completó un lote legado.
+ const date=workLotBogotaDate(row.completedAt||''),today=workLotBogotaDate(now.toISOString());
+ return !!date&&(date===today||date===workLotBogotaDateOffset(today,-1));
 }
 function workLotVisibleRows(row,rows){
  const sameModel=rows.filter(x=>x&&x.model===row.model);
@@ -359,7 +376,7 @@ if(p==='/api/admin/change-password'&&req.method==='POST'){
 }
 if(p==='/api/admin/patinadores-credentials'&&req.method==='POST'){
  const token=String(req.headers.authorization||'').slice(7),session=sessions.get(token),state=readState();
- if(!session||session.username!=='admin'||!state.users.admin||state.users.admin.role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede configurar estas claves.'});
+ if(!authorized(req)||!session||session.username!=='admin'||!state.users.admin||state.users.admin.role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede configurar estas claves.'});
  let body='';req.on('data',c=>{body+=c;if(body.length>10000)req.destroy();});req.on('end',()=>{try{
   const incoming=JSON.parse(body||'{}'),passDia=String(incoming.passDia||''),passNoche=String(incoming.passNoche||'');
   if(passDia.length<4||passNoche.length<4)return sendJson(res,400,{ok:false,error:'Cada contraseña debe tener mínimo 4 caracteres.'});
@@ -488,17 +505,45 @@ if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
   // guardados pueden tener instantáneas válidas con IDs distintos.
   const savedLots=readWorkLots(),selections=readWorkLotSelections(),activeByLot=new Map();
   const users=state.users&&typeof state.users==='object'?state.users:{};
+  // Limitar el tablero a códigos de lote que siguen activos en state.tasks.
+  // Las instantáneas de work-lots pueden tener IDs distintos a las tareas activas.
+  const activeModels=workLotActiveModels(state.tasks),activeCodesByModel=new Map(),activeRefsByModel=new Map();
+  for(const task of Array.isArray(state.tasks)?state.tasks:[]){
+   const model=workLotModel(task&&(task.standardMoto||task.modeloMoto||task.modeloEstandar||task.modelo||(task.standardNKD?'NKD':'')));
+   if(!task||!model)continue;
+   const code=String(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote||'').trim().toUpperCase();
+   if(code){if(!activeCodesByModel.has(model))activeCodesByModel.set(model,new Set());activeCodesByModel.get(model).add(code);}
+   const ean=String(task.ean||'').trim().toUpperCase().replace(/\s+/g,'');
+   const position=workLotPosition(task.puesto);
+   if(ean&&position){if(!activeRefsByModel.has(model))activeRefsByModel.set(model,new Set());activeRefsByModel.get(model).add(ean+'|'+position);}
+  }
   for(const [selectionKey,selection] of Object.entries(selections)){
    if(!selection||!selection.lotId)continue;
    const split=selectionKey.lastIndexOf('|');
    if(split<=0)continue;
    const actorKey=workLotNorm(selectionKey.slice(0,split)),model=workLotModel(selectionKey.slice(split+1));
-   if(!actorKey||!['NKD','CR4 150','CR4 125','XRS-180','CHR'].includes(model))continue;
+   if(!actorKey||!activeModels.has(model))continue;
    const username=Object.keys(users).find(key=>workLotNorm(key)===actorKey),patinador=username&&users[username];
    if(!patinador||patinador.role!=='Patinador')continue;
    const row=savedLots.find(candidate=>candidate&&workLotModel(candidate.model)===model&&String(candidate.id)===String(selection.lotId));
+   const activeCodes=activeCodesByModel.get(model)||new Set(),activeRefs=activeRefsByModel.get(model)||new Set();
    if(!row||!Array.isArray(row.tasks)||!row.tasks.length)continue;
-   const pending=row.tasks.reduce((sum,task)=>sum+Math.max(0,workLotTarget(task)-workLotNumber(task&&task.entregado)),0);
+   const rowCode=String(row.codigoLoteOperacion||'').trim().toUpperCase();
+   const rowTaskCodes=new Set(row.tasks.map(task=>String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase()).filter(Boolean));
+   let currentTasks=[];
+   if(activeCodes.size){
+    const matchingCodes=new Set([...rowTaskCodes].filter(code=>activeCodes.has(code)));
+    if(rowCode&&activeCodes.has(rowCode))currentTasks=row.tasks.filter(task=>{const code=String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase();return !code||activeCodes.has(code);});
+    else if(matchingCodes.size)currentTasks=row.tasks.filter(task=>matchingCodes.has(String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase()));
+    else continue;
+   }else{
+    currentTasks=row.tasks.filter(task=>{
+     const ean=String(task&&task.ean||'').trim().toUpperCase().replace(/\s+/g,''),position=workLotPosition(task&&task.puesto);
+     return !!(ean&&position&&activeRefs.has(ean+'|'+position));
+    });
+   }
+   if(!currentTasks.length)continue;
+   const pending=currentTasks.reduce((sum,task)=>sum+Math.max(0,workLotTarget(task)-workLotNumber(task&&task.entregado)),0);
    // GET solo recuerda la pantalla abierta: no inicia un lote.
    // Solo una selección explícita o un guardado de trabajo marca el inicio.
    if(!selection.startedAt)continue;
@@ -509,12 +554,51 @@ if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
    entry.patinadores.add(String(patinador.name||username));
    if(selection.startedAt&&(!entry.startedAt||String(selection.startedAt)<String(entry.startedAt)))entry.startedAt=selection.startedAt;
   }
-  const lots=[...activeByLot.values()].map(({row,model,patinadores,startedAt})=>{
-   const tasks=(Array.isArray(row.tasks)?row.tasks:[]).map(task=>({...task,standardNKD:true,standardMoto:model}));
-   const taskCodes=[...new Set(tasks.map(task=>String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase()).filter(Boolean))];
-   const code=String(row.codigoLoteOperacion||'').trim().toUpperCase()||(taskCodes.length===1?taskCodes[0]:'');
-   return {id:String(row.id),model,number:workLotNumber(row.number),codigoLoteOperacion:code,createdAt:row.createdAt||null,updatedAt:row.updatedAt||null,startedAt,active:true,activePatinadores:[...patinadores].sort((a,b)=>a.localeCompare(b,'es')),tasks};
-  }).sort((a,b)=>a.model.localeCompare(b.model,'es')||a.number-b.number);
+  // Los lotes completados se conservan en el historial, pero no vuelven a los tableros de producción.
+   const lots=[...activeByLot.values()].map(({row,model,patinadores,startedAt,completed})=>{
+    const activeCodes=activeCodesByModel.get(model)||new Set(),activeRefs=activeRefsByModel.get(model)||new Set();
+    const rowCode=String(row.codigoLoteOperacion||'').trim().toUpperCase();
+    const sourceTasks=Array.isArray(row.tasks)?row.tasks:[];
+    const tasks=(completed?sourceTasks:sourceTasks.filter(task=>{
+     const code=String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase();
+     if(activeCodes.size)return rowCode&&activeCodes.has(rowCode)?(!code||activeCodes.has(code)):activeCodes.has(code);
+     const ean=String(task&&task.ean||'').trim().toUpperCase().replace(/\s+/g,''),position=workLotPosition(task&&task.puesto);
+     return !!(ean&&position&&activeRefs.has(ean+'|'+position));
+    })).map(task=>({...task,standardNKD:true,standardMoto:model}));
+    const taskCodes=[...new Set(tasks.map(task=>String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase()).filter(Boolean))];
+    const code=String(row.codigoLoteOperacion||'').trim().toUpperCase()||(taskCodes.length===1?taskCodes[0]:'');
+    return {id:String(row.id),model,number:workLotNumber(row.number),codigoLoteOperacion:code,createdAt:row.createdAt||null,updatedAt:row.updatedAt||null,completedAt:row.completedAt||null,startedAt,active:!completed,completed:!!completed,activePatinadores:[...patinadores].sort((a,b)=>a.localeCompare(b,'es')),tasks};
+   }).sort((a,b)=>a.model.localeCompare(b.model,'es')||a.number-b.number);
+   if(viewer.role==='Supervisor'){
+   const summaries=lots.map(lot=>{
+    const tasks=Array.isArray(lot.tasks)?lot.tasks:[];
+    const total=tasks.reduce((sum,task)=>sum+Math.max(0,workLotTarget(task)),0);
+    const delivered=tasks.reduce((sum,task)=>sum+Math.min(Math.max(0,workLotTarget(task)),Math.max(0,workLotNumber(task&&task.entregado))),0);
+    const skaters=Object.entries(users).filter(([,user])=>user&&user.role==='Patinador').map(([username,user])=>{
+     const assigned=tasks.filter(task=>workLotUserCanTask(user,username,task));
+     if(!assigned.length)return null;
+     const identities=new Set([username,user.name,user.nombre].map(workLotNorm).filter(Boolean));
+     let assignedTotal=0,ownDelivered=0;
+     for(const task of assigned){
+      const target=Math.max(0,workLotTarget(task));
+      assignedTotal+=target;
+      const seen=new Set(),events=[...(Array.isArray(task.entregas)?task.entregas:[]),...(task.entrega&&typeof task.entrega==='object'?[task.entrega]:[])];
+      const ownUnits=events.filter(event=>{
+       if(!event||typeof event!=='object')return false;
+       const signature=String(event.id||'')||JSON.stringify([event.patinador||event.username||event.usuario||event.nombrePatinador||event.nombre,event.cantidad,event.fechaHora,event.metodo,event.numeroOperacion,event.observaciones,event.canastasFisicas,event.turno]);
+       if(seen.has(signature))return false;
+       seen.add(signature);
+       const responsible=workLotNorm(event.patinador||event.username||event.usuario||event.nombrePatinador||event.nombre);
+       return identities.has(responsible);
+      }).reduce((sum,event)=>sum+Math.max(0,workLotNumber(event.cantidad)),0);
+      ownDelivered+=Math.min(target,ownUnits);
+     }
+     return {name:String(user.name||user.nombre||username),percentage:assignedTotal?Math.min(100,ownDelivered/assignedTotal*100):0};
+    }).filter(Boolean).sort((a,b)=>a.name.localeCompare(b.name,'es'));
+    return {model:lot.model,number:lot.number,code:lot.codigoLoteOperacion||'',percentage:total?Math.min(100,delivered/total*100):0,skaters};
+   });
+   return sendJson(res,200,{ok:true,soloLectura:true,source:'aggregated-supervisor-dashboard',lots:summaries});
+  }
   return sendJson(res,200,{ok:true,soloLectura:true,source:'patinador-selections+work-lots',lots});
  }catch(e){console.error('Error consultando avance de patinadores:',e);return sendJson(res,503,{ok:false,error:'No se pudieron leer los lotes de trabajo. No se modificó ningún dato.'});}
 }
@@ -523,6 +607,7 @@ if(p==='/api/work-lots/overview'&&req.method==='GET'){
  if(!authorized(req)||!session)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
  const state=readState(),viewer=state.users&&state.users[session.username],allowed=['Admin','Supervisor','Coordinador'];
  if(!viewer||!allowed.includes(viewer.role))return sendJson(res,403,{ok:false,error:'No tienes permiso para consultar el detalle de lotes.'});
+ if(viewer.role==='Supervisor')return sendJson(res,403,{ok:false,error:'El perfil Supervisor solo puede consultar porcentajes de avance y entrega.'});
  const model=workLotModel(url.searchParams.get('model')),code=String(url.searchParams.get('code')||'').trim().toUpperCase();
  if(!model)return sendJson(res,400,{ok:false,error:'Selecciona un modelo válido.'});
  try{
@@ -674,7 +759,7 @@ if(p==='/api/work-lots'&&['GET','POST','PUT'].includes(req.method)){
    const selected=rows.find(x=>x.model===model&&x.id===String(body.lotId));if(!selected)return sendJson(res,404,{ok:false,error:'El lote ya no existe. Actualiza la pantalla.'});
    if(selected.updatedAt!==body.version)return sendJson(res,409,{ok:false,error:'Otro usuario guardó cambios en este lote. Actualiza antes de continuar.'});
    let merged;try{merged=validateWorkLot(selected.tasks||[],body.tasks,user,actor);}catch(e){return sendJson(res,403,{ok:false,error:e.message||'No se pudo validar el cambio.'});}
-   selected.tasks=merged;selected.updatedAt=new Date().toISOString()+'#'+require('crypto').randomUUID();writeWorkLots(rows);
+   selected.tasks=merged;const savedAt=new Date().toISOString();if(workLotIsCompleted(selected)){if(!selected.completedAt)selected.completedAt=savedAt;}else delete selected.completedAt;selected.updatedAt=savedAt+'#'+require('crypto').randomUUID();writeWorkLots(rows);
    rememberWorkLotSelection(actor,model,selected,true);
    return sendJson(res,200,workLotResponse(selected,user,actor,rows));
   }
@@ -729,7 +814,7 @@ if(p==='/api/admin/activate-work-lot'&&req.method==='POST'){
 if(p.startsWith('/api/')&&p!=='/api/login'&&!authorized(req))return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
 if(p==='/api/admin/deduplicate-standard-tasks'&&req.method==='POST'){
  const sessionToken=String(req.headers.authorization||'').slice(7),session=sessions.get(sessionToken),state=readState();
- if(!session||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo administración puede limpiar duplicados.'});
+ if(!authorized(req)||!session||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo administración puede limpiar duplicados.'});
  let body='';req.on('data',c=>{body+=c;if(body.length>10000)req.destroy();});req.on('end',()=>{
   try{
    const incoming=JSON.parse(body||'{}');
@@ -765,7 +850,7 @@ if(p==='/api/admin/deduplicate-standard-tasks'&&req.method==='POST'){
 
 if(p.startsWith('/api/admin/reference-photos/')&&req.method==='POST'){
  const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),modelKey=p.split('/').pop(),model=safePhotoModel(modelKey);
- if(!session||session.username!=='admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede cargar fotos de referencias.'});
+ if(!authorized(req)||!session||session.username!=='admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede cargar fotos de referencias.'});
  if(!model)return sendJson(res,400,{ok:false,error:'Modelo de fotos no válido.'});
  const chunks=[];let size=0,tooLarge=false;
  req.on('data',chunk=>{size+=chunk.length;if(size>15*1024*1024){tooLarge=true;chunks.length=0;}else if(!tooLarge)chunks.push(chunk);});
@@ -849,7 +934,7 @@ if(p.startsWith('/api/admin/reference-photos/')&&req.method==='POST'){
 
 if(p==='/api/admin/archive-completed-lot'&&req.method==='POST'){
  const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),state=readState();
- if(!session||session.username!=='admin'||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede retirar lotes.'});
+ if(!authorized(req)||!session||session.username!=='admin'||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede retirar lotes.'});
  let body='';req.on('data',c=>{body+=c;if(body.length>10000)req.destroy();});req.on('end',()=>{
   try{
    const incoming=JSON.parse(body||'{}'),modelo=String(incoming.modelo||'').trim().toUpperCase(),codigo=String(incoming.codigo||'').trim().toUpperCase();
@@ -857,7 +942,7 @@ if(p==='/api/admin/archive-completed-lot'&&req.method==='POST'){
    const modelOf=t=>String(t&&(t.standardMoto||(t.standardNKD?'NKD':''))||'').trim().toUpperCase();
    const selected=(Array.isArray(state.tasks)?state.tasks:[]).filter(t=>(t.standardNKD||String(t.standardMoto||'').trim())&&modelOf(t)===modelo&&String(t.codigoLoteOperacion||'').trim().toUpperCase()===codigo);
    if(!selected.length)return sendJson(res,404,{ok:false,error:'No hay tareas activas para ese lote.'});
-   const objective=t=>{if(String(t.standardMoto||'').trim().toUpperCase()==='XRS-180'&&t.continuidadDeTareaId&&String(t.codigoLoteOperacion||'').trim().toUpperCase()==='KK767A')return Math.max(0,Number(String(t.cantidad??'').replace(',','.'))||0);const lot=Number(String(t.lote??'').replace(',','.'))||0,cap=Number(String(t.cantidadCanasta??'').replace(',','.'))||0,baskets=Number(String(t.numCanastas??'').replace(',','.'))||0,unit=Number(String(t.cantidadUnidad??'').replace(',','.'))||0,qty=Number(String(t.cantidad??'').replace(',','.'))||0;if(lot>1)return lot;if(qty>1)return qty;if(cap>0&&baskets>0)return cap*baskets;return unit>0?unit:(lot>0?lot:(cap>0?cap:qty));};
+   const objective=t=>{if(t&&t.continuidadDeTareaId)return Math.max(0,Number(String(t.cantidad??'').replace(',','.'))||0);return workLotTarget(t);};
    const pending=selected.filter(t=>Math.max(0,objective(t))>Math.max(0,Number(t.entregado)||0));
    const untouched=selected.every(t=>Math.max(0,Number(t.entregado)||0)===0&&!(Array.isArray(t.entregas)&&t.entregas.length)&&!(Array.isArray(t.confirmacionesCanastas)&&t.confirmacionesCanastas.length));
    const completed=pending.length===0;
@@ -876,7 +961,7 @@ if(p==='/api/admin/archive-completed-lot'&&req.method==='POST'){
 
 if(p==='/api/admin/reference-photos/diagnostic'&&req.method==='GET'){
  const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),state=readState();
- if(!session||session.username!=='admin'||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede consultar este diagnóstico.'});
+ if(!authorized(req)||!session||session.username!=='admin'||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede consultar este diagnóstico.'});
  const models=[{key:'nkd',name:'NKD',match:t=>!!t.standardNKD&&String(t.standardMoto||t.modelo||'NKD').trim().toUpperCase()==='NKD'},{key:'cr4125',name:'CR4 125',match:t=>String(t.standardMoto||t.modelo||t.modeloMoto||'').trim().toUpperCase().replace(/[-_]/g,' ')==='CR4 125'},{key:'cr4150',name:'CR4-150',match:t=>['CR4 150','CR4-150'].includes(String(t.standardMoto||t.modelo||t.modeloMoto||'').trim().toUpperCase())},{key:'xrs180',name:'XRS-180',match:t=>String(t.standardMoto||t.modelo||t.modeloMoto||'').trim().toUpperCase().replace(/[-_ ]/g,'')==='XRS180'},{key:'chr',name:'CHR',match:t=>String(t.standardMoto||t.modelo||t.modeloMoto||'').trim().toUpperCase()==='CHR'}];
  const normPos=v=>{const x=String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');let m=x.match(/^pre\s*0*(\d+)$/);if(m)return 'pre '+Number(m[1]);m=x.match(/^0*(\d+)\s*(derecho|izquierdo)$/);if(m)return m[2]+' '+Number(m[1]);m=x.match(/^(derecho|izquierdo|final(?: de linea)?)\s*0*(\d+)$/);if(m)return (m[1].startsWith('final')?'final':m[1])+' '+Number(m[2]);return x;};
  const out=models.map(model=>{
@@ -898,6 +983,8 @@ if(p==='/api/admin/reference-photos/diagnostic'&&req.method==='GET'){
 }
 
 if(p.startsWith('/api/reference-photos/')&&req.method==='GET'){
+ const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',photoSession=sessions.get(token),photoState=readStateSnapshot(),photoViewer=photoSession&&photoState.users&&photoState.users[photoSession.username];
+ if(!authorized(req)||!photoSession||!photoViewer||!['Admin','Coordinador','Patinador'].includes(photoViewer.role))return sendJson(res,403,{ok:false,error:'Este perfil no tiene permiso para consultar las fotos de referencias.'});
  const parts=p.split('/'),modelKey=parts[3],model=safePhotoModel(modelKey);if(!model)return sendJson(res,404,{ok:false,error:'Modelo no encontrado.'});
  const dir=path.join(DATA_DIR,'reference-photos',modelKey);
  if(parts[4]==='manifest'&&parts.length===5){fs.readFile(path.join(dir,'manifest.json'),(err,data)=>{if(err)return sendJson(res,404,{ok:false,error:'Aún no hay fotos cargadas para este modelo.'});res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'private, max-age=300'});res.end(data);});return;}
@@ -917,29 +1004,52 @@ if(p==='/api/assistant/production-summary'&&req.method==='GET'){
   if(session.username==='patinadores')return sendJson(res,403,{ok:false,error:'Para consultar tu avance personal debes ingresar con tu cuenta individual de Patinador.'});
   const allowed=['Admin','Supervisor','Coordinador','Patinador'];
   if(!allowed.includes(role))return sendJson(res,403,{ok:false,error:'Tu perfil no tiene permiso para consultar el asistente de producción.'});
-  const standardModels=new Set(['NKD','CR4 150','CR4 125','XRS-180','CHR']),activeIdsByModel=new Map();
+  // Relacionar las instantáneas con las tareas activas igual que el tablero de avance:
+  // los IDs pueden cambiar al guardar/importar; usar código de lote y, si falta,
+  // la identidad estable EAN + puesto. Nunca seleccionar por número de lote solamente.
+  const activeModels=new Set(),activeCodesByModel=new Map(),activeRefsByModel=new Map();
   for(const task of Array.isArray(state.tasks)?state.tasks:[]){
-   const model=workLotModel(task&&(task.standardMoto||task.modeloMoto||task.modeloEstandar||task.modelo||(task.standardNKD?'NKD':'')));
-   if(!task||task.id==null||!standardModels.has(model))continue;
-   if(!activeIdsByModel.has(model))activeIdsByModel.set(model,new Set());
-   activeIdsByModel.get(model).add(String(task.id));
+   if(!task)continue;
+   const model=workLotModel(task.standardMoto||task.modeloMoto||task.modeloEstandar||task.modelo||(task.standardNKD?'NKD':''));
+   if(!model||workLotTarget(task)<=workLotNumber(task.entregado))continue;
+   activeModels.add(model);
+   const code=String(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote||'').trim().toUpperCase();
+   if(code){if(!activeCodesByModel.has(model))activeCodesByModel.set(model,new Set());activeCodesByModel.get(model).add(code);}
+   const ean=String(task.ean||'').trim().toUpperCase().replace(/\\s+/g,'');
+   const position=workLotPosition(task.puesto);
+   if(ean&&position){if(!activeRefsByModel.has(model))activeRefsByModel.set(model,new Set());activeRefsByModel.get(model).add(ean+'|'+position);}
   }
   const activeByModel=new Map();
   for(const candidate of readWorkLots()){
-   const model=workLotModel(candidate&&candidate.model),activeIds=activeIdsByModel.get(model);
-   if(!activeIds||!activeIds.size)continue;
+   const model=workLotModel(candidate&&candidate.model);
+   if(!activeModels.has(model))continue;
    const tasks=Array.isArray(candidate&&candidate.tasks)?candidate.tasks:[];
-   const matches=tasks.reduce((count,task)=>count+(task&&task.id!=null&&activeIds.has(String(task.id))?1:0),0);
-   if(!matches)continue;
-   const previous=activeByModel.get(model);
-   if(!previous||matches>previous.matches||(matches===previous.matches&&workLotNumber(candidate.number)>workLotNumber(previous.row.number)))activeByModel.set(model,{row:candidate,matches});
+   const activeCodes=activeCodesByModel.get(model)||new Set(),activeRefs=activeRefsByModel.get(model)||new Set();
+   const rowCode=String(candidate.codigoLoteOperacion||'').trim().toUpperCase();
+   let matchingTasks=[];
+   if(activeCodes.size){
+    if(rowCode&&activeCodes.has(rowCode)){
+     matchingTasks=tasks.filter(task=>{const code=String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase();return !code||activeCodes.has(code);});
+    }else{
+     matchingTasks=tasks.filter(task=>{const code=String(task&&(task.codigoLoteOperacion||task.loteCodigo||task.codigoLote)||'').trim().toUpperCase();return !!code&&activeCodes.has(code);});
+    }
+   }else if(activeRefs.size){
+    matchingTasks=tasks.filter(task=>{
+     const ean=String(task&&task.ean||'').trim().toUpperCase().replace(/\\s+/g,''),position=workLotPosition(task&&task.puesto);
+     return !!(ean&&position&&activeRefs.has(ean+'|'+position));
+    });
+   }
+   if(!matchingTasks.length)continue;
+   const matches=matchingTasks.length,previous=activeByModel.get(model);
+   if(!previous||matches>previous.matches||(matches===previous.matches&&workLotNumber(candidate.number)>workLotNumber(previous.row.number)))activeByModel.set(model,{row:candidate,matches,tasks:matchingTasks});
   }
-  const lots=[...activeByModel.values()].map(({row})=>{
-   const tasks=Array.isArray(row.tasks)?row.tasks:[];
-   const taskCodes=[...new Set(tasks.map(t=>String(t&&(t.codigoLoteOperacion||t.loteCodigo||t.codigoLote)||'').trim().toUpperCase()).filter(Boolean))];
-   const code=String(row.codigoLoteOperacion||'').trim().toUpperCase()||(taskCodes.length===1?taskCodes[0]:'');
-   return {id:String(row.id||''),model:workLotModel(row.model),number:workLotNumber(row.number),code,tasks};
-  }).sort((a,b)=>a.model.localeCompare(b.model,'es')||a.number-b.number);
+  const activeRows=[...activeByModel.values()];
+   const lots=activeRows.map(({row, tasks:matchedTasks})=>{
+    const tasks=matchedTasks.map(task=>({...task,standardNKD:true,standardMoto:workLotModel(row.model)}));
+    const taskCodes=[...new Set(tasks.map(t=>String(t&&(t.codigoLoteOperacion||t.loteCodigo||t.codigoLote)||'').trim().toUpperCase()).filter(Boolean))];
+    const code=String(row.codigoLoteOperacion||'').trim().toUpperCase()||(taskCodes.length===1?taskCodes[0]:'');
+    return {id:String(row.id||''),model:workLotModel(row.model),number:workLotNumber(row.number),code,tasks,completed:workLotIsCompleted(row),completedAt:row.completedAt||null};
+   }).sort((a,b)=>a.model.localeCompare(b.model,'es')||a.number-b.number);
   const norm=v=>workLotNorm(v);
   const eventSignature=e=>String(e&&e.id||'')||JSON.stringify([e&&(e.patinador||e.username||e.usuario||e.nombrePatinador||e.nombre),e&&e.cantidad,e&&e.fechaHora,e&&e.metodo,e&&e.numeroOperacion,e&&e.observaciones,e&&e.canastasFisicas,e&&e.turno]);
   const taskEvents=task=>{
@@ -1005,11 +1115,28 @@ if(p==='/api/state'&&req.method==='GET'){
  if(!viewer)return sendJson(res,403,{ok:false,error:'La cuenta no tiene acceso al estado de la aplicación.'});
  delete safe.patinadoresAuth;
  for(const user of Object.values(safe.users||{})){if(!user||typeof user!=='object')continue;delete user.pass;delete user.passDia;delete user.passNoche;}
+ if(viewer.role==='Supervisor'){
+  return sendJson(res,200,{users:{},tasks:[],lpnCatalog:[],queuedStandardBatches:[],freeDeliveries:[],estibasRecibidas:[],tareasArchivadas:[]});
+ }
+ if(viewer.role==='Coordinador'){
+  // Lista permitida explícita: solo datos necesarios para operar producción.
+  // No devolver el resto de safe por defecto: puede contener configuración,
+  // permisos, auditoría u otros datos administrativos agregados en el futuro.
+  const operationalState={
+   users:Object.fromEntries(Object.entries(safe.users||{}).filter(([,user])=>user&&user.role==='Patinador').map(([key,user])=>[key,{name:user.name||key,role:'Patinador',puestos:Array.isArray(user.puestos)?user.puestos:[],areas:Array.isArray(user.areas)?user.areas:[],turno:user.turno||'Todos'}])),
+   tasks:Array.isArray(safe.tasks)?safe.tasks:[],
+   lpnCatalog:Array.isArray(safe.lpnCatalog)?safe.lpnCatalog:[],
+   queuedStandardBatches:Array.isArray(safe.queuedStandardBatches)?safe.queuedStandardBatches:[],
+   freeDeliveries:Array.isArray(safe.freeDeliveries)?safe.freeDeliveries:[],
+   estibasRecibidas:Array.isArray(safe.estibasRecibidas)?safe.estibasRecibidas:[]
+  };
+  return sendJson(res,200,operationalState);
+ }
  return sendJson(res,200,safe);
 }
 if(p==='/api/jornada/cerrar'&&req.method==='POST'){
 const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),authState=readState();
-if(!session||!authState.users[session.username]||authState.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede cerrar la jornada.'});
+if(!authorized(req)||!session||!authState.users[session.username]||authState.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede cerrar la jornada.'});
 let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{
 const incoming=JSON.parse(body||'{}');const state=readState();
 if(!Array.isArray(state.tasks))state.tasks=[];
@@ -1024,7 +1151,7 @@ return sendJson(res,200,{ok:true,archived:archived.file,count:archived.count,rem
 }
 if(p==='/api/jornada/continuar-pendientes'&&req.method==='POST'){
 const token=String(req.headers.authorization||'').slice(7),session=sessions.get(token),state=readState();
-if(!session||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede preparar la continuidad de tareas.'});
+if(!authorized(req)||!session||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede preparar la continuidad de tareas.'});
 let body='';req.on('data',c=>{body+=c;if(body.length>10000)req.destroy();});req.on('end',()=>{
 try{
 const incoming=JSON.parse(body||'{}');
@@ -1074,7 +1201,7 @@ return sendJson(res,200,{ok:true,archived:archivedFile.file,archivedCount:snapsh
 }
 if(p==='/api/jornada/continuar-estandar'&&req.method==='POST'){
 const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),state=readState();
-if(!session||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede preparar esta continuidad.'});
+if(!authorized(req)||!session||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede preparar esta continuidad.'});
 let body='';req.on('data',c=>{body+=c;if(body.length>10000)req.destroy();});req.on('end',()=>{
 try{
  const incoming=JSON.parse(body||'{}'),accion=String(incoming.accion||'previsualizar');
@@ -1117,51 +1244,46 @@ try{
 }catch(e){console.error('Error preparando continuidad por modelo y operación:',e);return sendJson(res,500,{ok:false,error:'No se pudo preparar la continuidad de esta operación.'});}
 });return;
 }
-if(p==='/api/jornada/continuar-xrs180'&&req.method==='POST'){
-const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),state=readState();
-if(!session||!state.users[session.username]||state.users[session.username].role!=='Admin')return sendJson(res,403,{ok:false,error:'Solo el administrador puede preparar esta continuidad.'});
-let body='';req.on('data',c=>{body+=c;if(body.length>10000)req.destroy();});req.on('end',()=>{
-try{
-const incoming=JSON.parse(body||'{}'),accion=String(incoming.accion||'previsualizar');
-const esObjetivo=t=>String(t&& (t.standardMoto||(t.standardNKD?'NKD':''))||'').trim().toUpperCase()==='XRS-180'&&String(t&&t.codigoLoteOperacion||'').trim().toUpperCase()==='KK767A';
-const seleccionadas=(Array.isArray(state.tasks)?state.tasks:[]).filter(esObjetivo);
-const calcular=t=>{
- const total=Math.max(0,Number(String(t.cantidad??'').replace(',','.'))||0);
- const entregado=Math.min(total,Math.max(0,Number(String(t.entregado??0).replace(',','.'))||0));
- return {total,entregado,restante:Math.max(0,total-entregado)};
-};
-const resumen={modelo:'XRS-180',codigoLoteOperacion:'KK767A',tareasEncontradas:seleccionadas.length,tareasPendientes:0,tareasCompletadas:0,unidadesObjetivo:0,unidadesEntregadas:0,unidadesPendientes:0};
-seleccionadas.forEach(t=>{const x=calcular(t);resumen.unidadesObjetivo+=x.total;resumen.unidadesEntregadas+=x.entregado;resumen.unidadesPendientes+=x.restante;if(x.restante>0)resumen.tareasPendientes++;else resumen.tareasCompletadas++;});
-if(accion==='previsualizar'){
- if(!seleccionadas.length)return sendJson(res,200,{ok:true,resumen,mensaje:'No hay tareas activas que coincidan exactamente con XRS-180 y KK767A.'});
- return sendJson(res,200,{ok:true,resumen,mensaje:'Vista previa solamente. No se modificó ningún dato.'});
-}
-if(accion!=='aplicar')return sendJson(res,400,{ok:false,error:'Acción no válida.'});
-if(!seleccionadas.length)return sendJson(res,409,{ok:false,error:'No hay tareas activas XRS-180 con código KK767A.'});
-const fingerprint=JSON.stringify(seleccionadas);
-if(state.continuidadXRS180KK767A&&state.continuidadXRS180KK767A.fingerprint===fingerprint)return sendJson(res,409,{ok:false,error:'Esta misma continuidad ya fue preparada. No se duplicaron tareas.'});
-const stamp=Date.now(),fecha=new Date().toLocaleString('es-CO'),pendientes=[];
-seleccionadas.forEach((t,i)=>{
- const x=calcular(t);if(x.restante<=0)return;
- const next={...JSON.parse(JSON.stringify(t)),id:String(t.id)+'-continuidad-xrs180-kk767a-'+stamp+'-'+i,cantidad:x.restante,entregado:0,entregas:[],entrega:null,canastasEntregadas:0,confirmacionesCanastas:[],correcciones:[],estado:'Pendiente',continuidadDeTareaId:t.id,continuidadFecha:fecha,unidadesObjetivoAnterior:x.total,unidadesEntregadasJornadaAnterior:x.entregado,unidadesPendientesContinuadas:x.restante};
- pendientes.push(next);
-});
-if(!pendientes.length)return sendJson(res,409,{ok:false,error:'No hay cantidades pendientes para pasar al turno siguiente. No se modificó nada.'});
-const archivados=seleccionadas.map(t=>({...JSON.parse(JSON.stringify(t)),archivadaEn:fecha,archivadaPor:String(state.users[session.username].name||session.username),motivoArchivo:'Continuidad exclusiva XRS-180 OPR KK767A; se conserva el registro anterior íntegro.'}));
-const archivo=archiveTasks(seleccionadas,{usuario:String(state.users[session.username].name||session.username),motivo:'Continuidad exclusiva XRS-180 OPR KK767A',regla:'Se conserva el historial original. Solo las cantidades pendientes pasan a tareas activas nuevas; las entregas previas quedan registradas en el archivo.'});
-state.tareasArchivadas=[...(Array.isArray(state.tareasArchivadas)?state.tareasArchivadas:[]),...archivados];
-state.tasks=(Array.isArray(state.tasks)?state.tasks:[]).filter(t=>!esObjetivo(t)).concat(pendientes);
-state.continuidadXRS180KK767A={fecha,archivo:archivo.file,fingerprint:JSON.stringify(pendientes)};
-writeState(state);
-return sendJson(res,200,{ok:true,resumen,archivo:archivo.file,tareasNuevas:pendientes.length,unidadesContinuadas:pendientes.reduce((n,t)=>n+Math.max(0,Number(t.cantidad)||0),0),mensaje:'Continuidad XRS-180 / KK767A preparada. Las demás motos y códigos de operación no fueron modificados.'});
-}catch(e){console.error('Error preparando continuidad XRS-180 KK767A:',e);return sendJson(res,500,{ok:false,error:'No se pudo preparar la continuidad XRS-180 / KK767A.'});}
-});return;
-}
 if(p==='/api/state'&&req.method==='PUT'){
 const token=String(req.headers.authorization||'').startsWith('Bearer ')?String(req.headers.authorization).slice(7):'',session=sessions.get(token),actor=session&&readState().users[session.username];
-if(!session||!actor)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
+if(!authorized(req)||!session||!actor)return sendJson(res,401,{ok:false,error:'Sesión vencida. Ingresa nuevamente.'});
 let body='';req.on('data',c=>body+=c);req.on('end',()=>{try{
 const incoming=JSON.parse(body||'{}'),current=readState(),isAdmin=actor.role==='Admin';
+if(!['Admin','Coordinador'].includes(actor.role))return sendJson(res,403,{ok:false,error:'Este perfil no tiene permiso para modificar el estado general de producción.'});
+if(actor.role==='Coordinador'){
+ if(!Array.isArray(incoming.tasks)||incoming.tasks.length!==current.tasks.length)return sendJson(res,403,{ok:false,error:'Coordinación solo puede operar sobre las tareas de producción existentes; no puede crear ni eliminar referencias.'});
+ if(Object.prototype.hasOwnProperty.call(incoming,'freeDeliveries')&&stableWorkString(incoming.freeDeliveries)!==stableWorkString(current.freeDeliveries||[]))return sendJson(res,403,{ok:false,error:'El registro de entregas sin estándar está reservado al Administrador. No se guardó ningún cambio.'});
+ const operationalFields=[...WORK_LOT_DELIVERY_FIELDS,...WORK_LOT_CAPACITY_FIELDS,'lote','lotePiezas','cantidad','cantidadUnidad'];
+ for(let i=0;i<current.tasks.length;i++){
+  const before=current.tasks[i],after=incoming.tasks[i];
+  if(!before||!after||String(before.id)!==String(after.id)||stableWorkString(withoutWork(before,operationalFields))!==stableWorkString(withoutWork(after,operationalFields)))return sendJson(res,403,{ok:false,error:'Coordinación solo puede modificar datos operativos autorizados; las referencias y la configuración permanecen protegidas.'});
+  const targetFields=['lote','lotePiezas','cantidad','cantidadUnidad'];
+  const targetChanged=targetFields.some(k=>stableWorkString(before[k]??null)!==stableWorkString(after[k]??null));
+  const capacityChanged=WORK_LOT_CAPACITY_FIELDS.some(k=>stableWorkString(before[k]??null)!==stableWorkString(after[k]??null));
+  const deliveryChanged=WORK_LOT_DELIVERY_FIELDS.some(k=>stableWorkString(before[k]??null)!==stableWorkString(after[k]??null));
+  if((targetChanged||capacityChanged)&&deliveryChanged)return sendJson(res,403,{ok:false,error:'Guarda los cambios de lote o capacidad por separado de las entregas.'});
+  if(deliveryChanged){
+   const target=workLotTarget(after),delivered=workLotNumber(after.entregado);
+   if(!Number.isInteger(delivered)||delivered<0||delivered>target)return sendJson(res,403,{ok:false,error:'Las unidades entregadas deben ser un entero entre cero y el objetivo vigente del lote.'});
+  }
+  if(targetChanged||capacityChanged){
+   const target=workLotTarget(after),delivered=workLotNumber(after.entregado);
+   if(!Number.isInteger(target)||target<1||delivered>target)return sendJson(res,403,{ok:false,error:'El lote debe ser un entero positivo y no puede quedar por debajo de las unidades ya entregadas.'});
+   if(targetChanged){
+    const lote=workLotNumber(after.lote),cantidad=workLotNumber(after.cantidad);
+    if(!capacityChanged&&lote>0&&cantidad>0&&lote!==cantidad)return sendJson(res,403,{ok:false,error:'La cantidad y el total del lote deben coincidir.'});
+    if(Object.prototype.hasOwnProperty.call(after,'lotePiezas')&&workLotNumber(after.lotePiezas)!==lote)return sendJson(res,403,{ok:false,error:'El total de piezas debe coincidir con el lote.'});
+    if(!capacityChanged&&stableWorkString(before.cantidadUnidad??null)!==stableWorkString(after.cantidadUnidad??null))return sendJson(res,403,{ok:false,error:'La cantidad unitaria solo puede cambiar al ajustar la capacidad de canasta.'});
+   }
+   if(capacityChanged){
+    const cap=workLotNumber(after.cantidadCanasta),baskets=workLotNumber(after.numCanastas);
+    if(!Number.isInteger(cap)||cap<1||String(after.cantidadCanastaRaw??'')!==String(cap)||!Number.isInteger(baskets)||baskets<1||String(after.numCanastasRaw??'')!==String(baskets))return sendJson(res,403,{ok:false,error:'La capacidad y el número de canastas deben ser enteros válidos y coincidir con sus valores guardados.'});
+    if(after.standardManual&&(target!==cap*baskets||workLotNumber(after.cantidadUnidad)!==cap||workLotNumber(after.lote)!==target||workLotNumber(after.cantidad)!==target))return sendJson(res,403,{ok:false,error:'El lote manual debe coincidir con capacidad por número de canastas.'});
+    if(!after.standardManual&&baskets!==Math.ceil(target/cap))return sendJson(res,403,{ok:false,error:'El número de canastas debe corresponder al objetivo vigente y la capacidad indicada.'});
+   }
+  }
+ }
+}
 if(actor.role==='Patinador'&&Array.isArray(incoming.tasks)&&stableWorkString(incoming.tasks)!==stableWorkString(current.tasks))return sendJson(res,403,{ok:false,error:'Los Patinadores deben registrar sus entregas desde los lotes de trabajo.'});
 const nextUsers=isAdmin&&incoming.users&&typeof incoming.users==='object'?incoming.users:current.users;delete nextUsers.mesanin;
 if(isAdmin){for(const [key,user] of Object.entries(nextUsers)){const previous=current.users&&current.users[key];if(!user||typeof user!=='object')continue;for(const field of ['pass','passDia','passNoche'])if(!Object.prototype.hasOwnProperty.call(user,field)&&previous&&Object.prototype.hasOwnProperty.call(previous,field))user[field]=previous[field];}}
@@ -1170,7 +1292,7 @@ const queued=state.queuedStandardBatches[0];
 if(queued&&queued.modeloActual&&Array.isArray(queued.tasks)&&queued.tasks.length){
  const activeModel=String(queued.modeloActual),modelOf=t=>String(t&& (t.standardMoto||(t.standardNKD?'NKD':''))||'');
  const active=state.tasks.filter(t=>t&&t.standardNKD&&modelOf(t)===activeModel);
- const objective=t=>{if(String(t.standardMoto||'').trim().toUpperCase()==='XRS-180'&&t.continuidadDeTareaId&&String(t.codigoLoteOperacion||'').trim().toUpperCase()==='KK767A')return Math.max(0,Number(String(t.cantidad??'').replace(',','.'))||0);const lot=Number(String(t.lote??'').replace(',','.'))||0,cap=Number(String(t.cantidadCanasta??'').replace(',','.'))||0,baskets=Number(String(t.numCanastas??'').replace(',','.'))||0,unit=Number(String(t.cantidadUnidad??'').replace(',','.'))||0,qty=Number(String(t.cantidad??'').replace(',','.'))||0;if(lot>1)return lot;if(qty>1)return qty;if(cap>0&&baskets>0)return cap*baskets;return unit>0?unit:(lot>0?lot:(cap>0?cap:qty));};
+ const objective=t=>{if(t&&t.continuidadDeTareaId)return Math.max(0,Number(String(t.cantidad??'').replace(',','.'))||0);return workLotTarget(t);};
  const total=active.reduce((n,t)=>n+Math.max(0,objective(t)),0),delivered=active.reduce((n,t)=>n+Math.min(Math.max(0,Number(t.entregado)||0),Math.max(0,objective(t))),0);
  const target=state.tasks.filter(t=>t&&t.standardNKD&&modelOf(t)===String(queued.modelo)&&modelOf(t)!==activeModel);
  const targetHasPartial=target.some(t=>(Number(t.entregado)||0)>0&&(Number(t.entregado)||0)<objective(t));

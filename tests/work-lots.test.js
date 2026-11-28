@@ -76,16 +76,16 @@ test('el endpoint de avance entrega solo el lote vigente por modelo y no altera 
   patinadorChr:{pass:'ChrTest123',role:'Patinador',name:'Patinador CHR'},
   patinadorCr4:{pass:'Cr4Test123',role:'Patinador',name:'Patinador CR4'}
  },tasks:[
-  {id:'nkd-active-1',standardNKD:true,standardMoto:'NKD',puesto:'PRE 1',cantidad:100,entregado:20},
-  {id:'nkd-active-2',standardNKD:true,standardMoto:'NKD',puesto:'PRE 2',cantidad:100,entregado:0},
-  {id:'chr-active-1',standardNKD:true,standardMoto:'CHR',puesto:'PRE 3',cantidad:80,entregado:10},
+  {id:'nkd-active-1',standardNKD:true,standardMoto:'NKD',ean:'770000000001',puesto:'PRE 1',cantidad:100,entregado:20},
+  {id:'nkd-active-2',standardNKD:true,standardMoto:'NKD',ean:'770000000002',puesto:'PRE 2',cantidad:100,entregado:0},
+  {id:'chr-active-1',standardNKD:true,standardMoto:'CHR',ean:'770000000003',puesto:'PRE 3',cantidad:80,entregado:10},
   {id:'cr4-active-1',standardNKD:true,standardMoto:'CR4 125',codigoLoteOperacion:'CR4-TODAY',puesto:'PRE 4',cantidad:100,entregado:25}
  ]};
  const workLots=[
   {id:'nkd-old',model:'NKD',number:11,codigoLoteOperacion:'NKD-OLD',tasks:[{id:'nkd-historic-1',cantidad:500}]},
-  {id:'nkd-current',model:'NKD',number:12,codigoLoteOperacion:'NKD-CURRENT',tasks:[{id:'nkd-active-1',cantidad:100,entregado:20},{id:'nkd-active-2',cantidad:100,entregado:0}]},
+  {id:'nkd-current',model:'NKD',number:12,codigoLoteOperacion:'NKD-CURRENT',tasks:[{id:'nkd-active-1',ean:'770000000001',puesto:'PRE 1',cantidad:100,entregado:20},{id:'nkd-active-2',ean:'770000000002',puesto:'PRE 2',cantidad:100,entregado:0}]},
   {id:'nkd-future-empty',model:'NKD',number:13,codigoLoteOperacion:'NKD-FUTURE',tasks:[{id:'nkd-not-active',cantidad:700}]},
-  {id:'chr-current',model:'CHR',number:4,codigoLoteOperacion:'CHR-CURRENT',tasks:[{id:'chr-active-1',cantidad:80,entregado:10}]},
+  {id:'chr-current',model:'CHR',number:4,codigoLoteOperacion:'CHR-CURRENT',tasks:[{id:'chr-active-1',ean:'770000000003',puesto:'PRE 3',cantidad:80,entregado:10}]},
   {id:'cr4-historic',model:'CR4 125',number:90,codigoLoteOperacion:'CR4-HIST',tasks:[{id:'cr4-historic-1',cantidad:900}]},
   {id:'active-CR4 125',model:'CR4 125',number:91,codigoLoteOperacion:'CR4-TODAY',tasks:[{id:'cr4-active-1',cantidad:100,entregado:25}]},
   {id:'prepared-nkd',model:'NKD',number:14,codigoLoteOperacion:'NKD-PREP',tasks:[{id:'nkd-prepared',cantidad:200,entregado:0}]},
@@ -112,9 +112,19 @@ test('el endpoint de avance entrega solo el lote vigente por modelo y no altera 
   assert.equal(login.status,200,JSON.stringify(login.data));tokens.push(login.data.token);
  }
  const before=fs.readFileSync(path.join(dataDir,'state.json'),'utf8');
- for(const token of tokens){
+ for(const [index,token] of tokens.entries()){
   const response=await request(baseUrl,'/api/admin/work-lots/progress',{token});
   assert.equal(response.status,200,JSON.stringify(response.data));
+  if(index===1){
+   assert.deepEqual(response.data.lots.map(x=>x.model).sort(),['CHR','CR4 125','NKD']);
+   for(const lot of response.data.lots){
+    assert.deepEqual(Object.keys(lot).sort(),['code','model','number','percentage','skaters']);
+    assert.equal(typeof lot.percentage,'number');
+    assert.ok(Array.isArray(lot.skaters));
+   }
+   assert.equal(JSON.stringify(response.data).includes('chr-active-1'),false,'Supervisor no debe recibir detalle de referencias');
+   continue;
+  }
   assert.deepEqual(response.data.lots.map(x=>x.id).sort(),['active-CR4 125','chr-current','nkd-current']);
   assert.equal(response.data.lots.find(x=>x.model==='NKD').tasks.length,2);
   assert.equal(response.data.lots.find(x=>x.model==='CHR').tasks[0].id,'chr-active-1');

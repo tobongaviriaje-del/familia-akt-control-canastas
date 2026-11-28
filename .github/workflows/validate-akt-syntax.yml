@@ -1,0 +1,23 @@
+name: Validate AKT code and lot dates
+
+on:
+  push:
+    branches:
+      - main
+      - feature/paneles-por-perfil
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run syntax and production date tests
+        run: npm test
