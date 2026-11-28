@@ -312,11 +312,11 @@ test('AKT INTELIGENTE entrega solo indicadores permitidos por perfil y no modifi
       patinador: { pass: 'PatinadorTest123', role: 'Patinador', name: 'Patinador de prueba', puestos: ['PRE 1'] }
     },
     patinadoresAuth: { passDia: 'DiaTest123', passNoche: 'NocheTest123' },
-    tasks: [{ id: 'T-1', standardNKD: true, standardMoto: 'NKD', lote: 10, cantidad: 10, entregado: 2, estado: 'Parcial', puesto: 'PRE 1' }]
+    tasks: [{ id: 'T-1', standardNKD: true, standardMoto: 'NKD', codigoLoteOperacion: 'KK711', ean: '770000000001', lote: 10, cantidad: 10, entregado: 2, estado: 'Parcial', puesto: 'PRE 1' }]
   };
   const workLots = [
     { id: 'LOT-ACTIVE', model: 'NKD', number: 7, codigoLoteOperacion: 'KK711', tasks: [
-      { id: 'T-1', ean: '770000000001', puesto: 'PRE 1', lote: 10, cantidad: 10, entregado: 2, entregas: [{ id: 'EV-1', patinador: 'Patinador de prueba', cantidad: 2 }], entrega: null }
+      { id: 'SNAPSHOT-TASK-DIFFERENT-ID', ean: '770000000001', puesto: 'PRE 1', lote: 10, cantidad: 10, entregado: 2, entregas: [{ id: 'EV-1', patinador: 'Patinador de prueba', cantidad: 2 }], entrega: null }
     ] },
     { id: 'LOT-HISTORY', model: 'NKD', number: 6, codigoLoteOperacion: 'KK700', tasks: [
       { id: 'T-OLD', puesto: 'PRE 1', lote: 20, cantidad: 20, entregado: 20, entregas: [{ patinador: 'Patinador de prueba', cantidad: 20 }] }
@@ -352,6 +352,7 @@ test('AKT INTELIGENTE entrega solo indicadores permitidos por perfil y no modifi
   assert.equal(supervisor.status, 200);
   assert.equal(supervisor.data.role, 'Supervisor');
   assert.equal(supervisor.data.lots.length, 1, 'solo debe incluir el lote vigente');
+  assert.equal(supervisor.data.lots[0].lot, 'KK711 · lote 7', 'debe relacionar la instantánea aunque el ID de su tarea sea distinto');
   assert.deepEqual(Object.keys(supervisor.data.lots[0]).sort(), ['lot', 'model', 'percentage']);
   assert.deepEqual(Object.keys(supervisor.data.skaters[0]).sort(), ['lot', 'model', 'name', 'percentage']);
   assert.equal(supervisor.data.skaters[0].percentage, 20);
