@@ -1669,9 +1669,9 @@ async function guardarLoteEstandar(id){
  const input=$('stdLote'+id),total=Number(input?.value),entregado=Number(target.entregado)||0;
  if(!Number.isInteger(total)||total<1){alert('Ingresa el total de piezas del lote, mayor que cero.');input?.focus();return;}
  if(total<entregado){alert('El total del lote no puede ser menor que las piezas ya entregadas ('+entregado+').');input?.focus();return;}
- const before={lote:target.lote,lotePiezas:target.lotePiezas,cantidad:target.cantidad,numCanastas:target.numCanastas};
+ const before={lote:target.lote,lotePiezas:target.lotePiezas,cantidad:target.cantidad,numCanastas:target.numCanastas,numCanastasRaw:target.numCanastasRaw};
  target.lote=total;target.lotePiezas=total;target.cantidad=total;
- if(target.standardManual&&Number(target.cantidadCanasta)>0)target.numCanastas=Math.ceil(total/Number(target.cantidadCanasta));
+ if(target.standardManual&&Number(target.cantidadCanasta)>0){target.numCanastas=Math.ceil(total/Number(target.cantidadCanasta));target.numCanastasRaw=String(target.numCanastas);}
  cloudTasks=tasks;localStorage.setItem('cc_tasks',JSON.stringify(cloudTasks));
  const ok=await cloudSave();
  if(!ok){
