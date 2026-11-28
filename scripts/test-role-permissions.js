@@ -252,7 +252,7 @@ async function main() {
   });
   assert.equal(allowedLotTarget.status, 200, 'Coordinación puede ajustar el objetivo del lote');
   coordinatorFresh = await request(base, '/api/state', { token: coordinator });
-  coordinatorTask = { ...coordinatorFresh.data.tasks[0], cantidadCanasta: 30, cantidadCanastaRaw: '30', numCanastas: 4, numCanastasRaw: '4' };
+  coordinatorTask = { ...coordinatorFresh.data.tasks[0], cantidad: 125, cantidadCanasta: 25, cantidadCanastaRaw: '25', numCanastas: 5, numCanastasRaw: '5' };
   const allowedCapacity = await request(base, '/api/state', {
     method: 'PUT', token: coordinator,
     body: { ...coordinatorFresh.data, tasks: [coordinatorTask] },
