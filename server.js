@@ -1253,10 +1253,30 @@ if(!['Admin','Coordinador'].includes(actor.role))return sendJson(res,403,{ok:fal
 if(actor.role==='Coordinador'){
  if(!Array.isArray(incoming.tasks)||incoming.tasks.length!==current.tasks.length)return sendJson(res,403,{ok:false,error:'Coordinación solo puede operar sobre las tareas de producción existentes; no puede crear ni eliminar referencias.'});
  if(Object.prototype.hasOwnProperty.call(incoming,'freeDeliveries')&&stableWorkString(incoming.freeDeliveries)!==stableWorkString(current.freeDeliveries||[]))return sendJson(res,403,{ok:false,error:'El registro de entregas sin estándar está reservado al Administrador. No se guardó ningún cambio.'});
- const operationalFields=[...WORK_LOT_DELIVERY_FIELDS];
+ const operationalFields=[...WORK_LOT_DELIVERY_FIELDS,...WORK_LOT_CAPACITY_FIELDS,'lote','lotePiezas','cantidad','cantidadUnidad'];
  for(let i=0;i<current.tasks.length;i++){
   const before=current.tasks[i],after=incoming.tasks[i];
   if(!before||!after||String(before.id)!==String(after.id)||stableWorkString(withoutWork(before,operationalFields))!==stableWorkString(withoutWork(after,operationalFields)))return sendJson(res,403,{ok:false,error:'Coordinación solo puede modificar datos operativos autorizados; las referencias y la configuración permanecen protegidas.'});
+  const targetFields=['lote','lotePiezas','cantidad','cantidadUnidad'];
+  const targetChanged=targetFields.some(k=>stableWorkString(before[k]??null)!==stableWorkString(after[k]??null));
+  const capacityChanged=WORK_LOT_CAPACITY_FIELDS.some(k=>stableWorkString(before[k]??null)!==stableWorkString(after[k]??null));
+  const deliveryChanged=WORK_LOT_DELIVERY_FIELDS.some(k=>stableWorkString(before[k]??null)!==stableWorkString(after[k]??null));
+  if((targetChanged||capacityChanged)&&deliveryChanged)return sendJson(res,403,{ok:false,error:'Guarda los cambios de lote o capacidad por separado de las entregas.'});
+  if(targetChanged||capacityChanged){
+   const target=workLotTarget(after),delivered=workLotNumber(after.entregado);
+   if(!Number.isInteger(target)||target<1||delivered>target)return sendJson(res,403,{ok:false,error:'El lote debe ser un entero positivo y no puede quedar por debajo de las unidades ya entregadas.'});
+   if(targetChanged){
+    const lote=workLotNumber(after.lote),cantidad=workLotNumber(after.cantidad);
+    if(lote>0&&cantidad>0&&lote!==cantidad)return sendJson(res,403,{ok:false,error:'La cantidad y el total del lote deben coincidir.'});
+    if(Object.prototype.hasOwnProperty.call(after,'lotePiezas')&&workLotNumber(after.lotePiezas)!==lote)return sendJson(res,403,{ok:false,error:'El total de piezas debe coincidir con el lote.'});
+    if(!capacityChanged&&stableWorkString(before.cantidadUnidad??null)!==stableWorkString(after.cantidadUnidad??null))return sendJson(res,403,{ok:false,error:'La cantidad unitaria solo puede cambiar al ajustar la capacidad de canasta.'});
+   }
+   if(capacityChanged){
+    const cap=workLotNumber(after.cantidadCanasta),baskets=workLotNumber(after.numCanastas);
+    if(!Number.isInteger(cap)||cap<1||String(after.cantidadCanastaRaw??'')!==String(cap)||!Number.isInteger(baskets)||baskets<1||String(after.numCanastasRaw??'')!==String(baskets))return sendJson(res,403,{ok:false,error:'La capacidad y el número de canastas deben ser enteros válidos y coincidir con sus valores guardados.'});
+    if(after.standardManual&&(target!==cap*baskets||workLotNumber(after.cantidadUnidad)!==cap||workLotNumber(after.lote)!==target||workLotNumber(after.cantidad)!==target))return sendJson(res,403,{ok:false,error:'El lote manual debe coincidir con capacidad por número de canastas.'});
+   }
+  }
  }
 }
 if(actor.role==='Patinador'&&Array.isArray(incoming.tasks)&&stableWorkString(incoming.tasks)!==stableWorkString(current.tasks))return sendJson(res,403,{ok:false,error:'Los Patinadores deben registrar sus entregas desde los lotes de trabajo.'});
