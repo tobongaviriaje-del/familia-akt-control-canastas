@@ -554,13 +554,7 @@ if(p==='/api/admin/work-lots/progress'&&req.method==='GET'){
    entry.patinadores.add(String(patinador.name||username));
    if(selection.startedAt&&(!entry.startedAt||String(selection.startedAt)<String(entry.startedAt)))entry.startedAt=selection.startedAt;
   }
-  for(const row of savedLots){
-    const model=workLotModel(row&&row.model),id=String(row&&row.id||'');
-    if(!id||!model||!workLotRecentlyCompleted(row)||activeByLot.has(id))continue;
-    const assigned=new Set();
-    for(const [username,user] of Object.entries(users))if(user&&user.role==='Patinador'&&(row.tasks||[]).some(task=>workLotUserCanTask(user,username,task)))assigned.add(String(user.name||username));
-    activeByLot.set(id,{row,model,patinadores:assigned,startedAt:row.createdAt||row.updatedAt||null,completed:true});
-   }
+  // Los lotes completados se conservan en el historial, pero no vuelven a los tableros de producción.
    const lots=[...activeByLot.values()].map(({row,model,patinadores,startedAt,completed})=>{
     const activeCodes=activeCodesByModel.get(model)||new Set(),activeRefs=activeRefsByModel.get(model)||new Set();
     const rowCode=String(row.codigoLoteOperacion||'').trim().toUpperCase();
@@ -1029,8 +1023,7 @@ if(p==='/api/assistant/production-summary'&&req.method==='GET'){
    if(!previous||matches>previous.matches||(matches===previous.matches&&workLotNumber(candidate.number)>workLotNumber(previous.row.number)))activeByModel.set(model,{row:candidate,matches});
   }
   const activeRows=[...activeByModel.values()].map(({row})=>row);
-   const recentCompleted=readWorkLots().filter(row=>workLotRecentlyCompleted(row)&&!activeRows.some(active=>String(active.id)===String(row.id)));
-   const lots=[...activeRows,...recentCompleted].map(row=>{
+   const lots=activeRows.map(row=>{
     const tasks=(Array.isArray(row.tasks)?row.tasks:[]).map(task=>({...task,standardNKD:true,standardMoto:workLotModel(row.model)}));
     const taskCodes=[...new Set(tasks.map(t=>String(t&&(t.codigoLoteOperacion||t.loteCodigo||t.codigoLote)||'').trim().toUpperCase()).filter(Boolean))];
     const code=String(row.codigoLoteOperacion||'').trim().toUpperCase()||(taskCodes.length===1?taskCodes[0]:'');
