@@ -262,6 +262,8 @@ async function main() {
   for (const [label, mutate] of [
     ['un objetivo inferior a lo ya entregado', task => ({ ...task, lote: 40, lotePiezas: 40, cantidad: 40 })],
     ['una capacidad inválida', task => ({ ...task, cantidadCanasta: 0, cantidadCanastaRaw: '0' })],
+    ['entregas superiores al objetivo', task => ({ ...task, entregado: 121 })],
+    ['entregas negativas', task => ({ ...task, entregado: -1 })],
     ['el código de operación', task => ({ ...task, codigoLoteOperacion: 'KK999' })],
     ['los metadatos del código', task => ({ ...task, codigoOperacionActualizadoPor: 'Coordinación' })],
   ]) {
