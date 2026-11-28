@@ -1253,7 +1253,7 @@ if(!['Admin','Coordinador'].includes(actor.role))return sendJson(res,403,{ok:fal
 if(actor.role==='Coordinador'){
  if(!Array.isArray(incoming.tasks)||incoming.tasks.length!==current.tasks.length)return sendJson(res,403,{ok:false,error:'Coordinación solo puede operar sobre las tareas de producción existentes; no puede crear ni eliminar referencias.'});
  if(Object.prototype.hasOwnProperty.call(incoming,'freeDeliveries')&&stableWorkString(incoming.freeDeliveries)!==stableWorkString(current.freeDeliveries||[]))return sendJson(res,403,{ok:false,error:'El registro de entregas sin estándar está reservado al Administrador. No se guardó ningún cambio.'});
- const operationalFields=[...WORK_LOT_DELIVERY_FIELDS,...WORK_LOT_CAPACITY_FIELDS,'lote','lotePiezas','cantidad','codigoLoteOperacion','codigoOperacionActualizadoPor','codigoOperacionActualizadoEn'];
+ const operationalFields=[...WORK_LOT_DELIVERY_FIELDS];
  for(let i=0;i<current.tasks.length;i++){
   const before=current.tasks[i],after=incoming.tasks[i];
   if(!before||!after||String(before.id)!==String(after.id)||stableWorkString(withoutWork(before,operationalFields))!==stableWorkString(withoutWork(after,operationalFields)))return sendJson(res,403,{ok:false,error:'Coordinación solo puede modificar datos operativos autorizados; las referencias y la configuración permanecen protegidas.'});
