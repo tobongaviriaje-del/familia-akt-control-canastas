@@ -15,6 +15,10 @@ assert.match(uiSource, /app\.classList\.toggle\('cc-coordinator-view',!!coordina
 assert.match(uiSource, /cc-coordinator-view #adminPanel/);
 assert.match(uiSource, /cc-coordinator-view #historialTareasPanel/);
 assert.match(uiSource, /cc-coordinator-view #resetDemoBtn/);
+assert.match(uiSource, /cc-coordinator-view #freeDeliveryPanel/);
+assert.match(uiSource, /cc-coordinator-view #createDistributionPanel/);
+assert.match(uiSource, /function crearTarea\(\)\{if\(!current\|\|current\.role!=='Admin'\)/, 'La creación de tareas debe estar bloqueada en la interfaz para perfiles no Admin');
+assert.match(uiSource, /if\(!current\|\|current\.role!=='Admin'\)\{if\(msg\)/, 'La entrega sin estándar debe estar bloqueada en la interfaz para perfiles no Admin');
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'akt-role-tests-'));
 let child;
 let output = '';
