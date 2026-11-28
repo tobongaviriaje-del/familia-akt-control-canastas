@@ -1105,9 +1105,18 @@ if(p==='/api/state'&&req.method==='GET'){
   return sendJson(res,200,{users:{},tasks:[],lpnCatalog:[],queuedStandardBatches:[],freeDeliveries:[],estibasRecibidas:[],tareasArchivadas:[]});
  }
  if(viewer.role==='Coordinador'){
-  safe.users=Object.fromEntries(Object.entries(safe.users||{}).filter(([,user])=>user&&user.role==='Patinador').map(([key,user])=>[key,{name:user.name||key,role:'Patinador',puestos:Array.isArray(user.puestos)?user.puestos:[],areas:Array.isArray(user.areas)?user.areas:[],turno:user.turno||'Todos'}]));
-  delete safe.tareasArchivadas;
-  delete safe.adminRecoveryUsed;
+  // Lista permitida explícita: solo datos necesarios para operar producción.
+  // No devolver el resto de safe por defecto: puede contener configuración,
+  // permisos, auditoría u otros datos administrativos agregados en el futuro.
+  const operationalState={
+   users:Object.fromEntries(Object.entries(safe.users||{}).filter(([,user])=>user&&user.role==='Patinador').map(([key,user])=>[key,{name:user.name||key,role:'Patinador',puestos:Array.isArray(user.puestos)?user.puestos:[],areas:Array.isArray(user.areas)?user.areas:[],turno:user.turno||'Todos'}])),
+   tasks:Array.isArray(safe.tasks)?safe.tasks:[],
+   lpnCatalog:Array.isArray(safe.lpnCatalog)?safe.lpnCatalog:[],
+   queuedStandardBatches:Array.isArray(safe.queuedStandardBatches)?safe.queuedStandardBatches:[],
+   freeDeliveries:Array.isArray(safe.freeDeliveries)?safe.freeDeliveries:[],
+   estibasRecibidas:Array.isArray(safe.estibasRecibidas)?safe.estibasRecibidas:[]
+  };
+  return sendJson(res,200,operationalState);
  }
  return sendJson(res,200,safe);
 }
