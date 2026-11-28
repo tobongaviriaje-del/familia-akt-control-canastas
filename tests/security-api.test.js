@@ -374,6 +374,15 @@ test('AKT INTELIGENTE entrega solo indicadores permitidos por perfil y no modifi
   assert.equal(coordinator.status, 200);
   assert.equal(coordinator.data.role, 'Coordinador');
   assert.equal(coordinator.data.summary.percentage, 20);
+  const coordinatorState = await request(baseUrl, '/api/state', { token: coordinatorToken });
+  assert.equal(coordinatorState.status, 200);
+  const rejectedFreeDelivery = await request(baseUrl, '/api/state', {
+    token: coordinatorToken, method: 'PUT',
+    body: { ...coordinatorState.data, freeDeliveries: [{ id: 'FREE-UNAUTHORIZED', cantidad: 99 }] }
+  });
+  assert.equal(rejectedFreeDelivery.status, 403, 'Coordinación no debe guardar entregas sin estándar reservadas al Administrador');
+  const unchangedFreeDeliveries = await request(baseUrl, '/api/state', { token: adminToken });
+  assert.deepEqual(unchangedFreeDeliveries.data.freeDeliveries || [], [], 'El intento rechazado no debe crear registros');
 
   const patinadorToken = await login('patinador', 'PatinadorTest123');
   const patinador = await request(baseUrl, '/api/assistant/production-summary', { token: patinadorToken });
