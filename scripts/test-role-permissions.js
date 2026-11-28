@@ -242,28 +242,39 @@ async function main() {
 
   assert.equal(allowedCoordinatorWrite.status, 200, 'Coordinación puede guardar avance operativo');
 
-  // Coordinación no puede alterar objetivos, capacidad ni reasignar referencias a otro lote
-  // mediante el guardado general del estado. Esas modificaciones quedan fuera de la
-  // lista de campos operativos autorizados y requieren flujos específicos.
-  for (const [field, value] of [
-    ['cantidad', 999], ['lote', 999], ['lotePiezas', 999],
-    ['cantidadCanasta', 1], ['cantidadCanastaRaw', '1'],
-    ['numCanastas', 999], ['numCanastasRaw', '999'],
-    ['codigoLoteOperacion', 'KK999'],
-    ['codigoOperacionActualizadoPor', 'Coordinación'],
-    ['codigoOperacionActualizadoEn', '27/11/2026'],
+  // Coordinación puede ajustar objetivos y capacidad desde sus controles de producción,
+  // siempre que el lote no quede por debajo de lo ya entregado y los cálculos sean consistentes.
+  let coordinatorFresh = await request(base, '/api/state', { token: coordinator });
+  let coordinatorTask = { ...coordinatorFresh.data.tasks[0], lote: 120, lotePiezas: 120, cantidad: 120 };
+  const allowedLotTarget = await request(base, '/api/state', {
+    method: 'PUT', token: coordinator,
+    body: { ...coordinatorFresh.data, tasks: [coordinatorTask] },
+  });
+  assert.equal(allowedLotTarget.status, 200, 'Coordinación puede ajustar el objetivo del lote');
+  coordinatorFresh = await request(base, '/api/state', { token: coordinator });
+  coordinatorTask = { ...coordinatorFresh.data.tasks[0], cantidadCanasta: 30, cantidadCanastaRaw: '30', numCanastas: 4, numCanastasRaw: '4' };
+  const allowedCapacity = await request(base, '/api/state', {
+    method: 'PUT', token: coordinator,
+    body: { ...coordinatorFresh.data, tasks: [coordinatorTask] },
+  });
+  assert.equal(allowedCapacity.status, 200, 'Coordinación puede ajustar capacidad y número de canastas válidos');
+
+  for (const [label, mutate] of [
+    ['un objetivo inferior a lo ya entregado', task => ({ ...task, lote: 40, lotePiezas: 40, cantidad: 40 })],
+    ['una capacidad inválida', task => ({ ...task, cantidadCanasta: 0, cantidadCanastaRaw: '0' })],
+    ['el código de operación', task => ({ ...task, codigoLoteOperacion: 'KK999' })],
+    ['los metadatos del código', task => ({ ...task, codigoOperacionActualizadoPor: 'Coordinación' })],
   ]) {
     const fresh = await request(base, '/api/state', { token: coordinator });
     assert.equal(fresh.status, 200);
-    const changedTask = { ...fresh.data.tasks[0], [field]: value };
     const denied = await request(base, '/api/state', {
       method: 'PUT', token: coordinator,
-      body: { ...fresh.data, tasks: [changedTask] },
+      body: { ...fresh.data, tasks: [mutate(fresh.data.tasks[0])] },
     });
-    assert.equal(denied.status, 403, 'Coordinación no puede modificar ' + field);
+    assert.equal(denied.status, 403, 'Coordinación no puede guardar ' + label);
     const afterDenied = await request(base, '/api/state', { token: coordinator });
-    assert.equal(afterDenied.data.tasks[0][field], fresh.data.tasks[0][field],
-      'El intento rechazado no debe modificar ' + field);
+    assert.deepEqual(afterDenied.data.tasks[0], fresh.data.tasks[0],
+      'El intento rechazado no debe modificar datos al intentar ' + label);
   }
 
 
