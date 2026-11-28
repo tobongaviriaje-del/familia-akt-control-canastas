@@ -1271,7 +1271,7 @@ if(actor.role==='Coordinador'){
    if(!Number.isInteger(target)||target<1||delivered>target)return sendJson(res,403,{ok:false,error:'El lote debe ser un entero positivo y no puede quedar por debajo de las unidades ya entregadas.'});
    if(targetChanged){
     const lote=workLotNumber(after.lote),cantidad=workLotNumber(after.cantidad);
-    if(lote>0&&cantidad>0&&lote!==cantidad)return sendJson(res,403,{ok:false,error:'La cantidad y el total del lote deben coincidir.'});
+    if(!capacityChanged&&lote>0&&cantidad>0&&lote!==cantidad)return sendJson(res,403,{ok:false,error:'La cantidad y el total del lote deben coincidir.'});
     if(Object.prototype.hasOwnProperty.call(after,'lotePiezas')&&workLotNumber(after.lotePiezas)!==lote)return sendJson(res,403,{ok:false,error:'El total de piezas debe coincidir con el lote.'});
     if(!capacityChanged&&stableWorkString(before.cantidadUnidad??null)!==stableWorkString(after.cantidadUnidad??null))return sendJson(res,403,{ok:false,error:'La cantidad unitaria solo puede cambiar al ajustar la capacidad de canasta.'});
    }
@@ -1279,6 +1279,7 @@ if(actor.role==='Coordinador'){
     const cap=workLotNumber(after.cantidadCanasta),baskets=workLotNumber(after.numCanastas);
     if(!Number.isInteger(cap)||cap<1||String(after.cantidadCanastaRaw??'')!==String(cap)||!Number.isInteger(baskets)||baskets<1||String(after.numCanastasRaw??'')!==String(baskets))return sendJson(res,403,{ok:false,error:'La capacidad y el número de canastas deben ser enteros válidos y coincidir con sus valores guardados.'});
     if(after.standardManual&&(target!==cap*baskets||workLotNumber(after.cantidadUnidad)!==cap||workLotNumber(after.lote)!==target||workLotNumber(after.cantidad)!==target))return sendJson(res,403,{ok:false,error:'El lote manual debe coincidir con capacidad por número de canastas.'});
+    if(!after.standardManual&&baskets!==Math.ceil(target/cap))return sendJson(res,403,{ok:false,error:'El número de canastas debe corresponder al objetivo vigente y la capacidad indicada.'});
    }
   }
  }
