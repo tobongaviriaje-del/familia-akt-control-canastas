@@ -10,8 +10,8 @@ const root = path.resolve(__dirname, '..');
 // Regression visual: Coordinación comparte el panel operativo, pero no debe mostrar
 // paneles ni acciones exclusivas del Administrador. Supervisión conserva su vista aparte.
 const uiSource = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
-assert.match(uiSource, /const coordinator=!!\\(current&&current\\.role==='Coordinador'\\);/);
-assert.match(uiSource, /app\\.classList\\.toggle\\('cc-coordinator-view',!!coordinator\\);/);
+assert.match(uiSource, /const coordinator=!!\(current&&current\.role==='Coordinador'\);/);
+assert.match(uiSource, /app\.classList\.toggle\('cc-coordinator-view',!!coordinator\);/);
 assert.match(uiSource, /cc-coordinator-view #adminPanel/);
 assert.match(uiSource, /cc-coordinator-view #historialTareasPanel/);
 assert.match(uiSource, /cc-coordinator-view #resetDemoBtn/);
