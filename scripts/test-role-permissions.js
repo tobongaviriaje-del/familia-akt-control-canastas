@@ -78,7 +78,10 @@ function multiFixture() {
     users, tasks: [...nkdTasks, ...chrTasks], lpnCatalog: [], freeDeliveries: [],
     estibasRecibidas: [], queuedStandardBatches: [], tareasArchivadas: [],
   }, null, 2));
+  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const closedHistoricalTask = makeTask('nkd-closed-yesterday', 'NKD', 'KK710', '770000000099', 'PRE 3', 'Ana', 40, 40);
   fs.writeFileSync(path.join(tempDir, 'work-lots.json'), JSON.stringify([
+    { id: 'lot-nkd-closed', model: 'NKD', number: 710, codigoLoteOperacion: 'KK710', createdAt: yesterday, updatedAt: yesterday, completedAt: yesterday, tasks: [closedHistoricalTask] },
     { id: 'lot-nkd', model: 'NKD', number: 711, codigoLoteOperacion: 'KK711', createdAt: '2026-11-27T12:00:00.000Z', updatedAt: '2026-11-27T12:00:00.000Z', tasks: nkdTasks },
     { id: 'lot-chr', model: 'CHR', number: 900, codigoLoteOperacion: 'CH900', createdAt: '2026-11-27T12:00:00.000Z', updatedAt: '2026-11-27T12:00:00.000Z', tasks: chrTasks },
   ], null, 2));
